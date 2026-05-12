@@ -1,0 +1,22 @@
+- generic [ref=e1]:
+  - img "Oracle Logo" [ref=e3]
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - generic "User Name" [ref=e8]
+        - textbox "User Name" [active] [ref=e9]
+      - generic [ref=e10]:
+        - generic "Password" [ref=e11]
+        - textbox "Password" [ref=e12]
+    - generic [ref=e13]:
+      - button "Log In" [ref=e14]
+      - button "Cancel" [ref=e15]
+    - generic [ref=e16]:
+      - link "Login Assistance" [ref=e17] [cursor=pointer]:
+        - /url: "#"
+      - link "Apply Now":
+        - /url: https://emerson.sharepoint.com/sites/AutoSol/IT/ASG/SitePages/Join-ASG!.aspx
+        - img "Apply Now"
+    - alert [ref=e18]: Unexpected URL parameters have been detected and will be ignored.
+  - generic [ref=e20]:
+    - list

@@ -1,0 +1,14 @@
+[    2523ms] [LOG] jsStartup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:825
+[    2525ms] [LOG] call jsStartup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:700
+[    2525ms] [ERROR] Refused to set unsafe header "Content-length" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:705
+[    2525ms] [ERROR] Refused to set unsafe header "Connection" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:706
+[    3180ms] [LOG] loaded: login.js @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1141
+[    3212ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp:0
+[    3214ms] [LOG] startup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:984
+[    3214ms] [LOG] starup: AppsLoginPage.loaded=true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:985
+[    3214ms] [LOG] Var test:true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:990
+[    3228ms] [LOG] Initial : 30 @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:143
+[    3228ms] [LOG] Initial : 30 @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:143
+[    3235ms] [LOG] Window.onshow:  @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1120
+[    3235ms] [LOG] Window.onshow:[object PageTransitionEvent] trusted:true persisted:false @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1121
+[    3236ms] [LOG] AppsLoginPage.loaded=true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1122

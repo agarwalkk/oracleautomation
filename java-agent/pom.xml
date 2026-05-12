@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.pyebsdom</groupId>
+    <artifactId>ebs-dom-agent</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>EBS DOM Agent</name>
+    <description>
+        Oracle EBS Forms Java Agent for pyebsdom.
+        Loaded into a running EBS JVM via the Java Attach API.
+        Executes one-shot commands and writes JSON results to a file.
+    </description>
+
+    <!-- ── Properties ──────────────────────────────────────────────────── -->
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+    </properties>
+
+    <!-- ── No external runtime dependencies ──────────────────────────── -->
+
+    <!-- ── Build ──────────────────────────────────────────────────────── -->
+    <build>
+        <!-- Produce java-agent/target/ebs-dom-agent.jar -->
+        <finalName>ebs-dom-agent</finalName>
+
+        <plugins>
+
+            <!-- Compile at Java 8 level -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>8</source>
+                    <target>8</target>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+
+            <!--
+                exec:java — launch SampleSwingApp without an explicit
+                classpath argument.  Bound to the 'test' phase so it
+                is NOT executed during a normal 'mvn clean package'.
+
+                Usage:
+                  mvn exec:java
+                or, from the repo root:
+                  java -cp java-agent\target\ebs-dom-agent.jar \
+                       com.pyebsdom.testapp.SampleSwingApp
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <mainClass>com.pyebsdom.testapp.SampleSwingApp</mainClass>
+                </configuration>
+            </plugin>
+
+            <!--
+                Package as an agent JAR.
+                Manifest entries required by java.lang.instrument:
+                  Premain-Class     – loaded via -javaagent:
+                  Agent-Class       – loaded dynamically via Attach API
+                  Can-Redefine-Classes / Can-Retransform-Classes
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Premain-Class>com.pyebsdom.agent.EbsDomBootstrapAgent</Premain-Class>
+                            <Agent-Class>com.pyebsdom.agent.EbsDomBootstrapAgent</Agent-Class>
+                            <Boot-Class-Path>ebs-dom-agent.jar</Boot-Class-Path>
+                            <Can-Redefine-Classes>false</Can-Redefine-Classes>
+                            <Can-Retransform-Classes>false</Can-Retransform-Classes>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

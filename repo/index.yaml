@@ -1,0 +1,23 @@
+flows: {}
+forms:
+  java_adea4592e824bfd6: java_quote_order_information_tab_page_order_n
+  java_242f95f1085855f7: java_order_typelist_of_values
+  java_dbfad8553b44bb8b: java_find
+  java_abd14f977948687b: java_quote_order_information_tab_page_order_n
+  java_15386069ebe24be2: java_order_typelist_of_values
+  java_3f25abc24de10d0a: java_find
+  java_b8279de90a6e9467: java_quote_order_information_tab_page_order_n
+  java_7b57b3e1280c845e: java_order_typelist_of_values
+  java_488b2f884d62d0d2: java_find
+  java_4e2f22b322569c2e: java_yes_alt_y
+  java_3753a88c99819211: java_find_alt_i
+  java_b35eae19c94a272a: java_summary_tab_page_order_number
+  java_2fe43d65fa4ab3c2: java_main_tab_page_sold_tolist_of_values
+  java_e2657eb4a60a8c7b: java_main_tab_page_sold_tolist_of_values
+  java_58b77b87785eb29c: java_main_tab_page_sold_tolist_of_values
+  java_b5894cf95cc27686: java_quote_order_information_tab_page_order_n
+  java_bf6f5fb126b5fc3b: java_order_typelist_of_values
+  java_21b20c491a46cb03: java_yes_alt_y
+  java_2430cec31bd7f8ef: java_po
+  java_8cd86ab45d19e09c: java_po_datelist_of_values
+  java_f46f1c770310f025: java_po_datelist_of_values

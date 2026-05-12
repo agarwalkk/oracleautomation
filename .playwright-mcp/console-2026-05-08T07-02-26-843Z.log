@@ -1,0 +1,21 @@
+[    2644ms] [LOG] jsStartup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:825
+[    2645ms] [LOG] call jsStartup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:700
+[    2645ms] [ERROR] Refused to set unsafe header "Content-length" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:705
+[    2645ms] [ERROR] Refused to set unsafe header "Connection" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:706
+[    3315ms] [LOG] loaded: login.js @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1141
+[    3339ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp:0
+[    3340ms] [LOG] startup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:984
+[    3340ms] [LOG] starup: AppsLoginPage.loaded=true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:985
+[    3340ms] [LOG] Var test:true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:990
+[    3348ms] [LOG] Initial : 30 @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:143
+[    3348ms] [LOG] Initial : 30 @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:143
+[    3352ms] [LOG] Window.onshow:  @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1120
+[    3352ms] [LOG] Window.onshow:[object PageTransitionEvent] trusted:true persisted:false @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1121
+[    3352ms] [LOG] AppsLoginPage.loaded=true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1122
+[    3688ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://betsys0.emrsn.com/OA_HTML/media/apply.jpg:0
+[    3690ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://betsys0.emrsn.com/favicon.ico:0
+[   24039ms] [LOG] call AuthenticateUser @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:700
+[   24039ms] [ERROR] Refused to set unsafe header "Content-length" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:705
+[   24039ms] [ERROR] Refused to set unsafe header "Connection" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:706
+[   38449ms] [LOG] window.unload: @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1129
+[   38449ms] [LOG] Event @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1130

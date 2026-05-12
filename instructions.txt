@@ -1,0 +1,6 @@
+Steps:
+1. Open GSOF Organizer form for TES
+2. On Order Type field, enter CREDIT_ICO_TDS.
+3. Click on Find button, then on loading order list, click the Open button at the bottom.
+4. In the order header, find the field labeled "PO#". Clear it and type "KRISHAN001". Then click the save icon in the toolbar.
+5. Close the form using File > Close Form from the menu bar.

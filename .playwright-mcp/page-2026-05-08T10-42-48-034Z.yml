@@ -1,0 +1,411 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - link "Skip navigation elements to page contents" [ref=e4] [cursor=pointer]:
+      - /url: "#oafcontent"
+    - table [ref=e5]:
+      - rowgroup [ref=e6]:
+        - row "Oracle Logo E-Business Suite Favorites Settings Notifications Logged In As BAKUL_VOHRA Help Logout" [ref=e7]:
+          - cell "Oracle Logo E-Business Suite Favorites Settings Notifications Logged In As BAKUL_VOHRA Help Logout" [ref=e8]:
+            - table [ref=e9]:
+              - rowgroup [ref=e10]:
+                - row "Oracle Logo E-Business Suite Favorites Settings Notifications Logged In As BAKUL_VOHRA Help Logout" [ref=e11]:
+                  - cell
+                  - cell "Oracle Logo" [ref=e12]:
+                    - img "Oracle Logo" [ref=e13]
+                  - cell "E-Business Suite" [ref=e14]:
+                    - generic "E-Business Suite" [ref=e15]
+                  - cell "Favorites Settings Notifications Logged In As BAKUL_VOHRA Help Logout" [ref=e16]:
+                    - button "Favorites" [ref=e18] [cursor=pointer]:
+                      - img "Favorites" [ref=e20]
+                    - button "Settings" [ref=e22] [cursor=pointer]:
+                      - img "Settings" [ref=e24]
+                    - dialog "Notifications" [ref=e26]:
+                      - link "Notifications 5" [ref=e27] [cursor=pointer]:
+                        - /url: javascript:WFGetOpenWorklist('[My\x20Worklist, Go\x20To\x20Full\x20Worklist, No\x20Open\x20notifications\x20found\x20for\x20this\x20user., Loading..., OA.jsp\x3fOAFunc\x3dWF_WORKLIST\x26wlSrc\x3dwFWorklistFromGlobalHeader\x26oas\x3dpaKlLCXDY\x2dAxVtL_8ciNSA.., Notifications, Y, OK]')
+                        - generic [ref=e28]:
+                          - img "Notifications" [ref=e29]
+                          - generic [ref=e30]: "5"
+                    - text: Logged In As BAKUL_VOHRA
+                    - link "Help" [ref=e32] [cursor=pointer]:
+                      - /url: javascript:top.help_window()
+                      - img "Help" [ref=e34]
+                    - link "Logout" [ref=e35] [cursor=pointer]:
+                      - /url: /OA_HTML/OALogout.jsp?menu=Y
+                      - img "Logout" [ref=e37]
+                - row [ref=e38]:
+                  - cell [ref=e39]
+                - row:
+                  - cell
+    - table [ref=e40]:
+      - rowgroup [ref=e41]:
+        - row [ref=e42]:
+          - cell [ref=e43]:
+            - table [ref=e46]:
+              - rowgroup [ref=e47]:
+                - row [ref=e48]:
+                  - cell [ref=e49]
+        - row "Enterprise Search Contract Documents Go Search Results Display Preference Standard" [ref=e50]:
+          - cell "Enterprise Search Contract Documents Go Search Results Display Preference Standard" [ref=e51]:
+            - table [ref=e52]:
+              - rowgroup [ref=e53]:
+                - row "Enterprise Search Contract Documents Go Search Results Display Preference Standard" [ref=e54]:
+                  - cell "Enterprise Search Contract Documents Go Search Results Display Preference Standard" [ref=e55]:
+                    - table [ref=e56]:
+                      - rowgroup [ref=e57]:
+                        - row "Enterprise Search Contract Documents Go Search Results Display Preference Standard" [ref=e58]:
+                          - cell "Enterprise Search Contract Documents" [ref=e59]:
+                            - table [ref=e60]:
+                              - rowgroup [ref=e61]:
+                                - row "Enterprise Search Contract Documents" [ref=e62]:
+                                  - cell "Enterprise Search" [ref=e63]
+                                  - cell [ref=e64]:
+                                    - img [ref=e65]
+                                  - cell "Contract Documents" [ref=e66]:
+                                    - combobox "Enterprise Search" [ref=e67]:
+                                      - option "Contract Documents" [selected]
+                                      - option "Contracts Searchables"
+                                      - option "Courses"
+                                      - option "Workflow Notifications"
+                                    - img [ref=e68]
+                          - cell [ref=e69]:
+                            - table [ref=e70]:
+                              - rowgroup [ref=e71]:
+                                - row [ref=e72]:
+                                  - cell
+                                  - cell
+                                  - cell [ref=e73]:
+                                    - textbox "Search Text" [ref=e74]
+                                    - img [ref=e75]
+                          - cell "Go" [ref=e76]:
+                            - button "Go" [ref=e77] [cursor=pointer]
+                          - cell [ref=e78]:
+                            - img [ref=e79]
+                          - cell "Search Results Display Preference Standard" [ref=e80]:
+                            - table [ref=e81]:
+                              - rowgroup [ref=e82]:
+                                - row "Search Results Display Preference Standard" [ref=e83]:
+                                  - cell "Search Results Display Preference" [ref=e84]
+                                  - cell [ref=e85]:
+                                    - img [ref=e86]
+                                  - cell "Standard" [ref=e87]:
+                                    - combobox [ref=e88]:
+                                      - option "Advanced"
+                                      - option "Standard" [selected]
+                                    - img [ref=e89]
+    - generic [ref=e91]:
+      - generic [ref=e93]:
+        - table [ref=e94]:
+          - rowgroup [ref=e95]:
+            - row [ref=e96]:
+              - cell
+              - cell [ref=e97]:
+                - img [ref=e98]
+              - cell
+        - generic:
+          - table:
+            - rowgroup:
+              - row:
+                - cell
+        - generic [ref=e99]:
+          - generic [ref=e100]:
+            - table [ref=e102]:
+              - rowgroup [ref=e103]:
+                - row "Home" [ref=e104]:
+                  - cell "Home" [ref=e105]:
+                    - heading "Home" [level=1] [ref=e106]
+            - generic [ref=e107]:
+              - table [ref=e108]:
+                - rowgroup [ref=e109]:
+                  - row:
+                    - cell
+                    - cell
+                  - row [ref=e110]:
+                    - cell [ref=e111]:
+                      - img [ref=e112]
+              - img "The application is running in inaccessible mode. This can be changed from the preferences screen." [ref=e113]
+              - table [ref=e114]:
+                - rowgroup [ref=e115]:
+                  - row [ref=e116]:
+                    - cell [ref=e117]:
+                      - table [ref=e119]:
+                        - rowgroup [ref=e120]:
+                          - row [ref=e121]:
+                            - cell "Navigator Personalize" [ref=e122]:
+                              - table [ref=e123]:
+                                - rowgroup [ref=e124]:
+                                  - row "Navigator Personalize" [ref=e125]:
+                                    - cell "Navigator Personalize" [ref=e126]:
+                                      - table [ref=e128]:
+                                        - rowgroup [ref=e129]:
+                                          - row "Navigator Personalize" [ref=e130]:
+                                            - cell "Navigator Personalize" [ref=e131]:
+                                              - table [ref=e132]:
+                                                - rowgroup [ref=e133]:
+                                                  - row "Navigator Personalize" [ref=e134]:
+                                                    - cell "Navigator Personalize" [ref=e135]:
+                                                      - table [ref=e136]:
+                                                        - rowgroup [ref=e137]:
+                                                          - row [ref=e138]:
+                                                            - cell [ref=e139]:
+                                                              - img [ref=e140]
+                                                          - row "Navigator" [ref=e141]:
+                                                            - cell "Navigator" [ref=e142]:
+                                                              - table [ref=e143]:
+                                                                - rowgroup [ref=e144]:
+                                                                  - row "Navigator" [ref=e145]:
+                                                                    - cell "Navigator" [ref=e146]:
+                                                                      - heading "Navigator" [level=2] [ref=e147]
+                                                          - row [ref=e148]:
+                                                            - cell [ref=e149]:
+                                                              - img [ref=e150]
+                                                          - row "Personalize" [ref=e151]:
+                                                            - cell "Personalize" [ref=e152]:
+                                                              - table [ref=e153]:
+                                                                - rowgroup [ref=e154]:
+                                                                  - row "Personalize" [ref=e155]:
+                                                                    - cell "Personalize" [ref=e156]:
+                                                                      - table [ref=e159]:
+                                                                        - rowgroup [ref=e160]:
+                                                                          - row "Personalize" [ref=e161]:
+                                                                            - cell "Personalize" [ref=e162]:
+                                                                              - button "Personalize" [ref=e163] [cursor=pointer]
+                                                  - row [ref=e164]:
+                                                    - cell [ref=e165]:
+                                                      - table [ref=e166]:
+                                                        - rowgroup [ref=e167]:
+                                                          - row [ref=e168]:
+                                                            - cell [ref=e169]:
+                                                              - table [ref=e170]:
+                                                                - rowgroup [ref=e171]:
+                                                                  - row [ref=e172]:
+                                                                    - cell [ref=e173]:
+                                                                      - list
+                            - cell [ref=e174]:
+                              - table [ref=e175]:
+                                - rowgroup [ref=e176]:
+                                  - row [ref=e177]:
+                                    - cell [ref=e178]:
+                                      - generic [ref=e179]:
+                                        - table [ref=e180]:
+                                          - rowgroup [ref=e181]:
+                                            - row [ref=e182]:
+                                              - cell [ref=e183]:
+                                                - table [ref=e184]:
+                                                  - rowgroup [ref=e185]:
+                                                    - row [ref=e186]:
+                                                      - cell [ref=e187]:
+                                                        - table [ref=e189]:
+                                                          - rowgroup [ref=e190]:
+                                                            - row [ref=e191]:
+                                                              - cell [ref=e192]:
+                                                                - table [ref=e193]:
+                                                                  - rowgroup [ref=e194]:
+                                                                    - row [ref=e195]:
+                                                                      - cell [ref=e196]:
+                                                                        - table [ref=e197]:
+                                                                          - rowgroup [ref=e198]:
+                                                                            - row [ref=e199]:
+                                                                              - cell [ref=e200]:
+                                                                                - img [ref=e201]
+                                                                            - row "Worklist" [ref=e202]:
+                                                                              - cell "Worklist" [ref=e203]:
+                                                                                - table [ref=e204]:
+                                                                                  - rowgroup [ref=e205]:
+                                                                                    - row "Worklist" [ref=e206]:
+                                                                                      - cell "Worklist" [ref=e207]:
+                                                                                        - heading "Worklist" [level=2] [ref=e208]
+                                                                            - row [ref=e209]:
+                                                                              - cell [ref=e210]:
+                                                                                - img [ref=e211]
+                                                                            - row [ref=e212]:
+                                                                              - cell [ref=e213]:
+                                                                                - table [ref=e214]:
+                                                                                  - rowgroup [ref=e215]:
+                                                                                    - row [ref=e216]:
+                                                                                      - cell [ref=e217]:
+                                                                                        - generic [ref=e219]:
+                                                                                          - generic [ref=e220]:
+                                                                                            - table [ref=e221]:
+                                                                                              - rowgroup [ref=e222]:
+                                                                                                - row "Full List (5)" [ref=e223]:
+                                                                                                  - cell
+                                                                                                  - cell "Full List (5)" [ref=e224]:
+                                                                                                    - button "Full List (5)" [ref=e225] [cursor=pointer]
+                                                                                            - generic "Notification List" [ref=e226]:
+                                                                                              - generic [ref=e229]:
+                                                                                                - table [ref=e230]:
+                                                                                                  - rowgroup [ref=e231]:
+                                                                                                    - 'row "Detach Table: Notification List Refresh Table: Notification List Reset Table Settings Disabled: Notification List Table Settings: Notification List Column Freeze: Notification List Query by Example header row collapsed Clear Query by Example filters disabled" [ref=e232]':
+                                                                                                      - 'cell "Detach Table: Notification List Refresh Table: Notification List Reset Table Settings Disabled: Notification List Table Settings: Notification List Column Freeze: Notification List Query by Example header row collapsed Clear Query by Example filters disabled" [ref=e233]':
+                                                                                                        - table [ref=e235]:
+                                                                                                          - rowgroup [ref=e236]:
+                                                                                                            - 'row "Detach Table: Notification List Refresh Table: Notification List Reset Table Settings Disabled: Notification List Table Settings: Notification List Column Freeze: Notification List Query by Example header row collapsed Clear Query by Example filters disabled" [ref=e237]':
+                                                                                                              - cell [ref=e238]
+                                                                                                              - 'cell "Detach Table: Notification List" [ref=e239]':
+                                                                                                                - 'link "Detach Table: Notification List" [ref=e241] [cursor=pointer]':
+                                                                                                                  - /url: javascript:void(0);
+                                                                                                                  - 'img "Detach Table: Notification List" [ref=e242]'
+                                                                                                              - cell [ref=e243]:
+                                                                                                                - img [ref=e244]
+                                                                                                              - 'cell "Refresh Table: Notification List" [ref=e245]':
+                                                                                                                - 'link "Refresh Table: Notification List" [ref=e246] [cursor=pointer]':
+                                                                                                                  - /url: javascript:void(0);
+                                                                                                                  - 'img "Refresh Table: Notification List" [ref=e247]'
+                                                                                                              - cell [ref=e248]:
+                                                                                                                - img [ref=e249]
+                                                                                                              - cell
+                                                                                                              - 'cell "Reset Table Settings Disabled: Notification List" [ref=e250]':
+                                                                                                                - 'img "Reset Table Settings Disabled: Notification List" [ref=e252]'
+                                                                                                              - cell [ref=e253]:
+                                                                                                                - img [ref=e254]
+                                                                                                              - 'cell "Table Settings: Notification List" [ref=e255]':
+                                                                                                                - 'button "Table Settings: Notification List" [ref=e257] [cursor=pointer]':
+                                                                                                                  - 'img "Table Settings: Notification List" [ref=e258]'
+                                                                                                              - cell [ref=e259]:
+                                                                                                                - img [ref=e260]
+                                                                                                              - 'cell "Column Freeze: Notification List" [ref=e261]':
+                                                                                                                - 'button "Column Freeze: Notification List" [ref=e264] [cursor=pointer]':
+                                                                                                                  - 'img "Column Freeze: Notification List" [ref=e265]'
+                                                                                                              - cell
+                                                                                                              - cell [ref=e266]:
+                                                                                                                - img [ref=e267]
+                                                                                                              - cell
+                                                                                                              - cell "Query by Example header row collapsed" [ref=e268]:
+                                                                                                                - link "Query by Example header row collapsed" [ref=e270] [cursor=pointer]:
+                                                                                                                  - /url: javascript:void(0)
+                                                                                                                  - img "Query by Example header row collapsed" [ref=e271]
+                                                                                                              - cell
+                                                                                                              - cell [ref=e272]:
+                                                                                                                - img [ref=e273]
+                                                                                                              - cell
+                                                                                                              - cell "Clear Query by Example filters disabled" [ref=e274]:
+                                                                                                                - img "Clear Query by Example filters disabled" [ref=e276]
+                                                                                                              - cell [ref=e277]:
+                                                                                                                - img [ref=e278]
+                                                                                                              - cell [ref=e279]
+                                                                                                - table [ref=e281]:
+                                                                                                  - rowgroup [ref=e282]:
+                                                                                                    - row "From Sort in ascending order Type Sort in ascending order Subject Sort in ascending order Sent Sorted in descending order Due Sort in ascending order" [ref=e283]:
+                                                                                                      - columnheader "From Sort in ascending order" [ref=e284]:
+                                                                                                        - generic [ref=e285]: From
+                                                                                                        - link "Sort in ascending order" [ref=e286] [cursor=pointer]:
+                                                                                                          - /url: "#"
+                                                                                                          - img "Sort in ascending order" [ref=e287]
+                                                                                                      - columnheader "Type Sort in ascending order" [ref=e288]:
+                                                                                                        - generic [ref=e289]: Type
+                                                                                                        - link "Sort in ascending order" [ref=e290] [cursor=pointer]:
+                                                                                                          - /url: "#"
+                                                                                                          - img "Sort in ascending order" [ref=e291]
+                                                                                                      - columnheader "Subject Sort in ascending order" [ref=e292]:
+                                                                                                        - generic [ref=e293]: Subject
+                                                                                                        - link "Sort in ascending order" [ref=e294] [cursor=pointer]:
+                                                                                                          - /url: "#"
+                                                                                                          - img "Sort in ascending order" [ref=e295]
+                                                                                                      - columnheader "Sent Sorted in descending order" [ref=e296]:
+                                                                                                        - generic [ref=e297]: Sent
+                                                                                                        - link "Sorted in descending order" [ref=e298] [cursor=pointer]:
+                                                                                                          - /url: "#"
+                                                                                                          - img "Sorted in descending order" [ref=e299]
+                                                                                                      - columnheader "Due Sort in ascending order" [ref=e300]:
+                                                                                                        - generic [ref=e301]: Due
+                                                                                                        - link "Sort in ascending order" [ref=e302] [cursor=pointer]:
+                                                                                                          - /url: "#"
+                                                                                                          - img "Sort in ascending order" [ref=e303]
+                                                                                                - table [ref=e305]:
+                                                                                                  - rowgroup [ref=e306]:
+                                                                                                    - row "TRUPTI, TAMBAT PO Approval Standard Purchase Order 4263014164, 0 has been Approved via AME. 30-Apr-2026" [ref=e307]:
+                                                                                                      - cell "TRUPTI, TAMBAT" [ref=e308]
+                                                                                                      - cell "PO Approval" [ref=e309]
+                                                                                                      - cell "Standard Purchase Order 4263014164, 0 has been Approved via AME." [ref=e310]:
+                                                                                                        - link "Standard Purchase Order 4263014164, 0 has been Approved via AME." [ref=e311] [cursor=pointer]:
+                                                                                                          - /url: OA.jsp?OAFunc=FND_WFNTF_DETAILS&NtfId=286306251&addBreadCrumb=Y&retainAM=N&_ti=736059760&oapc=2&oas=N0YDMM4kaavFiCbcQbZc5Q..
+                                                                                                      - cell "30-Apr-2026" [ref=e312]
+                                                                                                      - cell [ref=e313]
+                                                                                                    - row "HERNANDEZ, JOCSELYN PO Approval Standard Purchase Order 4237027887, 0 has been Approved via AME. 15-Apr-2026" [ref=e314]:
+                                                                                                      - cell "HERNANDEZ, JOCSELYN" [ref=e315]
+                                                                                                      - cell "PO Approval" [ref=e316]
+                                                                                                      - cell "Standard Purchase Order 4237027887, 0 has been Approved via AME." [ref=e317]:
+                                                                                                        - link "Standard Purchase Order 4237027887, 0 has been Approved via AME." [ref=e318] [cursor=pointer]:
+                                                                                                          - /url: OA.jsp?OAFunc=FND_WFNTF_DETAILS&NtfId=286126922&addBreadCrumb=Y&retainAM=N&_ti=736059760&oapc=2&oas=elKQsXQNpGNYjovUjjojLg..
+                                                                                                      - cell "15-Apr-2026" [ref=e319]
+                                                                                                      - cell [ref=e320]
+                                                                                                    - row "NIETO, ALONSO PO Approval Standard Purchase Order 4300001123, 0 has been Approved via AME. 14-Apr-2026" [ref=e321]:
+                                                                                                      - cell "NIETO, ALONSO" [ref=e322]
+                                                                                                      - cell "PO Approval" [ref=e323]
+                                                                                                      - cell "Standard Purchase Order 4300001123, 0 has been Approved via AME." [ref=e324]:
+                                                                                                        - link "Standard Purchase Order 4300001123, 0 has been Approved via AME." [ref=e325] [cursor=pointer]:
+                                                                                                          - /url: OA.jsp?OAFunc=FND_WFNTF_DETAILS&NtfId=286114710&addBreadCrumb=Y&retainAM=N&_ti=736059760&oapc=2&oas=oGb2ZxtPGTMaFzDHlSOR0Q..
+                                                                                                      - cell "14-Apr-2026" [ref=e326]
+                                                                                                      - cell [ref=e327]
+                                                                                                    - row "NIETO, ALONSO PO Approval Standard Purchase Order 4300001122, 0 has been Approved via AME. 14-Apr-2026" [ref=e328]:
+                                                                                                      - cell "NIETO, ALONSO" [ref=e329]
+                                                                                                      - cell "PO Approval" [ref=e330]
+                                                                                                      - cell "Standard Purchase Order 4300001122, 0 has been Approved via AME." [ref=e331]:
+                                                                                                        - link "Standard Purchase Order 4300001122, 0 has been Approved via AME." [ref=e332] [cursor=pointer]:
+                                                                                                          - /url: OA.jsp?OAFunc=FND_WFNTF_DETAILS&NtfId=286114709&addBreadCrumb=Y&retainAM=N&_ti=736059760&oapc=2&oas=LvlZuACvk31dxyStOrExUw..
+                                                                                                      - cell "14-Apr-2026" [ref=e333]
+                                                                                                      - cell [ref=e334]
+                                                                                                    - row "NIETO, ALONSO PO Approval Standard Purchase Order 4300001121, 0 has been Approved via AME. 14-Apr-2026" [ref=e335]:
+                                                                                                      - cell "NIETO, ALONSO" [ref=e336]
+                                                                                                      - cell "PO Approval" [ref=e337]
+                                                                                                      - cell "Standard Purchase Order 4300001121, 0 has been Approved via AME." [ref=e338]:
+                                                                                                        - link "Standard Purchase Order 4300001121, 0 has been Approved via AME." [ref=e339] [cursor=pointer]:
+                                                                                                          - /url: OA.jsp?OAFunc=FND_WFNTF_DETAILS&NtfId=286114630&addBreadCrumb=Y&retainAM=N&_ti=736059760&oapc=2&oas=zojueY6ohrS9HxWL8EI8Sg..
+                                                                                                      - cell "14-Apr-2026" [ref=e340]
+                                                                                                      - cell [ref=e341]
+                                                                                                - table
+                                                                                            - table [ref=e344]:
+                                                                                              - rowgroup [ref=e345]:
+                                                                                                - row "TIP Vacation Rules - Redirect or auto-respond to notifications." [ref=e346]:
+                                                                                                  - cell [ref=e347]:
+                                                                                                    - img [ref=e348]
+                                                                                                  - cell "TIP" [ref=e349]
+                                                                                                  - cell "Vacation Rules - Redirect or auto-respond to notifications." [ref=e350]:
+                                                                                                    - link "Vacation Rules" [ref=e351] [cursor=pointer]:
+                                                                                                      - /url: OA.jsp?page=/oracle/apps/fnd/wf/worklist/webui/RouteRulePG&OAFunc=FND_WFNTF_ROUTE_RULE&addBreadCrumb=Y&_ti=736059760&oapc=2&oas=5nu62FtamCoqqokCzvvE6A..
+                                                                                                    - text: "- Redirect or auto-respond to notifications."
+                                                                                          - table [ref=e352]:
+                                                                                            - rowgroup [ref=e353]:
+                                                                                              - row [ref=e354]:
+                                                                                                - cell [ref=e355]:
+                                                                                                  - img [ref=e356]
+                                                                                                - cell [ref=e357]:
+                                                                                                  - table
+                                        - table [ref=e358]:
+                                          - rowgroup [ref=e359]:
+                                            - row [ref=e360]:
+                                              - cell [ref=e361]:
+                                                - table [ref=e362]:
+                                                  - rowgroup [ref=e363]:
+                                                    - row [ref=e364]:
+                                                      - cell [ref=e365]
+                            - cell [ref=e366]:
+                              - table [ref=e367]:
+                                - rowgroup [ref=e368]:
+                                  - row [ref=e369]:
+                                    - cell [ref=e370]
+                          - row [ref=e372]:
+                            - cell [ref=e373]:
+                              - table [ref=e374]:
+                                - rowgroup [ref=e375]:
+                                  - row [ref=e376]:
+                                    - cell [ref=e377]
+                            - cell [ref=e379]:
+                              - table [ref=e380]:
+                                - rowgroup [ref=e381]:
+                                  - row [ref=e382]:
+                                    - cell [ref=e383]
+                            - cell [ref=e385]:
+                              - table [ref=e386]:
+                                - rowgroup [ref=e387]:
+                                  - row [ref=e388]:
+                                    - cell [ref=e389]
+          - generic [ref=e391]:
+            - img [ref=e393]
+            - img [ref=e395]
+      - generic [ref=e396]:
+        - generic [ref=e397]: Copyright (c) 1998, 2022, Oracle and/or its affiliates. All rights reserved.
+        - link "Privacy Statement" [ref=e400] [cursor=pointer]:
+          - /url: http://personalize-this-link
+  - iframe [ref=e401]:
+    

@@ -1,0 +1,27 @@
+MVP Oracle EBS R12 Recording Instructions
+
+Important rules for the recorder:
+- Use EBS_USER and EBS_PASSWORD from environment variables. Do not type or record literal credentials.
+- Use only the test/sandbox Oracle EBS environment.
+- Immediately after login is successful, call oracle_form_open. It handles responsibility selection and function navigation internally. Do NOT navigate to a responsibility or menu item first.
+- If oracle_form_open results in a JNLP download or Java Forms launch, call java_form_launch immediately before any Java Forms interaction.
+- Treat record identifiers, dates, quantities, and amounts as test data placeholders.
+- Record a verification at the end of the flow.
+
+Test objective:
+Verify that QCS can log in, open a Java Forms screen, navigate through the form, complete a safe test transaction or inquiry, and replay it later without AI.
+
+Steps:
+1. Open the Oracle EBS login page from EBS_URL.
+2. Log in using EBS_USER and EBS_PASSWORD from environment variables.
+3. Immediately after login is successful, call oracle_form_open for <FORM_OR_FUNCTION_NAME>. It will handle responsibility selection and function navigation internally.
+4. If the browser downloads a JNLP file or starts Java Forms, call java_form_launch and wait for the Java Forms window to open.
+5. In the Java form, navigate to the field labeled <FIELD_LABEL_1>.
+6. Enter the test value <TEST_VALUE_1> in <FIELD_LABEL_1>. Treat this value as a data placeholder named <PLACEHOLDER_COLUMN_1>.
+7. Navigate to the field or button labeled <FIELD_OR_BUTTON_LABEL_2>.
+8. Enter or click the required test value/action: <TEST_VALUE_OR_ACTION_2>.
+9. Complete the transaction or inquiry using the visible button/menu item labeled <SAVE_SEARCH_OR_COMPLETE_LABEL>.
+10. Verify that <EXPECTED_FIELD_OR_MESSAGE_LABEL> shows <EXPECTED_VALUE_OR_MESSAGE>.
+11. If the form remains open and it is safe to close it, close the Java form.
+
+Replace all angle-bracket placeholders before running `qcs record`.

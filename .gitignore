@@ -1,0 +1,20 @@
+# Secrets — never commit
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Generated outputs
+recordings/
+generated_tests/
+reports/
+pages/
+flows_gen/
+center.db
+
+# Playwright
+node_modules/

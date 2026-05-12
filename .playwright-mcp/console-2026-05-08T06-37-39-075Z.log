@@ -1,0 +1,17 @@
+[    1066ms] [LOG] window.unload: @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1129
+[    1066ms] [LOG] Event @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1130
+[    1730ms] [LOG] jsStartup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:825
+[    1730ms] [LOG] call jsStartup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:700
+[    1730ms] [ERROR] Refused to set unsafe header "Content-length" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:705
+[    1730ms] [ERROR] Refused to set unsafe header "Connection" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:706
+[    2383ms] [LOG] loaded: login.js @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1141
+[    2387ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?errCode=FND_SSO_PHISH_ERROR&langCode=US:0
+[    2387ms] [LOG] startup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:984
+[    2387ms] [LOG] starup: AppsLoginPage.loaded=true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:985
+[    2387ms] [LOG] Var test:true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:990
+[    2391ms] [LOG] Initial : 30 @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:143
+[    2392ms] [LOG] Initial : 30 @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:143
+[    2394ms] [LOG] Window.onshow:  @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1120
+[    2394ms] [LOG] Window.onshow:[object PageTransitionEvent] trusted:true persisted:false @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1121
+[    2394ms] [LOG] AppsLoginPage.loaded=true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1122
+[    2724ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://betsys0.emrsn.com/OA_HTML/media/apply.jpg:0

@@ -1,0 +1,23 @@
+[    2466ms] [LOG] jsStartup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:825
+[    2467ms] [LOG] call jsStartup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:700
+[    2467ms] [ERROR] Refused to set unsafe header "Content-length" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:705
+[    2467ms] [ERROR] Refused to set unsafe header "Connection" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:706
+[    3104ms] [LOG] loaded: login.js @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1141
+[    3131ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp:0
+[    3132ms] [LOG] startup @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:984
+[    3132ms] [LOG] starup: AppsLoginPage.loaded=true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:985
+[    3133ms] [LOG] Var test:true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:990
+[    3141ms] [LOG] Initial : 30 @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:143
+[    3142ms] [LOG] Initial : 30 @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:143
+[    3146ms] [LOG] Window.onshow:  @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1120
+[    3146ms] [LOG] Window.onshow:[object PageTransitionEvent] trusted:true persisted:false @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1121
+[    3146ms] [LOG] AppsLoginPage.loaded=true @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1122
+[    3306ms] [LOG] call AuthenticateUser @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:700
+[    3306ms] [ERROR] Refused to set unsafe header "Content-length" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:705
+[    3306ms] [ERROR] Refused to set unsafe header "Connection" @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:706
+[    3464ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://betsys0.emrsn.com/favicon.ico:0
+[    3468ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://betsys0.emrsn.com/OA_HTML/media/apply.jpg:0
+[    6418ms] [LOG] window.unload: @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1129
+[    6418ms] [LOG] Event @ https://betsys0.emrsn.com/OA_HTML/AppsLocalLogin.jsp?login.js:1130
+[    6739ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://betsys0.emrsn.com/OA_HTML/oraclejet/js/libs/require/require.js:0
+[    6739ms] [ERROR] Refused to execute script from 'https://betsys0.emrsn.com/OA_HTML/oraclejet/js/libs/require/require.js' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled. @ https://betsys0.emrsn.com/OA_HTML/OA.jsp?OAFunc=OANEWHOMEPAGE:0
