@@ -1,0 +1,16 @@
+{
+  "form_ref": "confirm_dialog",
+  "display_name": "Yes/No Confirmation Dialog",
+  "domain": "common",
+  "surface": "java",
+  "technical_forms": ["java_yes_alt_y"],
+  "elements": [
+    {
+      "technical_name": "yes_alt_y",
+      "element_ref": "yes",
+      "display_name": "Yes Button",
+      "object_type": "button",
+      "review_status": "reviewed"
+    }
+  ]
+}

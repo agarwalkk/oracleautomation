@@ -16,7 +16,7 @@ Build an application that turns natural-language Oracle EBS R12 test instruction
 - Never put EBS credentials, Azure keys, or other secrets in prompts, logs, DB rows, generated tests, recordings, or docs.
 
 ## Current Architecture Facts
-- `qcs/__main__.py` owns CLI commands. `qcs record` records and then runs deterministic generation immediately.
+- `qcs/__main__.py` owns CLI commands. `qcs record` records and then runs deterministic generation immediately. `qcs gen run <recording> <name>` is the manual regeneration command. `qcs gen validate <dir>` runs the business-readability gate. `qcs aliases validate` and `qcs aliases report` manage the alias catalog. `qcs repo validate` checks the repository schema.
 - `oracle_ai_agent` owns the AI recording loop.
 - Recording is screenshot-only from the AI perspective: AI gets screenshots and returns actions; Java DOM stays local and is used only for coordinate mapping and deterministic descriptors.
 - Normal recording stores only actioned elements in the repository.
@@ -25,7 +25,9 @@ Build an application that turns natural-language Oracle EBS R12 test instruction
 - Java Forms agent tools run through the local Java Attach API command protocol in `qcs_java_agent`.
 - The old standalone `oracle_mcp_server` was removed. Do not reintroduce it unless there is a strong architectural reason.
 - `generator` converts recordings into readable pytest suites deterministically; generated tests use `qcs_replay.script.OracleReplay`.
-- `qcs_replay` performs deterministic runtime actions and owns failure-only self-healing.
+- `generator/naming.py` provides `sanitize_ref()` and `AliasResolver`: the generator resolves all technical Java form/element IDs to business-readable names before emitting code. The alias catalog lives in `config/aliases/<domain>/<form_ref>.json` and is loaded by `generator/alias_catalog.py`.
+- `generator/script_validator.py` enforces the business-readability gate post-generation: no `java_*` refs, `_alt_*`, `_mnemonic_*`, `toolbar\d` IDs, `page.locator()` calls, or raw Java descriptor dicts may appear in generated step arguments.
+- `qcs_replay` performs deterministic runtime actions and owns failure-only self-healing. `qcs_replay.failure_bundle` writes structured diagnostics (JSON + screenshots + Java snapshots) on step failure when `artifact_dir` is configured.
 - `qcs_center` and `qcs_agent` are early distributed execution prototypes that should evolve into the management/control plane and Windows worker fleet.
 
 ## Recorder And Repository Rules
@@ -38,23 +40,26 @@ Build an application that turns natural-language Oracle EBS R12 test instruction
 
 ## Replay Rules
 - Generated pytest and manifests should refer to semantic names, not raw Java-agent paths or browser selectors.
+- `form_ref` and `element_ref` must be business-readable names. They must not contain `java_` prefixes, `_alt_X` shortcut suffixes, `_mnemonic_X` suffixes, `toolbar\d` IDs, or Playwright selectors. The generator applies the alias catalog first; the sanitiser provides a deterministic fallback. Low-confidence sanitised names are flagged with `# alias_review: was '...'` and validated by `qcs gen validate`.
 - Generated scripts should be UFT-like: each Forms window/dialog/page is a named replay object, and controls are invoked from that object. Do not hang every step off the initially opened form object.
-- Each generated Forms action line should use the chained format `oracle.form('Form Name').textbox('Textbox Name').set('value')` or the equivalent `button/menu/toolbar/press_key` call. Do not emit temporary form variables or visible object-repository parameters for normal action lines.
-- The form name in each generated action must come from the repository form that owns the resolved control descriptor. Do not blindly use the transient `form_id` captured in `recording.jsonl` if repo resolution maps the control to a different form.
-- Generated scripts should launch the initial Oracle Forms URL with `oracle.open_form(url=...)`; do not pass instruction/search text such as a form name into the visible launch call.
+- Each generated Forms action line must use the `FormReplay` DSL: `oracle_replay.form('form_ref').set_text('element_ref', value)` or the equivalent `.click`, `.press_key`, `.assert_text`, `.assert_value` call. Do not use the flat-ref surface-agnostic methods (`oracle_replay.click(ref)`, `oracle_replay.set_text(ref, value)` etc.) — those are removed.
+- `form_ref` and `element_ref` are the canonical manifest fields (Phase 4 model). Do not use the legacy `target_ref` field in new manifests, schemas, validators, or generated code.
+- The form name in each generated action must come from the `form_ref` stored in the manifest step, which is set by the recorder from the repository form id that owns the resolved control descriptor.
+- Generated scripts should launch the initial Oracle Forms URL with `oracle_replay.open_form(url=...)`; do not pass instruction/search text such as a form name into the visible launch call.
 - Replay must resolve semantic names through `qcs_repo` descriptors using `qcs_java_agent` or Playwright deterministic resolvers.
 - Healing may propose repository patches, alternate descriptors, or popup handling, but must not silently merge them.
 
 ## Product Direction
-- Add a normalized test manifest between `recording.jsonl` and generated pytest. Use it for codegen, UI display, Azure Test Plans sync, and run analytics.
+- Manifest steps use `form_ref` (required string, the form/page id) and `element_ref` (nullable string, the element identifier within that form). These are the source of truth for generator, replay, and analytics. Do not introduce `target_ref` or any flat composite ref back into the manifest.
 - Generated pytest steps must resolve structured descriptors through `qcs_java_agent`/Playwright, perform deterministic actions, verify outcomes, and call `HealingEngine.run_with_healing` only after deterministic failure.
 - Improve recorder semantic disambiguation so fields like `PO#` are mapped to the intended business field rather than nearby labels.
 - Azure Test Plans integration should be an adapter around manifests, pytest/JUnit output, and run summaries. Do not replace pytest with a custom runner.
 - Build the management UI over `qcs_center`, not inside generated tests.
 
 ## Development Rules
-- Prefer existing package boundaries: recorder in `oracle_ai_agent`, repository logic in `qcs_repo`, code generation in `generator`, replay in `qcs_replay`, orchestration in `qcs_center` and `qcs_agent`.
+- Prefer existing package boundaries: recorder in `oracle_ai_agent`, repository logic in `qcs_repo`, business naming in `generator/naming.py` and `generator/alias_catalog.py`, code generation in `generator`, replay in `qcs_replay`, orchestration in `qcs_center` and `qcs_agent`.
 - Do not edit generated tests, page objects, or flow files by hand for lasting changes. Update the generator or repository source instead.
 - Preserve local CLI workflows while adding remote center/agent behavior.
 - When touching generator, replay, healing, center, or agent behavior, add or update tests where practical.
 - Validate generated tests by importing/running pytest and checking that no undefined variables are emitted.
+- After generating or modifying a test suite, run `qcs gen validate <dir>` and `qcs aliases validate` to confirm no technical name leakage and no alias catalog errors.

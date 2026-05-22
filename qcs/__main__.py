@@ -4,6 +4,7 @@ qcs — Oracle EBS test automation CLI.
 Commands:
   record   Run the AI recorder agent against live Oracle.
   gen      Generate a pytest suite from a recording.
+    normalize Convert recording.jsonl into a normalized manifest.
   pages    Regenerate all Page Object files from the repository.
   flows    Regenerate all flow functions from the repository.
     repo-capture  Import a recording snapshot.db into the repository catalog.
@@ -56,15 +57,49 @@ def _snake(name: str) -> str:
     return re.sub(r"[^a-z0-9_]", "_", s.lower()).strip("_")
 
 
-def cmd_gen(args: argparse.Namespace) -> None:
-    """qcs gen <recording_dir> <test_name> [--out <dir>]"""
+def cmd_gen_run(args: argparse.Namespace) -> None:
+    """qcs gen run <recording_path> <test_name> [--out <dir>]"""
     from generator.build_test import generate_test  # noqa: PLC0415
     import config  # noqa: PLC0415
 
-    rec_dir   = Path(args.recording_dir)
+    recording_path = Path(args.recording_path)
     test_name = args.test_name
     out_dir   = Path(args.out) if args.out else config.TESTS_DIR / test_name
-    generate_test(rec_dir, out_dir, test_name)
+    generate_test(recording_path, out_dir, test_name)
+
+
+def cmd_gen_validate(args: argparse.Namespace) -> None:
+    """qcs gen validate <generated_test_dir>"""
+    from generator.script_validator import validate_generated_dir  # noqa: PLC0415
+
+    test_dir = Path(args.test_dir)
+    results = validate_generated_dir(test_dir)
+    if not results:
+        print(f"No test_*.py files found under {test_dir}")
+        return
+
+    any_failures = False
+    for result in results:
+        print(result.summary())
+        if not result.passed:
+            any_failures = True
+
+    n_files = len(results)
+    n_fail  = sum(1 for r in results if not r.passed)
+    n_reviews = sum(len(r.alias_reviews) for r in results)
+    print(f"\n{n_files} file(s) checked — {n_fail} failure(s), {n_reviews} alias_review item(s)")
+    if any_failures:
+        sys.exit(1)
+
+
+def cmd_normalize(args: argparse.Namespace) -> None:
+    """qcs normalize <recording_path> [--out <manifest_path>]"""
+    from qcs_manifest import normalize_recording  # noqa: PLC0415
+
+    recording_path = Path(args.recording_path)
+    out_path = Path(args.out) if args.out else None
+    manifest_path = normalize_recording(recording_path, out_path)
+    print(f"Normalized manifest written: {manifest_path}")
 
 
 def cmd_pages(args: argparse.Namespace) -> None:
@@ -94,6 +129,22 @@ def cmd_flows(args: argparse.Namespace) -> None:
         print(f"Total: {len(paths)} flow functions regenerated.")
 
 
+def cmd_repo_validate(args: argparse.Namespace) -> None:
+    """qcs repo validate — validate all repo_entries in the catalog."""
+    from qcs_repo import store as repo_store  # noqa: PLC0415
+    import config  # noqa: PLC0415
+
+    repo_dir = getattr(args, "repo_dir", None)
+    if repo_dir is None:
+        repo_dir = config.REPO_DIR
+    errors = repo_store.validate_repo(repo_dir)
+    if errors:
+        for e in errors:
+            print(f"  ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+    print("Repository validation passed.")
+
+
 def cmd_repo_capture(args: argparse.Namespace) -> None:
     """qcs repo-capture <form_id> <snapshot_db> [--screenshot <png>]"""
     from qcs_repo import store as repo_store  # noqa: PLC0415
@@ -121,6 +172,37 @@ def cmd_play(args: argparse.Namespace) -> None:
 
     instructions = Path(args.instructions).read_text(encoding="utf-8")
     asyncio.run(run_play(instructions, args.run_id))
+
+
+def cmd_aliases_validate(args: argparse.Namespace) -> None:
+    """qcs aliases validate — validate all alias catalog files and report conflicts."""
+    from generator.alias_catalog import AliasCatalog  # noqa: PLC0415
+    import config  # noqa: PLC0415
+
+    catalog_dir = Path(args.catalog_dir) if getattr(args, "catalog_dir", None) else config.BUSINESS_ALIASES_DIR
+    catalog = AliasCatalog.load(catalog_dir)
+    conflicts = catalog.validate()
+    if not conflicts:
+        print(f"Alias catalog OK — {len(catalog.form_files)} form(s) loaded from {catalog_dir}")
+        return
+    for conflict in conflicts:
+        severity = "WARNING" if conflict.conflict_type == "alias_review_pending" else "ERROR"
+        print(f"  {severity}: {conflict}", file=sys.stderr)
+    n_errors = sum(
+        1 for c in conflicts if c.conflict_type != "alias_review_pending"
+    )
+    if n_errors:
+        sys.exit(1)
+
+
+def cmd_aliases_report(args: argparse.Namespace) -> None:
+    """qcs aliases report — print a full alias catalog summary and conflict report."""
+    from generator.alias_catalog import AliasCatalog  # noqa: PLC0415
+    import config  # noqa: PLC0415
+
+    catalog_dir = Path(args.catalog_dir) if getattr(args, "catalog_dir", None) else config.BUSINESS_ALIASES_DIR
+    catalog = AliasCatalog.load(catalog_dir)
+    print(catalog.report())
 
 
 def cmd_center(_args: argparse.Namespace) -> None:
@@ -178,12 +260,46 @@ def main() -> None:
                        help="Generated replay output directory (default: generated_tests/<test-name>).")
     p_rec.set_defaults(func=cmd_record)
 
-    # gen
-    p_gen = sub.add_parser("gen", help="Generate a pytest suite from a recording.")
-    p_gen.add_argument("recording_dir", help="Path to the recording run directory.")
-    p_gen.add_argument("test_name",     help="Name for the generated test suite.")
-    p_gen.add_argument("--out",         help="Output directory (default: generated_tests/<test_name>).")
-    p_gen.set_defaults(func=cmd_gen)
+    # gen (subcommand group)
+    p_gen = sub.add_parser("gen", help="Code generation commands: run, validate.")
+    gen_sub = p_gen.add_subparsers(dest="gen_cmd", required=True)
+
+    p_gen_run = gen_sub.add_parser(
+        "run",
+        help="Generate a pytest suite from a recording dir/jsonl/manifest.",
+    )
+    p_gen_run.add_argument(
+        "recording_path",
+        help="Path to recording run directory, recording.jsonl, or recording.manifest.json.",
+    )
+    p_gen_run.add_argument("test_name", help="Name for the generated test suite.")
+    p_gen_run.add_argument("--out", help="Output directory (default: generated_tests/<test_name>).")
+    p_gen_run.set_defaults(func=cmd_gen_run)
+
+    p_gen_validate = gen_sub.add_parser(
+        "validate",
+        help="Validate generated test_*.py files for business readability.",
+    )
+    p_gen_validate.add_argument(
+        "test_dir",
+        help="Path to directory containing generated test_*.py files.",
+    )
+    p_gen_validate.set_defaults(func=cmd_gen_validate)
+
+    # normalize
+    p_norm = sub.add_parser(
+        "normalize",
+        help="Convert recording.jsonl into a normalized recording manifest.",
+    )
+    p_norm.add_argument(
+        "recording_path",
+        help="Path to recording run directory or recording.jsonl file.",
+    )
+    p_norm.add_argument(
+        "--out",
+        help="Output manifest path (default: <recording_dir>/recording.manifest.json).",
+    )
+    p_norm.set_defaults(func=cmd_normalize)
 
     # pages
     p_pages = sub.add_parser("pages", help="Regenerate all Page Object files from the repository.")
@@ -194,6 +310,41 @@ def main() -> None:
     p_flows = sub.add_parser("flows", help="Regenerate all flow functions from the repository.")
     p_flows.add_argument("flow_ids", nargs="*", help="Specific flow_ids to regenerate (default: all).")
     p_flows.set_defaults(func=cmd_flows)
+
+    # aliases (with nested sub-commands)
+    p_aliases = sub.add_parser("aliases", help="Alias catalog management commands.")
+    aliases_sub = p_aliases.add_subparsers(dest="aliases_cmd", required=True)
+
+    p_aliases_validate = aliases_sub.add_parser(
+        "validate",
+        help="Validate all alias catalog files and report conflicts.",
+    )
+    p_aliases_validate.add_argument(
+        "--catalog-dir",
+        dest="catalog_dir",
+        help="Path to alias catalog directory (default: config/aliases).",
+    )
+    p_aliases_validate.set_defaults(func=cmd_aliases_validate)
+
+    p_aliases_report = aliases_sub.add_parser(
+        "report",
+        help="Print a full alias catalog summary with all validation issues.",
+    )
+    p_aliases_report.add_argument(
+        "--catalog-dir",
+        dest="catalog_dir",
+        help="Path to alias catalog directory (default: config/aliases).",
+    )
+    p_aliases_report.set_defaults(func=cmd_aliases_report)
+
+    # repo (with nested sub-commands)
+    p_repo = sub.add_parser("repo", help="Object repository management commands.")
+    repo_sub = p_repo.add_subparsers(dest="repo_cmd", required=True)
+    p_repo_validate = repo_sub.add_parser(
+        "validate",
+        help="Validate all repository entries and report errors.",
+    )
+    p_repo_validate.set_defaults(func=cmd_repo_validate)
 
     # repo-capture
     p_capture = sub.add_parser(

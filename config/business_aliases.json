@@ -1,0 +1,82 @@
+{
+  "_comment": "Business alias table for Oracle EBS R12 form and element names. Map technical Java Forms IDs to human-reviewed business names. Run `qcs gen` after editing to regenerate tests.",
+  "forms": {
+    "java_quote_order_information_tab_page_order_n": {
+      "business_ref": "order_organizer",
+      "confidence": 1.0,
+      "note": "GSOF Sales Order Organizer — Quote/Order Information tab"
+    },
+    "java_order_typelist_of_values": {
+      "business_ref": "order_type_lov",
+      "confidence": 1.0,
+      "note": "Order Type List-of-Values dialog"
+    },
+    "java_yes_alt_y": {
+      "business_ref": "confirm_dialog",
+      "confidence": 1.0,
+      "note": "Generic Yes/No confirmation dialog"
+    },
+    "java_find_alt_i": {
+      "business_ref": "find_orders",
+      "confidence": 1.0,
+      "note": "Find Orders dialog"
+    },
+    "java_summary_tab_page_order_number": {
+      "business_ref": "order_summary",
+      "confidence": 1.0,
+      "note": "Order Summary tab — shows order number column"
+    },
+    "java_po": {
+      "business_ref": "purchase_order",
+      "confidence": 1.0,
+      "note": "Purchase Order main form"
+    },
+    "java_po_datelist_of_values": {
+      "business_ref": "po_date_lov",
+      "confidence": 1.0,
+      "note": "Purchase Order date picker List-of-Values"
+    }
+  },
+  "elements": {
+    "java_order_typelist_of_values.order_typelist_of_values": {
+      "business_ref": "order_type",
+      "confidence": 1.0
+    },
+    "java_order_typelist_of_values.find_alt_i": {
+      "business_ref": "find",
+      "confidence": 1.0
+    },
+    "java_yes_alt_y.yes_alt_y": {
+      "business_ref": "yes",
+      "confidence": 1.0
+    },
+    "java_find_alt_i.summary_tab_page_order_number": {
+      "business_ref": "select_order",
+      "confidence": 1.0
+    },
+    "java_summary_tab_page_order_number.open_alt_o": {
+      "business_ref": "open",
+      "confidence": 1.0
+    },
+    "java_summary_tab_page_order_number.po_received": {
+      "business_ref": "po_number_field",
+      "confidence": 1.0
+    },
+    "java_po.po_received": {
+      "business_ref": "po_number",
+      "confidence": 1.0
+    },
+    "java_po_datelist_of_values.toolbar195": {
+      "business_ref": "toolbar",
+      "confidence": 1.0
+    },
+    "java_po_datelist_of_values.file_mnemonic_f": {
+      "business_ref": "file_menu",
+      "confidence": 1.0
+    },
+    "java_po_datelist_of_values.view_mnemonic_v": {
+      "business_ref": "view_menu",
+      "confidence": 1.0
+    }
+  }
+}

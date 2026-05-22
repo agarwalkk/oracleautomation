@@ -1,0 +1,23 @@
+{
+  "form_ref": "order_type_lov",
+  "display_name": "Order Type List of Values",
+  "domain": "order_management",
+  "surface": "java",
+  "technical_forms": ["java_order_typelist_of_values"],
+  "elements": [
+    {
+      "technical_name": "order_typelist_of_values",
+      "element_ref": "order_type",
+      "display_name": "Order Type",
+      "object_type": "text_field",
+      "review_status": "reviewed"
+    },
+    {
+      "technical_name": "find_alt_i",
+      "element_ref": "find",
+      "display_name": "Find Button",
+      "object_type": "button",
+      "review_status": "reviewed"
+    }
+  ]
+}

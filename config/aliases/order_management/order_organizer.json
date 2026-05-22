@@ -1,0 +1,8 @@
+{
+  "form_ref": "order_organizer",
+  "display_name": "GSOF Sales Order Organizer",
+  "domain": "order_management",
+  "surface": "java",
+  "technical_forms": ["java_quote_order_information_tab_page_order_n"],
+  "elements": []
+}

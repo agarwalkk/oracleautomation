@@ -59,14 +59,20 @@ qcs-agent  = "qcs_agent.main:main"
 where = ["."]
 include = ["qcs*", "qcs_repo*", "qcs_replay*", "qcs_java_agent*", "generator*", "oracle_ai_agent*", "qcs_center*", "qcs_agent*"]
 
+[tool.pytest.ini_options]
+markers = [
+    "oracle: marks tests that run against Oracle EBS",
+    "ebs: marks tests that exercise Oracle EBS business flows",
+    "generated: marks auto-generated replay scripts",
+    "browser: marks tests that require a Playwright browser session",
+    "java_forms: marks tests that interact with Oracle Java Forms",
+]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
 [tool.setuptools]
 py-modules = ["config"]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["generated_tests"]
-pythonpath = ["."]
-addopts = "--html=reports/report.html --self-contained-html"
 
 [tool.ruff]
 line-length = 100

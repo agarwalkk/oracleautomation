@@ -1,0 +1,16 @@
+{
+  "form_ref": "purchase_order",
+  "display_name": "Purchase Order Form",
+  "domain": "purchasing",
+  "surface": "java",
+  "technical_forms": ["java_po"],
+  "elements": [
+    {
+      "technical_name": "po_received",
+      "element_ref": "po_number",
+      "display_name": "PO Number",
+      "object_type": "text_field",
+      "review_status": "reviewed"
+    }
+  ]
+}

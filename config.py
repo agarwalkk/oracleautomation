@@ -40,6 +40,21 @@ FLOWS_GEN_DIR   = Path(os.environ.get("QCS_FLOWS_GEN_DIR",   ROOT_DIR / "flows_g
 TESTS_DIR       = Path(os.environ.get("QCS_TESTS_DIR",       ROOT_DIR / "generated_tests"))
 REPORTS_DIR     = Path(os.environ.get("QCS_REPORTS_DIR",     ROOT_DIR / "reports"))
 
+# Business alias catalog — scalable per-form JSON files under a directory tree.
+# Each subdirectory is a domain; each file is one business form.
+# Takes precedence over BUSINESS_ALIASES_FILE when the directory exists.
+BUSINESS_ALIASES_DIR = Path(
+    os.environ.get("QCS_BUSINESS_ALIASES_DIR", ROOT_DIR / "config" / "aliases")
+)
+
+# Legacy flat alias file (migration / fallback when BUSINESS_ALIASES_DIR not present).
+# Business alias table used by generator to map technical Java Forms IDs to
+# human-reviewed business form/element names.  Override via env var or edit the
+# JSON file directly and re-run `qcs gen`.
+BUSINESS_ALIASES_FILE = Path(
+    os.environ.get("QCS_BUSINESS_ALIASES_FILE", ROOT_DIR / "config" / "business_aliases.json")
+)
+
 # ── Oracle EBS connection ───────────────────────────────────────────────────
 EBS_URL      = os.environ.get("EBS_URL", "")
 EBS_USER     = os.environ.get("EBS_USER", "")

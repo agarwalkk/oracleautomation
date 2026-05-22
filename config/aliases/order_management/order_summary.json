@@ -1,0 +1,23 @@
+{
+  "form_ref": "order_summary",
+  "display_name": "Order Summary Tab",
+  "domain": "order_management",
+  "surface": "java",
+  "technical_forms": ["java_summary_tab_page_order_number"],
+  "elements": [
+    {
+      "technical_name": "open_alt_o",
+      "element_ref": "open",
+      "display_name": "Open Order Button",
+      "object_type": "button",
+      "review_status": "reviewed"
+    },
+    {
+      "technical_name": "po_received",
+      "element_ref": "po_number_field",
+      "display_name": "PO Number Field",
+      "object_type": "text_field",
+      "review_status": "reviewed"
+    }
+  ]
+}

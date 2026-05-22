@@ -122,6 +122,31 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_elements_form_enabled ON elements(form_id, enabled)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_elements_form_name ON elements(form_id, name)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_elements_form_friendly ON elements(form_id, friendly_name)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS repo_entries (
+            form_ref TEXT NOT NULL,
+            element_ref TEXT NOT NULL,
+            qualified_ref TEXT NOT NULL DEFAULT '',
+            friendly_name TEXT NOT NULL DEFAULT '',
+            surface TEXT NOT NULL DEFAULT '',
+            object_type TEXT NOT NULL DEFAULT '',
+            descriptor_json TEXT NOT NULL DEFAULT '{}',
+            fallback_descriptors_json TEXT NOT NULL DEFAULT '[]',
+            source TEXT NOT NULL DEFAULT 'recording',
+            confidence REAL NOT NULL DEFAULT 1.0,
+            status TEXT NOT NULL DEFAULT 'active',
+            last_validated_run TEXT,
+            created_at TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT '',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            PRIMARY KEY (form_ref, element_ref)
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_repo_entries_form ON repo_entries(form_ref)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_repo_entries_qualified ON repo_entries(qualified_ref)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_repo_entries_status ON repo_entries(status)")
     conn.commit()
 
 
@@ -765,3 +790,122 @@ def append_repo_patch(patch_path: Path, entry: dict) -> None:
     existing = load_repo_patch(patch_path)
     existing.append({**entry, "patched_at": _now_iso()})
     _yaml_save(patch_path, existing)
+
+
+# ── Form-scoped object repository entries ─────────────────────────────────────
+
+def _row_to_entry(row: sqlite3.Row) -> "RepoEntry":
+    from qcs_repo.schema import RepoEntry  # noqa: PLC0415
+    import json as _json  # noqa: PLC0415
+    return RepoEntry.from_dict({
+        "form_ref": row["form_ref"],
+        "element_ref": row["element_ref"],
+        "qualified_ref": row["qualified_ref"],
+        "friendly_name": row["friendly_name"],
+        "surface": row["surface"],
+        "object_type": row["object_type"],
+        "descriptor": _json.loads(row["descriptor_json"] or "{}"),
+        "fallback_descriptors": _json.loads(row["fallback_descriptors_json"] or "[]"),
+        "source": row["source"],
+        "confidence": row["confidence"],
+        "status": row["status"],
+        "last_validated_run": row["last_validated_run"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "metadata": _json.loads(row["metadata_json"] or "{}"),
+    })
+
+
+def upsert_entry(entry: "RepoEntry", repo_dir: Path = config.REPO_DIR) -> None:
+    """Validate and upsert a RepoEntry.  Raises RepoValidationError on invalid data."""
+    from qcs_repo.schema import validate_entry, RepoValidationError  # noqa: PLC0415
+    errors = validate_entry(entry.to_dict())
+    if errors:
+        raise RepoValidationError(errors)
+    now = _now_iso()
+    entry.updated_at = now
+    entry.qualified_ref = f"{entry.form_ref}.{entry.element_ref}"
+    with _db_connect(repo_dir) as conn:
+        conn.execute(
+            """
+            INSERT INTO repo_entries (
+                form_ref, element_ref, qualified_ref, friendly_name, surface, object_type,
+                descriptor_json, fallback_descriptors_json, source, confidence, status,
+                last_validated_run, created_at, updated_at, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(form_ref, element_ref) DO UPDATE SET
+                qualified_ref=excluded.qualified_ref,
+                friendly_name=excluded.friendly_name,
+                surface=excluded.surface,
+                object_type=excluded.object_type,
+                descriptor_json=excluded.descriptor_json,
+                fallback_descriptors_json=excluded.fallback_descriptors_json,
+                source=excluded.source,
+                confidence=excluded.confidence,
+                status=excluded.status,
+                last_validated_run=excluded.last_validated_run,
+                updated_at=excluded.updated_at,
+                metadata_json=excluded.metadata_json
+            """,
+            (
+                entry.form_ref, entry.element_ref, entry.qualified_ref, entry.friendly_name,
+                entry.surface, entry.object_type,
+                _json_dump(entry.descriptor), _json_dump(entry.fallback_descriptors),
+                entry.source, entry.confidence, entry.status,
+                entry.last_validated_run, entry.created_at, now, _json_dump(entry.metadata),
+            ),
+        )
+        conn.commit()
+
+
+def load_entry(
+    form_ref: str, element_ref: str, repo_dir: Path = config.REPO_DIR
+) -> "RepoEntry | None":
+    """Primary-key lookup: return the RepoEntry for (form_ref, element_ref) or None."""
+    with _db_connect(repo_dir) as conn:
+        row = conn.execute(
+            "SELECT * FROM repo_entries WHERE form_ref=? AND element_ref=?",
+            (form_ref, element_ref),
+        ).fetchone()
+    if row is None:
+        return None
+    return _row_to_entry(row)
+
+
+def list_form_entries(
+    form_ref: str, repo_dir: Path = config.REPO_DIR
+) -> list["RepoEntry"]:
+    """Return all RepoEntry rows for a given form_ref, ordered by element_ref."""
+    with _db_connect(repo_dir) as conn:
+        rows = conn.execute(
+            "SELECT * FROM repo_entries WHERE form_ref=? ORDER BY element_ref",
+            (form_ref,),
+        ).fetchall()
+    return [_row_to_entry(r) for r in rows]
+
+
+def all_entries(repo_dir: Path = config.REPO_DIR) -> list["RepoEntry"]:
+    """Return every RepoEntry in the repository, ordered by (form_ref, element_ref)."""
+    with _db_connect(repo_dir) as conn:
+        rows = conn.execute(
+            "SELECT * FROM repo_entries ORDER BY form_ref, element_ref"
+        ).fetchall()
+    return [_row_to_entry(r) for r in rows]
+
+
+def validate_repo(repo_dir: Path = config.REPO_DIR) -> list[str]:
+    """Validate all repo_entries.
+
+    Returns a list of formatted error strings.  An empty list means all entries
+    are valid.  Each error is prefixed with the qualified_ref of the offending
+    entry so errors are easy to locate::
+
+        "[java_find.order_type] $.surface must be one of ..."
+    """
+    from qcs_repo.schema import validate_entry  # noqa: PLC0415
+    all_errors: list[str] = []
+    for entry in all_entries(repo_dir):
+        entry_errors = validate_entry(entry.to_dict())
+        for err in entry_errors:
+            all_errors.append(f"[{entry.qualified_ref}] {err}")
+    return all_errors

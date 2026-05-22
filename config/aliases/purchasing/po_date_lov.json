@@ -1,0 +1,30 @@
+{
+  "form_ref": "po_date_lov",
+  "display_name": "PO Date List of Values",
+  "domain": "purchasing",
+  "surface": "java",
+  "technical_forms": ["java_po_datelist_of_values"],
+  "elements": [
+    {
+      "technical_name": "toolbar195",
+      "element_ref": "toolbar",
+      "display_name": "Toolbar",
+      "object_type": "toolbar",
+      "review_status": "reviewed"
+    },
+    {
+      "technical_name": "file_mnemonic_f",
+      "element_ref": "file_menu",
+      "display_name": "File Menu",
+      "object_type": "menu",
+      "review_status": "reviewed"
+    },
+    {
+      "technical_name": "view_mnemonic_v",
+      "element_ref": "view_menu",
+      "display_name": "View Menu",
+      "object_type": "menu",
+      "review_status": "reviewed"
+    }
+  ]
+}
