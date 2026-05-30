@@ -24,7 +24,7 @@ from qcs_replay.dsl import (
     RepositoryResolver,
     ResolvedTarget,
 )
-from qcs_replay.java_agent import attach_java_agent, resolve_java_ref, wait_for_active_form
+from qcs_replay.java_agent import attach_java_agent, wait_for_active_form
 from qcs_replay.web import open_java_form_sync
 from qcs_repo import store as repo_store
 
@@ -138,6 +138,7 @@ class OracleReplay:
         user_env: str = "EBS_USER",
         password_env: str = "EBS_PASSWORD",
     ) -> None:
+        """Log into Oracle EBS and fail fast when authentication is rejected."""
         login_url = url or os.environ.get("EBS_URL")
         if not login_url:
             raise RuntimeError("EBS login URL was not provided and EBS_URL is not set")
@@ -145,8 +146,17 @@ class OracleReplay:
         self.page.wait_for_load_state("networkidle")
         self.page.get_by_role("textbox", name="User Name").fill(os.environ[user_env])
         self.page.get_by_role("textbox", name="Password").fill(os.environ[password_env])
-        self.page.get_by_role("button", name="Log In").click()
+        login_button = self.page.get_by_role("button", name="Log In")
+        login_button.click()
         self.page.wait_for_load_state("networkidle")
+        try:
+            login_button.wait_for(state="hidden", timeout=15_000)
+        except Exception as exc:
+            raise RuntimeError(
+                "Oracle EBS login did not complete successfully; the login page remained "
+                "visible after submit. Check EBS_USER/EBS_PASSWORD and any login error "
+                "shown by the application."
+            ) from exc
 
     def open_form(
         self,

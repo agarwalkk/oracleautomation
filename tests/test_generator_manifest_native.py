@@ -78,9 +78,10 @@ def _assert_generated_pytest_structure(out_dir: Path, test_name: str) -> None:
     for ref in form_refs:
         assert not ref.startswith("java_"), f"Technical java_ form_ref emitted: {ref!r}"
 
-    # Lifecycle must NOT be in test file (moved to conftest)
-    assert "oracle_replay.login(" not in content
-    assert "oracle_replay.open_form(" not in content
+    # Lifecycle must be present in the generated replay script.
+    assert "oracle_replay.step('Open browser')" in content
+    assert "oracle_replay.login(" in content
+    assert "oracle_replay.open_form(" in content
     assert "sync_playwright" not in content
 
     # No internal/technical details in generated test
@@ -95,10 +96,6 @@ def _assert_conftest_structure(out_dir: Path) -> None:
     assert conftest.exists()
     content = conftest.read_text(encoding="utf-8")
 
-    # Lifecycle constants
-    assert "_EBS_LOGIN_URL" in content
-    assert "_INITIAL_FORM_URL" in content
-
     # Fixtures present
     assert "def oracle_replay" in content
     assert "def _artifact_dir" in content
@@ -108,9 +105,9 @@ def _assert_conftest_structure(out_dir: Path) -> None:
     assert "artifact_dir" in content
     assert "test_name" in content
 
-    # Login and form open in fixture
-    assert "replay.login(" in content
-    assert "replay.open_form(" in content
+    # Lifecycle is owned by the test file, not the fixture.
+    assert "replay.login(" not in content
+    assert "replay.open_form(" not in content
 
     # No business step calls in conftest
     assert ".set_text(" not in content
@@ -157,8 +154,8 @@ def test_generate_from_direct_manifest_path(tmp_path: Path) -> None:
     _assert_conftest_structure(out_dir)
 
 
-def test_generated_test_has_no_lifecycle_or_selectors(tmp_path: Path) -> None:
-    """Generated test file must be clean: no login, no browser setup, no selectors."""
+def test_generated_test_has_lifecycle_but_no_selectors(tmp_path: Path) -> None:
+    """Generated test file must include replay lifecycle without leaking selectors."""
     run_dir = tmp_path / "rec_clean"
     run_dir.mkdir(parents=True)
     _write_generation_sample_jsonl(run_dir / "recording.jsonl", run_id="rec_clean")
@@ -166,8 +163,9 @@ def test_generated_test_has_no_lifecycle_or_selectors(tmp_path: Path) -> None:
 
     content = (tmp_path / "out_clean" / "test_rec_clean.py").read_text(encoding="utf-8")
 
-    assert "oracle_replay.login(" not in content
-    assert "oracle_replay.open_form(" not in content
+    assert "oracle_replay.step('Open browser')" in content
+    assert "oracle_replay.login(" in content
+    assert "oracle_replay.open_form(" in content
     assert "sync_playwright" not in content
     assert "playwright" not in content.lower()
     assert "xpath" not in content.lower()
@@ -181,8 +179,8 @@ def test_generated_test_has_no_lifecycle_or_selectors(tmp_path: Path) -> None:
     assert "pytest.mark.java_forms" in content
 
 
-def test_conftest_contains_lifecycle_not_business_steps(tmp_path: Path) -> None:
-    """Conftest must own login/open_form lifecycle; no business step calls."""
+def test_conftest_contains_runtime_fixture_not_lifecycle_steps(tmp_path: Path) -> None:
+    """Conftest must provide runtime fixtures only; replay lifecycle lives in the test."""
     run_dir = tmp_path / "rec_conf"
     run_dir.mkdir(parents=True)
     _write_generation_sample_jsonl(run_dir / "recording.jsonl", run_id="rec_conf")
@@ -191,8 +189,8 @@ def test_conftest_contains_lifecycle_not_business_steps(tmp_path: Path) -> None:
     _assert_conftest_structure(tmp_path / "out_conf")
 
     conftest = (tmp_path / "out_conf" / "conftest.py").read_text(encoding="utf-8")
-    assert "https://example.local/login" in conftest
-    assert "https://example.local/form" in conftest
     assert "_browser_page" in conftest
     assert "_artifact_dir" in conftest
+    assert "replay.login(" not in conftest
+    assert "replay.open_form(" not in conftest
 

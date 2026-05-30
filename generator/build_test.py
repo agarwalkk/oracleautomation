@@ -2,8 +2,8 @@
 generator.build_test -- Generate a pytest suite from a normalized recording manifest.
 
 Produces in <out_dir>/:
-  test_<name>.py    -- business-step pytest file (no login/setup boilerplate)
-  conftest.py       -- session fixtures: browser lifecycle, login, open_form, artifact dir
+    test_<name>.py    -- replay pytest file with lifecycle + business steps
+    conftest.py       -- session fixtures: browser lifecycle and artifact dir
   README.txt        -- run command and originating recording steps
 """
 from __future__ import annotations
@@ -103,6 +103,7 @@ def generate_test(recording_input: Path, out_dir: Path, test_name: str) -> None:
     manifest_path, run_dir = _resolve_manifest_path(Path(recording_input))
     manifest = load_manifest(manifest_path)
     steps: list[dict[str, Any]] = manifest.get("steps") or []
+    login_url, user_env, password_env, form_url = _extract_lifecycle_params(steps)
 
     has_java = any(s.get("surface") == "java_forms" for s in steps)
     has_html = any(s.get("surface") in ("browser", "system") for s in steps) or any(
@@ -127,6 +128,12 @@ def generate_test(recording_input: Path, out_dir: Path, test_name: str) -> None:
         "import pytest",
         "from qcs_replay.script import OracleReplay",
         "",
+        "# -- EBS session parameters (from recording) ----------------------------------",
+        f"_EBS_LOGIN_URL = {login_url!r}",
+        f"_EBS_USER_ENV = {user_env!r}",
+        f"_EBS_PASSWORD_ENV = {password_env!r}",
+        f"_INITIAL_FORM_URL = {form_url!r}",
+        "",
         "pytestmark = [",
     ]
     for marker in markers:
@@ -137,6 +144,16 @@ def generate_test(recording_input: Path, out_dir: Path, test_name: str) -> None:
         "",
         f"def test_{_snake(test_name)}(oracle_replay: OracleReplay):",
         f'    """Generated from: {run_dir.name}"""',
+        "",
+        "    oracle_replay.step('Open browser')",
+        "    if _EBS_LOGIN_URL:",
+        "        oracle_replay.login(",
+        "            url=_EBS_LOGIN_URL,",
+        "            user_env=_EBS_USER_ENV,",
+        "            password_env=_EBS_PASSWORD_ENV,",
+        "        )",
+        "    if _INITIAL_FORM_URL:",
+        "        oracle_replay.open_form(url=_INITIAL_FORM_URL)",
         "",
     ]
 
@@ -169,7 +186,7 @@ def generate_test(recording_input: Path, out_dir: Path, test_name: str) -> None:
         tech_element_ref: str | None = step.get("element_ref")
         inp = step.get("input") or {}
 
-        # Lifecycle steps are handled by the conftest fixture.
+        # Lifecycle steps are emitted explicitly in the test file.
         if action in ("ebs_login", "java_form_launch"):
             continue
 
@@ -257,20 +274,12 @@ def _write_conftest(
     has_html: bool,
     has_java: bool,
 ) -> None:
-    login_url, user_env, password_env, form_url = _extract_lifecycle_params(steps)
-
     lines = [
         "# AUTO-GENERATED conftest.py -- do not edit by hand.",
         "# Regenerate with: qcs gen run <recording_dir> <test_name>",
         "from __future__ import annotations",
         "",
         "import pytest",
-        "",
-        "# -- EBS session parameters (from recording) ----------------------------------",
-        f"_EBS_LOGIN_URL = {login_url!r}",
-        f"_EBS_USER_ENV = {user_env!r}",
-        f"_EBS_PASSWORD_ENV = {password_env!r}",
-        f"_INITIAL_FORM_URL = {form_url!r}",
     ]
 
     if has_html:
@@ -306,10 +315,10 @@ def _write_conftest(
     lines += [
         "",
         "",
-        "# -- OracleReplay -- EBS session ready ----------------------------------------",
+        "# -- OracleReplay --------------------------------------------------------------",
         "@pytest.fixture",
         f"def oracle_replay({oracle_replay_args}):",
-        '    """Authenticated EBS session, initial form open. Tests contain business steps only."""',
+        '    """OracleReplay with browser/page and artifacts configured."""',
         "    from qcs_replay.script import OracleReplay",
         "    from qcs_replay.dsl import RepositoryResolver",
         "    resolver = RepositoryResolver()",
@@ -317,14 +326,6 @@ def _write_conftest(
         f"    replay = OracleReplay(page={page_arg}, resolver=resolver,",
         "                          artifact_dir=_test_artifact_dir,",
         "                          test_name=request.node.name)",
-        "    if _EBS_LOGIN_URL:",
-        "        replay.login(",
-        "            url=_EBS_LOGIN_URL,",
-        "            user_env=_EBS_USER_ENV,",
-        "            password_env=_EBS_PASSWORD_ENV,",
-        "        )",
-        "    if _INITIAL_FORM_URL:",
-        "        replay.open_form(url=_INITIAL_FORM_URL)",
         "    yield replay",
         "",
     ]
