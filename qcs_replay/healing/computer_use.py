@@ -1,6 +1,13 @@
 """
 qcs_replay.healing.computer_use — Tier-2 Computer-Use Fallback.
 
+*** HEALING FALLBACK ONLY ***
+This module is the ONLY authorised user of the coordinate/computer-use AI path
+during replay.  It is invoked by ``qcs_replay.healing.engine.HealingEngine`` when
+a deterministic locator fails (Tier-2 escalation).  It must NOT be imported or
+called from any recorder code path — the recorder uses the snapshot path
+(``oracle_ai_agent._run_snapshot_recorder``) exclusively.
+
 Provider interface + OpenAI default adapter (gpt-5.4-mini computer use).
 
 Flow

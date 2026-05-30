@@ -45,13 +45,21 @@ def _form_ref_from_row(row: dict[str, Any]) -> str:
         form_id = str(target.get("form_id") or "").strip()
         if form_id:
             return form_id
-    fid = row.get("form_id")
-    if isinstance(fid, str) and fid.strip():
-        return fid.strip()
+    # Prefer explicit top-level form_ref added by the Approach B recorder,
+    # then fall back to legacy form_id.
+    for key in ("form_ref", "form_id"):
+        fid = row.get(key)
+        if isinstance(fid, str) and fid.strip():
+            return fid.strip()
     return ""
 
 
 def _element_ref_from_row(row: dict[str, Any]) -> str | None:
+    # Prefer the explicit stable repo key added by the Approach B recorder.
+    explicit = str(row.get("element_ref") or "").strip()
+    if explicit:
+        return explicit
+    # Fall back to target.friendly_name for legacy rows.
     target = row.get("target")
     if isinstance(target, dict):
         name = (
@@ -68,10 +76,25 @@ def _element_ref_from_row(row: dict[str, Any]) -> str | None:
 
 def _input_from_row(row: dict[str, Any]) -> dict[str, Any] | None:
     payload: dict[str, Any] = {}
-    for key in ("text", "value", "key", "url", "user_env", "password_env", "form_name"):
+    for key in ("text", "value", "key", "url", "user_env", "password_env", "form_name",
+                "locator_params"):
         if key in row:
             payload[key] = row[key]
     return payload or None
+
+
+def _metadata_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Extract supplementary fields for the manifest step metadata dict.
+
+    Captures the stable ``semantic_ref`` (gold/display name) and the volatile
+    ``element_id`` (scan-time token like ``e10``) for diagnostics and healing.
+    """
+    meta: dict[str, Any] = {}
+    for key in ("semantic_ref", "element_id"):
+        val = row.get(key)
+        if val is not None:
+            meta[key] = val
+    return meta
 
 
 def _assertions_from_row(row: dict[str, Any]) -> list[dict[str, Any]]:
@@ -138,7 +161,7 @@ def normalize_rows_to_manifest(
             input=_input_from_row(row),
             assertions=_assertions_from_row(row),
             diagnostics={"ts": row.get("ts", "")},
-            metadata={},
+            metadata=_metadata_from_row(row),
         )
         steps.append(step)
 

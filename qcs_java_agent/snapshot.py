@@ -25,6 +25,110 @@ ACTIONABLE_ROLES = {
 }
 
 
+_ORACLE_FORMS_INNER_FRAME = "ExtendedFrame"
+
+
+def _active_window_root(scan: dict) -> dict | None:
+    """Return the top-level window node that currently holds focus.
+
+    Priority order:
+    1. Window directly marked ``focused``.
+    2. Window that contains any focused descendant.
+    3. Last window in the list (Oracle Forms renders the frontmost form last).
+    """
+    windows = scan.get("windows") or []
+    if not windows:
+        return None
+
+    for w in windows:
+        if w.get("focused"):
+            return w
+
+    def _has_focused(node: dict) -> bool:
+        if node.get("focused"):
+            return True
+        return any(_has_focused(c) for c in (node.get("children") or []))
+
+    for w in windows:
+        if _has_focused(w):
+            return w
+
+    return windows[-1]
+
+
+def _oracle_forms_active_frame(scan: dict) -> dict | None:
+    """Return the active Oracle Forms MDI child frame node, if present.
+
+    Oracle Forms hosts multiple form modules inside a single JVM under a
+    ``FormDesktopContainer``.  Each module is an ``oracle.forms.ui.ExtendedFrame``
+    (``simpleClassName == "ExtendedFrame"``).  Oracle Forms marks the active
+    MDI child with ``focusable=True`` and sets ``focusable=False`` on all
+    background frames.
+
+    Selection priority:
+    1. ``focusable=True`` ExtendedFrame whose ``bounds`` have a non-zero origin
+       (floated / raised dialog on top of the desktop).
+    2. Any ``focusable=True`` ExtendedFrame.
+    3. Fall back: the showing ExtendedFrame with the highest sibling ``index``
+       (Oracle Forms puts the most recently activated form at the top of the
+       Z-order list).
+    """
+    # We need a full flatten to find ExtendedFrame nodes anywhere in the tree
+    nodes: list[dict] = []
+
+    def _walk(node: dict) -> None:
+        nodes.append(node)
+        for child in node.get("children") or []:
+            _walk(child)
+
+    for window in scan.get("windows") or []:
+        _walk(window)
+
+    ef_nodes = [
+        n for n in nodes
+        if str(n.get("simpleClassName") or "") == _ORACLE_FORMS_INNER_FRAME
+        and n.get("showing")
+    ]
+    if not ef_nodes:
+        return None
+
+    focusable = [n for n in ef_nodes if n.get("focusable")]
+    if focusable:
+        # Prefer a floating frame (non-zero origin = raised on top of desktop)
+        for n in focusable:
+            b = n.get("bounds") or {}
+            if b.get("x", 0) != 0 or b.get("y", 0) != 0:
+                return n
+        return focusable[0]
+
+    # No focusable frame — highest sibling index = most recently activated
+    return max(ef_nodes, key=lambda n: n.get("index") or 0)
+
+
+def active_window_scan(scan: dict) -> dict:
+    """Return a scan dict scoped to the active/focused window only.
+
+    For Oracle Forms sessions the active MDI child frame
+    (``oracle.forms.ui.ExtendedFrame``) is detected via the ``focusable``
+    flag and used as the scope root.  For other Java applications the
+    focused top-level window is used instead.
+
+    All other callers (replay, healing, coord mapping) should continue to
+    use the full scan so they can locate elements regardless of which module
+    they belong to.
+    """
+    # Oracle Forms MDI: scope to the active ExtendedFrame module
+    ef = _oracle_forms_active_frame(scan)
+    if ef is not None:
+        return {"windows": [ef]}
+
+    # Standard: scope to the focused top-level window
+    root = _active_window_root(scan)
+    if root is None:
+        return scan
+    return {"windows": [root]}
+
+
 def flatten_nodes(scan: dict) -> list[dict]:
     """Return all Java agent DOM nodes in depth-first order."""
     result: list[dict] = []
@@ -197,6 +301,32 @@ def java_elements_to_ai_snapshot(
     return result
 
 
+_ACTION_SNAPSHOT_ROLES: frozenset[str] = frozenset({
+    "Field", "Button", "List", "ComboBox", "Checkbox", "RadioButton",
+    "Menu", "MenuItem", "Tab", "Table", "Tree", "Toolbar",
+})
+
+
+def _actionable_elements(elements: list[dict]) -> list[dict]:
+    """Return only elements that pass the action-snapshot filter.
+
+    An element qualifies when:
+    - its ``role`` is one of ``_ACTION_SNAPSHOT_ROLES``, AND
+    - it carries an ``"enabled"`` state, OR its role is ``"Toolbar"``
+      (Toolbar items render without an explicit enabled flag).
+    """
+    result: list[dict] = []
+    for element in elements:
+        role = str(element.get("role") or "")
+        if role not in _ACTION_SNAPSHOT_ROLES:
+            continue
+        states = element.get("states") or []
+        if "enabled" not in states and role != "Toolbar":
+            continue
+        result.append(element)
+    return result
+
+
 def java_elements_to_action_snapshot(
     elements: list[dict],
     max_chars: int = config.MAX_SNAPSHOT_CHARS,
@@ -206,21 +336,16 @@ def java_elements_to_action_snapshot(
     Oracle Forms scans include many layout containers whose refs are technically
     clickable but not meaningful replay targets. Keeping them out of the model
     context prevents recordings from binding script steps to volatile panels.
+
+    Uses ``_actionable_elements`` for filtering so that
+    ``build_action_context`` can guarantee an exact element_id match.
     """
-    actionable_roles = {
-        "Field", "Button", "List", "ComboBox", "Checkbox", "RadioButton",
-        "Menu", "MenuItem", "Tab", "Table", "Tree", "Toolbar",
-    }
     lines: list[str] = []
-    for element in elements:
+    for element in _actionable_elements(elements):
+        element_id = element.get("elementid", "?")
+        name = element.get("name") or element.get("text") or ""
         role = str(element.get("role") or "")
         states = element.get("states") or []
-        name = element.get("name") or element.get("text") or ""
-        if role not in actionable_roles:
-            continue
-        if "enabled" not in states and role not in {"Label", "Toolbar"}:
-            continue
-        element_id = element.get("elementid", "?")
         semantic_ref = element.get("semantic_ref") or element.get("friendly_name") or ""
         state_text = ",".join(states)
         line = f"[{element_id}] {name} | {role}"
@@ -233,6 +358,33 @@ def java_elements_to_action_snapshot(
     if len(result) > max_chars:
         result = result[:max_chars] + "\n...(truncated)"
     return result
+
+
+def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
+    """Return ``(action_snapshot_text, {element_id: repo_element})`` for a scan.
+
+    Both the snapshot text and the map are derived from exactly the same
+    ``_actionable_elements`` filter pass, so every ``[eN]`` token that appears
+    in the text has a corresponding key ``eN`` in the map — and nothing else does.
+
+    Intended use (Approach B recorder):
+    1. Render ``snapshot_text`` into the AI prompt.
+    2. AI returns ``element_id`` for the target element.
+    3. Look up ``id_map[element_id]`` to obtain the full repo element descriptor
+       and pass it straight to ``locator_params`` / ``JavaAgentDriver``.
+
+    Only elements from the active/focused window are included; background
+    form modules open in the same JVM are excluded via :func:`active_window_scan`.
+    """
+    elements = java_nodes_to_repo_elements(active_window_scan(scan))
+    actionable = _actionable_elements(elements)
+    snapshot_text = java_elements_to_action_snapshot(elements)
+    id_map: dict[str, dict] = {
+        el["elementid"]: el
+        for el in actionable
+        if el.get("elementid")
+    }
+    return snapshot_text, id_map
 
 
 def locator_params(element: dict) -> dict[str, str]:

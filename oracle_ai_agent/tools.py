@@ -19,11 +19,13 @@ Public surface
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import re
 import sqlite3
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -42,6 +44,7 @@ from qcs_java_agent import (
     JavaAgentDriver,
     active_form_title,
     java_nodes_to_repo_elements,
+    locator_params,
     wait_for_forms_ready,
 )
 from qcs_replay.java_agent import resolve_java_ref
@@ -618,6 +621,263 @@ async def java_form_close(session: RecorderSession) -> str:
 
     session.log_action("java_form_close")
     return "Form close requested via Java agent (ALT+F4)."
+
+
+# ── Approach B: snapshot-based action schema + parser ─────────────────────────
+
+_VALID_ACTIONS: frozenset[str] = frozenset({"set_text", "click", "press_key", "assert", "done"})
+_ELEMENT_ID_REQUIRED: frozenset[str] = frozenset({"set_text", "click", "assert"})
+_ASSERTION_KINDS: frozenset[str] = frozenset({"text", "value", "visible", "enabled"})
+
+
+class SnapshotActionError(ValueError):
+    """Raised when the AI response cannot be parsed into a valid SnapshotAction."""
+
+
+@dataclass
+class SnapshotAction:
+    """Validated AI response for one step in the Approach B recorder loop.
+
+    Produced by ``parse_snapshot_action``; consumed by the Approach B
+    execution layer (not yet wired into the recorder — Approach A is still live).
+    """
+
+    action: str                    # set_text | click | press_key | assert | done
+    element_id: str | None = None  # required for set_text, click, assert
+    value: str | None = None       # text to type / expected value / done note
+    key: str | None = None         # key name for press_key
+    assertion_kind: str | None = None  # text | value | visible | enabled
+
+
+def parse_snapshot_action(
+    raw_args: dict,
+    valid_element_ids: set[str],
+) -> SnapshotAction:
+    """Parse and validate the AI's ``record_action`` tool-call arguments.
+
+    Parameters
+    ----------
+    raw_args:
+        The already-JSON-decoded ``arguments`` dict from the LLM tool call.
+    valid_element_ids:
+        The set of ``elementid`` keys returned by ``build_action_context`` for
+        the current scan.  Any ``element_id`` not in this set is rejected.
+
+    Returns
+    -------
+    SnapshotAction
+        Validated action ready for deterministic execution.
+
+    Raises
+    ------
+    SnapshotActionError
+        When the action is unknown, a required field is missing, the
+        element_id is absent from the snapshot, or assertion_kind is invalid.
+    """
+    action = str(raw_args.get("action") or "").strip()
+    if not action:
+        raise SnapshotActionError(
+            "record_action: 'action' field is required but was empty or missing"
+        )
+    if action not in _VALID_ACTIONS:
+        raise SnapshotActionError(
+            f"record_action: unknown action {action!r}. "
+            f"Must be one of: {', '.join(sorted(_VALID_ACTIONS))}"
+        )
+
+    raw_eid = raw_args.get("element_id")
+    element_id: str | None = str(raw_eid).strip() if raw_eid is not None else None
+    if not element_id:
+        element_id = None
+
+    if action in _ELEMENT_ID_REQUIRED:
+        if not element_id:
+            raise SnapshotActionError(
+                f"record_action: 'element_id' is required for action={action!r}"
+            )
+        if element_id not in valid_element_ids:
+            raise SnapshotActionError(
+                f"record_action: element_id={element_id!r} is not in the current "
+                f"action snapshot. Use only element_ids that appear in the snapshot text."
+            )
+
+    raw_value = raw_args.get("value")
+    value: str | None = str(raw_value) if raw_value is not None else None
+
+    if action == "set_text" and not value:
+        raise SnapshotActionError(
+            "record_action: 'value' is required and must be non-empty for action='set_text'"
+        )
+
+    raw_key = raw_args.get("key")
+    key: str | None = str(raw_key).strip() if raw_key is not None else None
+    if not key:
+        key = None
+
+    if action == "press_key" and not key:
+        raise SnapshotActionError(
+            "record_action: 'key' is required for action='press_key'"
+        )
+
+    raw_kind = raw_args.get("assertion_kind")
+    assertion_kind: str | None = str(raw_kind).strip() if raw_kind is not None else None
+    if not assertion_kind:
+        assertion_kind = None
+
+    if action == "assert":
+        if not assertion_kind:
+            raise SnapshotActionError(
+                "record_action: 'assertion_kind' is required for action='assert'"
+            )
+        if assertion_kind not in _ASSERTION_KINDS:
+            raise SnapshotActionError(
+                f"record_action: unknown assertion_kind={assertion_kind!r}. "
+                f"Must be one of: {', '.join(sorted(_ASSERTION_KINDS))}"
+            )
+
+    return SnapshotAction(
+        action=action,
+        element_id=element_id,
+        value=value,
+        key=key,
+        assertion_kind=assertion_kind,
+    )
+
+
+def execute_resolved_action(
+    driver: Any,
+    element: dict,
+    action: SnapshotAction,
+) -> dict:
+    """Execute a resolved repo element action via the Java-agent locator command path.
+
+    Shared deterministic execution core for Approach B recording and replay:
+
+    1. Build Java-agent locator params from *element* via
+       ``locator_params(element)`` — the same function the driver and replay
+       engine use internally.
+    2. Dispatch ``click``, ``set_text``, or ``press_key`` through
+       ``driver._run(command)`` — the identical wire path as
+       ``JavaAgentDriver.click`` / ``.set_text`` and the replay engine
+       ``JavaAgentElement.click`` / ``.send_text``.
+    3. Return the raw agent result dict.
+
+    ``assert`` and ``done`` are recording markers with no Java agent
+    side-effect and return ``{}`` immediately.
+
+    Parameters
+    ----------
+    driver:
+        Attached ``JavaAgentDriver`` instance.
+    element:
+        Repo element descriptor (from ``build_action_context`` or
+        ``repo_store.resolve_element_ref``).  Pass ``{}`` for
+        ``press_key`` actions that carry no element context.
+    action:
+        Parsed and validated ``SnapshotAction``.
+
+    Returns
+    -------
+    dict
+        Raw agent result dict, or ``{}`` for assert/done.
+
+    Raises
+    ------
+    CommandError
+        If the Java agent rejects the command.  No coordinate fallback is
+        performed here; healing handles that separately.
+    ValueError
+        If ``action.action`` is not a recognised command.
+    """
+    params = locator_params(element)
+    act = action.action
+
+    if act == "click":
+        return driver._run({"command": "click", **params})
+
+    if act == "set_text":
+        encoded = base64.b64encode(
+            (action.value or "").encode("utf-8")
+        ).decode("ascii")
+        return driver._run({"command": "settext", "text64": encoded, **params})
+
+    if act == "press_key":
+        cmd: dict[str, Any] = {"command": "presskey", "key": action.key or ""}
+        cmd.update(params)  # element context for active field (empty dict is a no-op)
+        return driver._run(cmd)
+
+    if act in ("assert", "done"):
+        return {}  # recording markers — no Java agent call at record time
+
+    raise ValueError(
+        f"execute_resolved_action: unsupported action {act!r}; "
+        f"expected one of: click, set_text, press_key, assert, done"
+    )
+
+
+#: Tool schema for the Approach B AI contract.  The Approach B recorder loop
+#: passes this as the sole tool so the model is forced to call it.
+SNAPSHOT_ACTION_TOOL_SCHEMA: dict = {
+    "type": "function",
+    "function": {
+        "name": "record_action",
+        "description": (
+            "Declare the next UI action to perform on the Oracle Forms window. "
+            "Call this ONCE per step. Use element_ids EXACTLY as they appear in "
+            "the action snapshot — do not invent element_ids or use coordinates."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["set_text", "click", "press_key", "assert", "done"],
+                    "description": (
+                        "set_text — type a value into a field; "
+                        "click — click a button/tab/menu item; "
+                        "press_key — press a keyboard shortcut (no element target); "
+                        "assert — verify an element's text, value, or state; "
+                        "done — step is already complete or FAIL note."
+                    ),
+                },
+                "element_id": {
+                    "type": "string",
+                    "description": (
+                        "The element_id from the action snapshot, e.g. 'e12'. "
+                        "Required for set_text, click, and assert. "
+                        "Must appear verbatim in the snapshot — do NOT invent ids."
+                    ),
+                },
+                "value": {
+                    "type": "string",
+                    "description": (
+                        "For set_text: the exact text to type (required). "
+                        "For assert: the expected text or value. "
+                        "For done: optional note; prefix 'FAIL: ' to signal a failure."
+                    ),
+                },
+                "key": {
+                    "type": "string",
+                    "description": (
+                        "For press_key: canonical key name — TAB, ENTER, F10, F11, "
+                        "ESC, ctrl+s, ctrl+F11, ALT+F4, etc. (required)."
+                    ),
+                },
+                "assertion_kind": {
+                    "type": "string",
+                    "enum": ["text", "value", "visible", "enabled"],
+                    "description": (
+                        "For assert: text — inner display text; "
+                        "value — field input value; "
+                        "visible — element is shown; "
+                        "enabled — element is editable/enabled."
+                    ),
+                },
+            },
+            "required": ["action"],
+        },
+    },
+}
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────

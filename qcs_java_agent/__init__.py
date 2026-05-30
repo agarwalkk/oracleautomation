@@ -11,6 +11,8 @@ from .readiness import FormsReadiness, analyze_forms_readiness, wait_for_forms_r
 from .snapshot import (
     actioned_element_at,
     active_form_title,
+    active_window_scan,
+    build_action_context,
     flatten_nodes,
     java_elements_to_action_snapshot,
     java_elements_to_ai_snapshot,
@@ -24,7 +26,9 @@ __all__ = [
     "FormsReadiness",
     "actioned_element_at",
     "active_form_title",
+    "active_window_scan",
     "analyze_forms_readiness",
+    "build_action_context",
     "flatten_nodes",
     "java_elements_to_action_snapshot",
     "java_elements_to_ai_snapshot",

@@ -86,6 +86,14 @@ LOCATOR_TIMEOUT_S   = int(os.environ.get("QCS_LOCATOR_TIMEOUT_S", "10"))
 # ── Recording ───────────────────────────────────────────────────────────────
 PLACEHOLDER_PREFIX  = os.environ.get("QCS_PLACEHOLDER_PREFIX", "DATA_")
 MAX_SNAPSHOT_CHARS  = int(os.environ.get("QCS_MAX_SNAPSHOT_CHARS", "30000"))
+# Recorder mode (override via QCS_RECORDER_MODE env var):
+#   "snapshot"   — Approach B (default): Java DOM scan → chat-completions AI →
+#                  element_id → deterministic locator execution.  No coordinates.
+#   "coordinate" — Approach A (legacy): screenshot → computer-use Responses API →
+#                  pixel coords → Robot click.
+# IMPORTANT: the coordinate/AI path is ALSO used by qcs_replay/healing/ as the
+# Tier-2 healing-only fallback.  Do not remove it even when RECORDER_MODE="snapshot".
+RECORDER_MODE = os.environ.get("QCS_RECORDER_MODE", "snapshot")
 
 # ── Azure OpenAI (recorder + Tier-1 healer) ────────────────────────────────
 AZURE_OPENAI_API_KEY  = os.environ.get("AZURE_OPENAI_API_KEY", "")

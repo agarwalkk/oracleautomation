@@ -41,11 +41,25 @@ from fastmcp import Client
 from fastmcp.client.transports import NpxStdioTransport, SSETransport, StreamableHttpTransport
 
 import config
-from qcs_java_agent import active_form_title, analyze_forms_readiness, java_nodes_to_repo_elements, wait_for_forms_ready
+from qcs_java_agent import (
+    active_form_title,
+    analyze_forms_readiness,
+    build_action_context,
+    java_nodes_to_repo_elements,
+    locator_params,
+    wait_for_forms_ready,
+)
 from qcs_repo import store as repo_store
 from qcs_repo.fingerprint import fingerprint_java_form, suggest_form_id
 from oracle_ai_agent.tools import (
-    RecorderSession, dispatch, TOOL_SCHEMAS,
+    RecorderSession,
+    SnapshotAction,
+    SnapshotActionError,
+    SNAPSHOT_ACTION_TOOL_SCHEMA,
+    dispatch,
+    execute_resolved_action,
+    parse_snapshot_action,
+    TOOL_SCHEMAS,
     close_existing_oracle_windows,
 )
 
@@ -112,6 +126,16 @@ When you execute a block of steps that you recognise as a reusable sequence
 
 The codegen step will extract it as a shared flow callable.
 """
+
+_SNAPSHOT_SYSTEM_PROMPT_FILE = Path(__file__).with_name("snapshot_system_prompt.txt")
+
+
+def _load_snapshot_system_prompt() -> str:
+    """Load the Approach B system prompt (snapshot-based action contract)."""
+    if _SNAPSHOT_SYSTEM_PROMPT_FILE.exists():
+        return _SNAPSHOT_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8").strip()
+    return ""
+
 
 # ── LLM call ──────────────────────────────────────────────────────────────────
 
@@ -588,6 +612,308 @@ def _execute_recording_action(
     return mapped or last_target
 
 
+# ── Approach B: snapshot-driven recording step ────────────────────────────────────
+
+def _execute_snapshot_action(
+    driver: Any,
+    action: SnapshotAction,
+    element: dict | None,
+) -> None:
+    """Execute a parsed SnapshotAction deterministically via JavaAgentDriver.
+
+    Uses ``driver.click`` / ``driver.set_text`` / ``driver.press_key`` —
+    all of which resolve the element through ``locator_params``, NOT through
+    ``java.awt.Robot`` pixel coordinates.  This is the Approach B execution path.
+
+    ``assert`` and ``done`` are recording markers only; no runtime action
+    is performed for them at record time.
+    """
+    act = action.action
+    if act == "set_text" and element is not None:
+        driver.set_text(element, action.value or "")
+    elif act == "click" and element is not None:
+        driver.click(element)
+    elif act == "press_key":
+        driver.press_key(action.key or "")
+    # assert / done: no runtime side-effect at record time
+
+
+async def _execute_snapshot_recording_step(
+    session: RecorderSession,
+    driver: Any,
+    step_text: str,
+    diagnostic_dir: Path | None = None,
+    *,
+    _call_llm: Any = None,
+) -> SnapshotAction | None:
+    """Approach B: scan Java DOM → AI picks element_id → deterministic execution.
+
+    Parallel to ``_execute_recording_action`` (Approach A coordinate path).
+    Does NOT use pyautogui or pixel coordinates.
+
+    Parameters
+    ----------
+    session:
+        Active recorder session; ``current_form_id`` must already be set.
+    driver:
+        Live ``JavaAgentDriver`` attached to the Oracle Forms JVM.
+    step_text:
+        The single English instruction line the AI should execute.
+    diagnostic_dir:
+        Optional per-step directory for JSON diagnostic artefacts.
+    _call_llm:
+        Optional async callable override for the AI call — used in tests to
+        inject a canned response without patching module globals.
+        Signature: ``async (messages, tools) -> dict``.
+        Defaults to the module-level ``call_llm``.
+
+    Returns
+    -------
+    SnapshotAction | None
+        The parsed and executed action, or ``None`` if the step was aborted
+        (no actionable elements, AI returned no tool call, or parse error).
+    """
+    if _call_llm is None:
+        _call_llm = call_llm
+
+    # 1. Scan DOM and build action context ─────────────────────────────────────
+    scan = driver.scan()
+    snapshot_text, id_to_element = build_action_context(scan)
+
+    if diagnostic_dir:
+        _write_diag_json(diagnostic_dir / "b_snapshot.json", {
+            "step_text": step_text,
+            "snapshot_text": snapshot_text,
+            "element_ids": list(id_to_element.keys()),
+        })
+
+    if not id_to_element:
+        msg = f"[Record:B] No actionable elements in snapshot for: {step_text!r}"
+        print(msg)
+        session.log_diagnostic("b_step_abort", step=step_text, reason="empty_snapshot")
+        return None
+
+    # 2. Call AI with snapshot system prompt + step ────────────────────────────
+    system_prompt = _load_snapshot_system_prompt()
+    user_content = (
+        f"ACTION SNAPSHOT:\n{snapshot_text}\n\n"
+        f"NEXT STEP: {step_text}"
+    )
+    messages: list[dict] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": user_content},
+    ]
+    if diagnostic_dir:
+        _write_diag_json(diagnostic_dir / "b_ai_request.json", {
+            "step_text": step_text,
+            "snapshot_element_count": len(id_to_element),
+        })
+
+    response = await _call_llm(messages, [SNAPSHOT_ACTION_TOOL_SCHEMA])
+
+    if diagnostic_dir:
+        _write_diag_json(diagnostic_dir / "b_ai_response.json", response)
+
+    # 3. Extract and parse the tool call ───────────────────────────────────────
+    choice  = (response.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    tool_calls = message.get("tool_calls") or []
+    if not tool_calls:
+        content = message.get("content") or ""
+        print(f"[Record:B] AI returned no tool call for step {step_text!r}: {content[:200]}")
+        session.log_diagnostic("b_step_abort", step=step_text, reason="no_tool_call")
+        if diagnostic_dir:
+            _write_diag_json(diagnostic_dir / "b_no_tool_call.json", {"content": content})
+        return None
+
+    tc = tool_calls[0]
+    try:
+        raw_args = json.loads(tc["function"]["arguments"])
+    except (json.JSONDecodeError, KeyError) as exc:
+        print(f"[Record:B] Could not parse tool call arguments: {exc}")
+        session.log_diagnostic("b_step_abort", step=step_text, reason="bad_arguments", error=str(exc))
+        return None
+
+    try:
+        action = parse_snapshot_action(raw_args, set(id_to_element.keys()))
+    except SnapshotActionError as exc:
+        print(f"[Record:B] Invalid SnapshotAction for step {step_text!r}: {exc}")
+        session.log_diagnostic("b_step_abort", step=step_text, reason="parse_error", error=str(exc))
+        if diagnostic_dir:
+            _write_diag_json(diagnostic_dir / "b_parse_error.json", {
+                "error": str(exc), "raw_args": raw_args,
+            })
+        return None
+
+    if diagnostic_dir:
+        _write_diag_json(diagnostic_dir / "b_parsed_action.json", {
+            "action": action.action,
+            "element_id": action.element_id,
+            "value": action.value,
+            "key": action.key,
+            "assertion_kind": action.assertion_kind,
+        })
+
+    # 4. Resolve element from id_to_element ────────────────────────────────────
+    element: dict | None = None
+    if action.element_id:
+        element = id_to_element.get(action.element_id)
+        if element is None:
+            # Should not happen — parse_snapshot_action already validated the id
+            print(f"[Record:B] element_id {action.element_id!r} vanished after parse (bug)")
+            session.log_diagnostic("b_step_abort", step=step_text, reason="element_vanished",
+                                   element_id=action.element_id)
+            return None
+
+    # 5. Deterministic execution via locator params ────────────────────────────
+    _execute_snapshot_action(driver, action, element)
+
+    # 6. Persist to repo — derive the committed element_ref first so both the
+    # elements table and repo_entries table agree, and the log uses that same ref.
+    form_id: str = session.current_form_id or ""
+    batch: list[dict] = list(id_to_element.values()) if id_to_element else []
+
+    # 6a. Compute the element_ref upsert_form_module will commit (no DB write).
+    # Stamp element["semantic_ref"] so upsert_actioned_element writes the same ref.
+    module_ref: str | None = None
+    if element is not None and form_id and batch:
+        module_ref = repo_store.actioned_element_ref(form_id, element, batch)
+        if module_ref:
+            element["semantic_ref"] = module_ref
+
+    # 6b. Persist the actioned element to the elements table (feeds page codegen)
+    saved: dict | None = None
+    if element is not None and form_id:
+        saved = repo_store.upsert_actioned_element(
+            form_id,
+            element,
+            source=f"recording:{session.run_id}",
+        )
+        if diagnostic_dir:
+            _write_diag_json(diagnostic_dir / "b_saved_element.json",
+                             {k: v for k, v in (saved or {}).items() if k != "java"})
+
+    # 6c. Capture full form module (Tosca-style: all actionable elements) ─────
+    # Upsert every actionable element seen in this scan into repo_entries so the
+    # full form is catalogued, not just the single actioned element.  Existing
+    # created_at/status values are preserved; new entries start as "candidate".
+    if form_id and batch:
+        repo_store.upsert_form_module(
+            form_id,
+            batch,
+            source=f"recording:{session.run_id}",
+        )
+
+    # 7. Record to recording.jsonl ─────────────────────────────────────────────
+    # module_ref is the PK committed to repo_entries — it is the sole source of
+    # truth for the log ref.  Fall back to saved/element only when actioned_element_ref
+    # could not find the element in the batch (should not happen in normal operation).
+    ref: str | None = None
+    if element is not None:
+        ref = (
+            module_ref
+            or (saved or element or {}).get("semantic_ref")
+            or (saved or element or {}).get("friendly_name")
+        )
+
+    # Resolve locator params from the element for deterministic replay/healing
+    _lp: dict = locator_params(element) if element is not None else {}
+
+    if action.action == "click":
+        session.log_action(
+            "java_click",
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            element_id=action.element_id,
+            locator_params=_lp,
+        )
+    elif action.action == "set_text":
+        session.log_action(
+            "java_send_text",
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            text=action.value,
+            element_id=action.element_id,
+            locator_params=_lp,
+        )
+    elif action.action == "press_key":
+        session.log_action(
+            "java_press_key",
+            form_ref=form_id,
+            target={"form_id": form_id},
+            key=action.key,
+        )
+    elif action.action == "assert":
+        session.log_action(
+            "assertion",
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            expected_text=action.value,
+            expected_state=action.assertion_kind,
+        )
+    elif action.action == "done" and action.value:
+        session.log_action("step_note", note=action.value)
+
+    _refresh_current_form_metadata(session, driver)
+    return action
+
+
+async def _run_snapshot_recorder(
+    session: RecorderSession,
+    pw_client,
+    instructions: str,
+) -> None:
+    """Approach B recorder: DOM snapshot → AI returns element_id → deterministic execution.
+
+    Each numbered instruction step is handled by one call to
+    ``_execute_snapshot_recording_step``, which issues a single chat-completion
+    and resolves the action entirely through Java-agent locator params.
+
+    No pixel coordinates, no ``java.awt.Robot``, and no computer-use Responses API
+    are used here.  The coordinate path lives exclusively in
+    ``qcs_replay/healing/`` as the Tier-2 healing-only fallback.
+    """
+    from qcs_java_agent import JavaAgentDriver  # noqa: PLC0415
+
+    numbered = _numbered_instruction_lines(instructions)
+    if not numbered:
+        raise RuntimeError("No numbered steps found in instructions.txt")
+
+    form_step = numbered[0]
+    remaining_steps = numbered[1:]
+    print(f"[Record:B] Opening form deterministically: {form_step}")
+    await _open_oracle_form(session, pw_client, form_step)
+    if not session.java_hwnd or not session.java_pid:
+        raise RuntimeError("No Java Forms window after deterministic form open")
+
+    driver = JavaAgentDriver(pid=session.java_pid)
+    driver.health()
+    await asyncio.to_thread(wait_for_forms_ready, driver, log_prefix="[Record:B]")
+    _refresh_current_form_metadata(session, driver)
+
+    total = len(remaining_steps)
+    for step_no, step_text in enumerate(remaining_steps, start=1):
+        label = f"b_step_{step_no:03d}"
+        diag_dir = _diag_step_dir(session, label)
+        print(f"[Record:B] Step {step_no}/{total}: {step_text!r}")
+        result = await _execute_snapshot_recording_step(
+            session, driver, step_text, diagnostic_dir=diag_dir,
+        )
+        if result is None:
+            print(f"[Record:B]   ↳ aborted — check diagnostics at {diag_dir}")
+        else:
+            suffix = f" element_id={result.element_id}" if result.element_id else ""
+            print(f"[Record:B]   ↳ {result.action}{suffix}")
+
+    print(f"[Record:B] All {total} step(s) completed.")
+
+
 async def _run_computer_use_recorder(
     session: RecorderSession,
     pw_client,
@@ -788,7 +1114,21 @@ async def run_agent(
         print("[Agent] Performing deterministic EBS login …")
         await _deterministic_login(session, pw_client)
 
-        await _run_computer_use_recorder(session, pw_client, instructions)
+        # ── Recorder dispatch ─────────────────────────────────────────────────
+        # RECORDER_MODE="snapshot" (default, Approach B): one chat-completion per
+        # instruction step; no pixel coordinates or java.awt.Robot.
+        # RECORDER_MODE="coordinate" (Approach A, legacy): screenshot-based
+        # computer-use Responses API loop.
+        # The coordinate/AI path is retained in qcs_replay/healing/ as the Tier-2
+        # healing-only fallback and must not be removed regardless of RECORDER_MODE.
+        if config.RECORDER_MODE == "coordinate":
+            print("[Agent] Recorder mode: coordinate (Approach A — computer-use)")
+            await _run_computer_use_recorder(session, pw_client, instructions)
+        else:
+            if config.RECORDER_MODE != "snapshot":
+                print(f"[Agent] Unknown RECORDER_MODE {config.RECORDER_MODE!r}, defaulting to snapshot")
+            print("[Agent] Recorder mode: snapshot (Approach B — DOM snapshot)")
+            await _run_snapshot_recorder(session, pw_client, instructions)
 
         with open(session.run_dir / "messages.json", "w", encoding="utf-8") as f:
             json.dump([

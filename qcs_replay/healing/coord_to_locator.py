@@ -1,5 +1,13 @@
 """Reverse-map screen coordinates to deterministic locator descriptors.
 
+*** HEALING FALLBACK ONLY ***
+This module is the ONLY authorised consumer of pixel-coordinate-to-element
+mapping during replay.  It is called by ``computer_use.py`` when the Tier-2
+healing path (coordinate-based AI) resolves a click position back to a
+Java-agent locator.  It must NOT be used in any new recorder code — the
+recorder (``oracle_ai_agent._run_snapshot_recorder``) resolves elements
+directly from the DOM snapshot, never from coordinates.
+
 For Java Forms, use the local Java agent scan and element bounds to identify
 the element under a computer-use action. For HTML, use Playwright DOM lookup.
 """

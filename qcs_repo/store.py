@@ -909,3 +909,147 @@ def validate_repo(repo_dir: Path = config.REPO_DIR) -> list[str]:
         for err in entry_errors:
             all_errors.append(f"[{entry.qualified_ref}] {err}")
     return all_errors
+
+
+# ── Bulk form-module upsert ───────────────────────────────────────────────────
+
+def upsert_form_module(
+    form_ref: str,
+    elements: list[dict],
+    source: str = "recording",
+    repo_dir: Path = config.REPO_DIR,
+) -> list:  # list[RepoEntry]
+    """Capture a complete form module (Tosca-style) into the object repository.
+
+    Maps every element in *elements* to a ``RepoEntry`` keyed by
+    ``(form_ref, element_ref)``, where ``element_ref`` is the stable semantic
+    label derived from the element's human-readable display name via
+    ``repo_identity.semantic_ref`` (e.g. ``"po_number"``, ``"find_button"``).
+    Volatile capture-local ids such as ``e12`` are never used as the key.
+
+    Preservation policy
+    -------------------
+    * ``created_at`` and ``status`` are **never** changed after the first
+      insert for a given ``(form_ref, element_ref)`` pair.  Only
+      ``descriptor_json``, ``friendly_name``, ``surface``, ``object_type``,
+      ``source``, and ``updated_at`` are refreshed on subsequent scans.
+    * Elements **absent** from *elements* are left completely untouched — no
+      auto-deprecation.  They keep whatever status they had before.
+    * New (first-seen) elements are inserted with ``status='candidate'``.
+      They become ``'active'`` only when ``upsert_actioned_element`` is called
+      for them, establishing that the user/model explicitly interacted with them.
+
+    Uniqueness
+    ----------
+    When two elements in the same batch produce the same semantic label (rare
+    in Oracle Forms but possible for duplicate field titles), the later element
+    in iteration order receives a disambiguating ``_2``, ``_3`` suffix.
+    Since ``build_action_context`` orders elements by Java DOM node id (stable
+    across JVM restarts), disambiguation is deterministic across scans.
+
+    Returns
+    -------
+    list[RepoEntry]
+        The ``RepoEntry`` objects that were inserted or updated, one per
+        element in *elements*.
+    """
+    if not elements:
+        return []
+
+    now = _now_iso()
+
+    # Derive a stable, unique element_ref for each element in this batch.
+    used_refs: set[str] = set()
+    ref_pairs: list[tuple[str, dict]] = []
+    for element in elements:
+        base = repo_identity.semantic_ref(element)
+        ref = _unique_semantic_ref(base, used_refs)
+        used_refs.add(ref)
+        ref_pairs.append((ref, element))
+
+    with _db_connect(repo_dir) as conn:
+        for element_ref, element in ref_pairs:
+            friendly_name = (
+                element.get("semantic_ref")
+                or element.get("friendly_name")
+                or element_ref
+            )
+            conn.execute(
+                """
+                INSERT INTO repo_entries (
+                    form_ref, element_ref, qualified_ref, friendly_name, surface, object_type,
+                    descriptor_json, fallback_descriptors_json, source, confidence, status,
+                    last_validated_run, created_at, updated_at, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(form_ref, element_ref) DO UPDATE SET
+                    qualified_ref  = excluded.qualified_ref,
+                    friendly_name  = excluded.friendly_name,
+                    surface        = excluded.surface,
+                    object_type    = excluded.object_type,
+                    descriptor_json= excluded.descriptor_json,
+                    source         = excluded.source,
+                    updated_at     = excluded.updated_at
+                """,
+                (
+                    form_ref,
+                    element_ref,
+                    f"{form_ref}.{element_ref}",
+                    friendly_name,
+                    "java_forms",
+                    str(element.get("role") or ""),
+                    _json_dump(element),
+                    "[]",           # fallback_descriptors_json
+                    source,
+                    1.0,            # confidence
+                    "candidate",    # status — only for new rows; preserved on conflict
+                    None,           # last_validated_run
+                    now,            # created_at — kept from original on conflict (not in DO UPDATE SET)
+                    now,            # updated_at — always refreshed on conflict
+                    "{}",           # metadata_json
+                ),
+            )
+        conn.commit()
+
+        if ref_pairs:
+            placeholders = ",".join("?" for _ in ref_pairs)
+            rows = conn.execute(
+                f"SELECT * FROM repo_entries "
+                f"WHERE form_ref=? AND element_ref IN ({placeholders})",
+                [form_ref, *[r for r, _ in ref_pairs]],
+            ).fetchall()
+        else:
+            rows = []
+
+    return [_row_to_entry(r) for r in rows]
+
+
+def actioned_element_ref(
+    form_ref: str,
+    actioned_element: dict,
+    batch_elements: list[dict],
+) -> str | None:
+    """Return the element_ref that :func:`upsert_form_module` commits for ``actioned_element``.
+
+    Replays the identical ``repo_identity.semantic_ref`` + ``_unique_semantic_ref``
+    disambiguation pass over *batch_elements* (in iteration order) that
+    ``upsert_form_module`` uses internally, and returns the ref assigned to the
+    element that is identity-equal to *actioned_element*.
+
+    Identity is matched via ``repo_identity.element_uid(form_ref, el)`` for
+    structurally-equivalent elements, with an ``el is actioned_element`` object-
+    identity fallback for newly-constructed dicts not yet persisted.
+
+    Returns ``None`` if *actioned_element* is not found in *batch_elements*.
+
+    This function makes **no database writes**.
+    """
+    actioned_uid = repo_identity.element_uid(form_ref, actioned_element)
+    used_refs: set[str] = set()
+    for element in batch_elements:
+        base = repo_identity.semantic_ref(element)
+        ref = _unique_semantic_ref(base, used_refs)
+        used_refs.add(ref)
+        uid = repo_identity.element_uid(form_ref, element)
+        if uid == actioned_uid or element is actioned_element:
+            return ref
+    return None
