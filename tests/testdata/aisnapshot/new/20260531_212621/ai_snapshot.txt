@@ -1,0 +1,37 @@
+Form: EMR Global Find  Orders/Quotes
+  [e317] Open Folder... (Button, enabled)
+  [e307] Tabs: Quote/Order Information | [*Line Information*] | Advanced | Holds Information | Scheduling (disabled)
+    [e93] Ordered Item (read-only) , [e298] Hold Name (read-only) , [e35] Ordered Item (LOV) , [e36] Model String , [e139] Consol Location (read-only) , [e91] Consol Location (LOV) , [e120] Line type (read-only) , [e37] Line type (LOV)
+    [e274] Shipment Priority (read-only) , [e275] Order Status (read-only) , [e288] Hold Type (read-only) , [e33] Internal Item (LOV) , [e243] Order Number , [e265] Order Type (read-only) , [e38] Division ID (LOV) , [e244] Order Type (LOV) , [e39] Credit Division ID (LOV) , [e40] PA Reference ID
+    [e129] Internal Item (read-only) , [e266] Customer (read-only) , [e287] Description (read-only) , [e245] Customer (LOV) , [e121] Division ID (read-only) , [e122] Credit Division ID (read-only) , [e246] Customer Number (LOV)
+    [e41] Source Type (LOV) , [e42] Warehouse (LOV) , [e267] Customer Number (read-only) , [e43] Status (LOV) , [e44] Shipment Priority (LOV)
+    [e128] Source Type (read-only) , [e268] Ship To (read-only) , [e289] Held By (LOV) , [e247] Ship To (LOV) , [e94] Warehouse (read-only) , [e248] Schedule Status (LOV) , [e101] Status (read-only) , [e96] Shipment Priority (read-only)
+    [e301] Held By (read-only) , [e45] Admin (LOV) , [e46] PID/Tag , [e269] Schedule Status (read-only)
+    [e97] Admin (read-only) , [e249] Demand Class (LOV) , [e271] Reserve Status (read-only) , [e250] Reserve Status (LOV) , [e47] Serial Number From , [e48] To
+    [e270] Demand Class (read-only) , [e290] Criteria (ComboBox) (read-only) values: ['Bill to Site', 'Creation Date', 'Customer', 'Customer Number', 'Deliver to Site', 'End Customer', 'End Customer Number', 'Item', 'Item Category', 'Order', 'Order Type', 'Payment Type', 'Price List', 'Project Number', 'Sales Agreement Number', 'Sales Channel Code', 'Ship to Site', 'Shipping Method Code', 'Top Model', 'Warehouse']
+    [e99] Tech Contact (read-only) , [e49] Tech Contact (LOV) , [e251] On Hold (ComboBox) (read-only) values: ['Yes', 'No'] , [e130] Project Number (read-only) , [e84] Project Number (LOV) , [e273] Pick Status (read-only) , [e253] Pick Status (LOV) , [e50] Ship Set , [e132] Fulfillment Set (read-only) , [e51] Fulfillment Set (LOV)
+    [e34] KOB3 (read-only) , [e292] Value (LOV) , [e85] Task Number (LOV) , [e53] Waybill Number
+    [e254] Shipment Priority (LOV) , [e131] Task Number (read-only) , [e255] Order Status (LOV) , [e111] Lot Number (read-only) , [e54] Lot Number (LOV)
+    [e86] Related Order No (read-only) , [e276] Request Date (read-only) , [e295] Criteria (ComboBox) (read-only) values: ['Customer', 'Ship To Site', 'Bill To Site', 'Warehouse', 'Sales Agreement Line Number'] , [e256] Request Date (LOV) , [e257] To (LOV) , [e88] Customer Reference , [e105] Inland Carrier/Ship Method (read-only) , [e56] Inland Carrier/Ship Method (LOV)
+    [e137] Consolidation Name (read-only) , [e278] Promise Date (read-only) , [e293] Value (read-only) , [e89] Consolidation Name (LOV) , [e258] Promise Date (LOV) , [e138] Intermediate Ship To ID (read-only) , [e259] To (LOV) , [e90] Intermediate Ship To ID (LOV) , [e107] Requested Delivery Date (read-only) , [e57] Requested Delivery Date (LOV) , [e58] To (LOV)
+    [e280] Schedule Ship Date (read-only) , [e297] Hold Sources (Button, enabled)
+    [e59] Bill To (LOV) , [e260] Schedule Ship Date (LOV) , [e60] Bill To (read-only) , [e261] To (LOV) , [e109] Requested Ship Date (read-only) , [e62] Requested Ship Date (LOV) , [e63] To (LOV)
+    [e87] Ship To (read-only) , [e114] Promise Date (read-only) , [e67] Promise Date (LOV) , [e68] To (LOV)
+    [e133] End Customer (read-only) , [e69] End Customer (LOV) , [e70] End User (read-only) , [e112] Orginal Promise Date (read-only) , [e72] Orginal Promise Date (LOV) , [e73] To (LOV)
+    [e102] Invoice Number (read-only) , [e74] Invoice Number (LOV) , [e75] To (LOV) , [e124] Schedule Ship Date (read-only) , [e76] Schedule Ship Date (LOV) , [e77] To (LOV)
+    [e78] Invoice Date (LOV) , [e79] To (LOV) , [e80] On Hold (ComboBox) (read-only) values: ['Yes', 'No'] , [e92] [ ] (read-only)
+    [e118] Invoice Date (read-only)
+    [e82] ACK (ComboBox) (read-only) values: ['Yes', 'No']
+    [e262] Internal Item (read-only) , [e286] Hold Name (LOV) , [e241] Internal Item (LOV) , [e263] Warehouse (read-only) , [e242] Warehouse (LOV)
+  Buttons:
+    [e315] Clear (Button, enabled) , [e316] Find (Button, enabled)
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    [ ] Show Line Details
+    Book Sales Order
+    [ ] ATO Summary View
+    Copy Sales Order Prgram
+    [ ] Pricing Options
+    [ ] Star Model Status
+    Mass Price Adjustment Tool

@@ -2,12 +2,16 @@ package com.pyebsdom.agent;
 
 import javax.accessibility.Accessible;
 import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
 import javax.swing.*;
 import java.awt.*;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -134,6 +138,7 @@ public final class DomScanner {
             if (!raw && !safeIsVisible(window)) continue;
             try {
                 DomNode node = buildNode(window, null, 0, 0, windows.length, idGen, raw);
+                annotateGridRows(node);
                 windowNodes.add(node);
             } catch (Exception e) {
                 // Produce a minimal error node so the window is still represented.
@@ -226,6 +231,14 @@ public final class DomScanner {
                     if (ac.getAccessibleRole() != null) {
                         node.accessibleRole = ac.getAccessibleRole().toDisplayString();
                     }
+                    // Read checked/selected state from AccessibleStateSet.
+                    // Oracle Forms LWCheckbox does not expose isSelected()
+                    // or isChecked() via reflection, but the accessibility
+                    // layer correctly reports CHECKED state.
+                    AccessibleStateSet stateSet = ac.getAccessibleStateSet();
+                    if (stateSet != null && stateSet.contains(AccessibleState.CHECKED)) {
+                        node.selected = true;
+                    }
                 }
             } catch (Exception ignored) {}
         }
@@ -250,10 +263,20 @@ public final class DomScanner {
             if (selected != null) node.selected = "true".equalsIgnoreCase(selected);
             String checked = refMap.get("isChecked");
             if (checked != null) node.selected = "true".equalsIgnoreCase(checked);
+            // Oracle Forms LWCheckbox/ExtendedCheckbox: getState() returns
+            // a string like "true"/"false" or an integer state indicator.
+            String state = refMap.get("getState");
+            if (state != null && !node.selected) {
+                node.selected = "true".equalsIgnoreCase(state)
+                        || "1".equals(state)
+                        || "on".equalsIgnoreCase(state);
+            }
 
             // Extra attributes worth surfacing
             for (String key : new String[] {
-                    "getItemCount", "getRowCount", "getColumnCount", "getSelectedIndex" }) {
+                    "getItemCount", "getRowCount", "getColumnCount", "getSelectedIndex",
+                    "getSelectedRow", "getSelectedRows", "getLeadSelectionIndex",
+                    "getBackground", "getForeground" }) {
                 if (refMap.containsKey(key)) {
                     node.attributes.put(key, refMap.get(key));
                 }
@@ -264,9 +287,101 @@ public final class DomScanner {
                 node.valueOptions.addAll(options);
                 node.attributes.put("valueOptionCount", Integer.toString(options.size()));
             }
+
+            List<String> treeRows = null;
+
+            // For Oracle Forms ListView, use dedicated extractor first
+            // (getCellData uses column-major arg order: col, row)
+            if ("ListView".equals(node.simpleClassName)) {
+                try {
+                    treeRows = ReflectionExtractor.extractListViewRows(comp, 256);
+                } catch (Throwable lvErr) {
+                    node.attributes.put("_listViewError", lvErr.getClass().getName() + ": " + lvErr.getMessage());
+                }
+            }
+
+            // Generic tree/grid extraction for non-ListView or as fallback
+            if (treeRows == null || treeRows.isEmpty()) {
+                try {
+                    treeRows = ReflectionExtractor.extractTreeRows(comp, 256);
+                } catch (Throwable treeErr) {
+                    node.attributes.put("_treeError", treeErr.getClass().getName() + ": " + treeErr.getMessage());
+                }
+            }
+
+            if (treeRows != null && !treeRows.isEmpty()) {
+                node.attributes.put("treeRowCount", Integer.toString(treeRows.size()));
+                node.attributes.put("treeRows", String.join(" || ", treeRows));
+            }
+
+            // Probe ListView-style components for available accessor methods
+            if (node.simpleClassName != null
+                    && (node.simpleClassName.equals("ListView")
+                        || node.simpleClassName.contains("List"))
+                    && (treeRows == null || treeRows.isEmpty())
+                    && node.valueOptions.isEmpty()) {
+                StringBuilder methodProbe = new StringBuilder();
+                for (Method m : comp.getClass().getMethods()) {
+                    String mn = m.getName();
+                    if ((mn.startsWith("get") || mn.startsWith("is"))
+                            && m.getParameterCount() <= 2
+                            && !mn.equals("getClass")) {
+                        Class<?>[] pts = m.getParameterTypes();
+                        StringBuilder sig = new StringBuilder(mn).append("(");
+                        for (int pi = 0; pi < pts.length; pi++) {
+                            if (pi > 0) sig.append(",");
+                            sig.append(pts[pi].getSimpleName());
+                        }
+                        sig.append(")");
+                        if (methodProbe.length() > 0) methodProbe.append(" | ");
+                        methodProbe.append(sig);
+                    }
+                }
+                node.attributes.put("_listMethodProbe", methodProbe.toString());
+            }
+
+            // Tab captions (Main / Shipping / Financials / ...), if available.
+            List<String> tabTitles = ReflectionExtractor.extractTabTitles(comp, 32);
+            if (!tabTitles.isEmpty()) {
+                for (String title : tabTitles) {
+                    if (title != null && !title.isEmpty() && !node.valueOptions.contains(title)) {
+                        node.valueOptions.add(title);
+                    }
+                }
+                node.attributes.put("tabTitleCount", Integer.toString(tabTitles.size()));
+                node.attributes.put("tabTitles", String.join(" | ", tabTitles));
+
+                String selectedTabTitle = ReflectionExtractor.extractSelectedTabTitle(comp, tabTitles);
+                if (selectedTabTitle != null && !selectedTabTitle.isEmpty()) {
+                    node.attributes.put("tabSelectedTitle", selectedTabTitle);
+                }
+
+                // Per-tab enabled/visible state ("1,1 | 0,1 | 1,0 | ...")
+                String tabStates = ReflectionExtractor.extractTabStates(comp, tabTitles.size());
+                if (tabStates != null) {
+                    node.attributes.put("tabStates", tabStates);
+                }
+            }
         } catch (Exception ignored) {}
 
-        // ── DrawnPanel prompt extraction ──────────────────────────────────
+        // ── Menu items (Oracle EWT LWMenu / Swing JMenu) ──────────────────
+        if ("Menu".equals(node.semanticType)) {
+            try {
+                List<String> menuItems = ReflectionExtractor.extractMenuItems(comp, 64);
+                if (!menuItems.isEmpty()) {
+                    node.attributes.put("menuItemCount", Integer.toString(menuItems.size()));
+                    node.attributes.put("menuItems", String.join(" | ", menuItems));
+                }
+            } catch (Exception ignored) {}
+            // Also extract via Accessibility API (role + checked state)
+            try {
+                List<String> accItems = ReflectionExtractor.extractAccessibleMenuItems(comp, 64);
+                if (!accItems.isEmpty()) {
+                    node.attributes.put("accessibleMenuItems", String.join(" || ", accItems));
+                }
+            } catch (Exception ignored) {}
+        }
+
         // oracle.forms.ui.DrawnPanel renders column headers by painting text
         // directly via Graphics2D; the standard accessibility API returns no
         // useful text.  We try a cascade of Oracle-internal field/method names
@@ -442,6 +557,105 @@ public final class DomScanner {
                     + t.getClass().getName() + ": " + t.getMessage());
         }
         return new Component[0];
+    }
+
+    // ── Grid row annotation ──────────────────────────────────────────────
+
+    /**
+     * Post-processing pass: walks the scanned DomNode tree and annotates
+     * fields inside Oracle Forms Folder-style grids with {@code gridRowIndex}.
+     *
+     * <p>Oracle Forms Folder blocks arrange repeating grid fields and
+     * singleton summary fields (e.g. Line Total, Description) inside the
+     * same DrawnPanel container.  Python-side snapshot code has to use
+     * heuristics to distinguish them.  This pass makes it explicit by:
+     *
+     * <ol>
+     *   <li>Finding DrawnPanel nodes whose parent is an FScrollBox (Panel)</li>
+     *   <li>Grouping child Field nodes by accessibleName</li>
+     *   <li>If a name appears ≥ 3 times at regular y-intervals, tagging
+     *       each instance with {@code gridRowIndex=0,1,2...}</li>
+     *   <li>Fields that don't repeat get no gridRowIndex (singletons)</li>
+     * </ol>
+     *
+     * <p>The attribute is written to {@link DomNode#attributes} so it
+     * flows through to JSON and is available to Python immediately.
+     */
+    private static void annotateGridRows(DomNode node) {
+        // Process this node if it's a DrawnPanel inside an FScrollBox
+        if ("Canvas".equals(node.semanticType)
+                && node.type != null
+                && node.type.contains("DrawnPanel")) {
+            annotateDrawnPanelChildren(node);
+        }
+        // Recurse into children
+        for (DomNode child : node.children) {
+            annotateGridRows(child);
+        }
+    }
+
+    /**
+     * For a DrawnPanel node, groups child Field nodes by accessibleName,
+     * detects repeating patterns (≥ 3 instances), and annotates each
+     * repeating instance with its gridRowIndex.
+     */
+    private static void annotateDrawnPanelChildren(DomNode drawnPanel) {
+        // Collect Field children with valid names and y-positions
+        List<DomNode> fields = new ArrayList<>();
+        for (DomNode child : drawnPanel.children) {
+            if (!"Field".equals(child.semanticType)) continue;
+            if (child.accessibleName == null || child.accessibleName.isEmpty()) continue;
+            if (child.bounds == null) continue;
+            fields.add(child);
+        }
+
+        if (fields.isEmpty()) return;
+
+        // Group by accessibleName
+        Map<String, List<DomNode>> byName = new HashMap<>();
+        for (DomNode f : fields) {
+            List<DomNode> list = byName.get(f.accessibleName);
+            if (list == null) {
+                list = new ArrayList<>();
+                byName.put(f.accessibleName, list);
+            }
+            list.add(f);
+        }
+
+        // For names that appear ≥ 3 times, sort by y and assign gridRowIndex.
+        // Also check for regular spacing to confirm it's actually a grid column.
+        for (Map.Entry<String, List<DomNode>> entry : byName.entrySet()) {
+            List<DomNode> instances = entry.getValue();
+            if (instances.size() < 3) continue;
+
+            // Sort by y coordinate
+            instances.sort((a, b) -> Integer.compare(a.bounds.y, b.bounds.y));
+
+            // Check for roughly regular y-spacing (tolerance: 50% of median gap)
+            int[] gaps = new int[instances.size() - 1];
+            for (int i = 0; i < gaps.length; i++) {
+                gaps[i] = instances.get(i + 1).bounds.y - instances.get(i).bounds.y;
+            }
+            int[] sortedGaps = gaps.clone();
+            java.util.Arrays.sort(sortedGaps);
+            int medianGap = sortedGaps[sortedGaps.length / 2];
+
+            if (medianGap <= 0) continue;  // All at same y — not a grid
+
+            // Count how many gaps are within tolerance of the median
+            int regularCount = 0;
+            for (int g : gaps) {
+                if (Math.abs(g - medianGap) <= medianGap / 2) regularCount++;
+            }
+
+            // At least 60% of gaps should be regular for this to be a grid column
+            if (regularCount < gaps.length * 0.6) continue;
+
+            // Confirmed repeating grid column — annotate each instance
+            for (int i = 0; i < instances.size(); i++) {
+                instances.get(i).attributes.put("gridRowIndex", String.valueOf(i));
+            }
+        }
     }
 
     private static String stackTrace(Throwable t) {

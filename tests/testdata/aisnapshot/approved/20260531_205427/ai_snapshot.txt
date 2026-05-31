@@ -1,0 +1,30 @@
+Form: EMR Global Sales Order Entry Form (RMT_RMD_OU) - 8100499, EMERSON PROCESS MANAGEMENT SA DE CV
+  [e882] Tabs: Order Information | [*Line Items*]
+    [e876] Tabs: Main | [*Pricing*] | Shipping | Addresses | Export | Returns | Services | BU Specific | Others
+      | # | Line RO | Ordered Item RO | Qty RO | Pricing UOM RO | Price Rollup RO | Pricing Context RO | Unit Selling Price RO | Price List RO | Agreement RO | Pricing Date RO | List Price RO | Extended Price RO | Contract Lines Sum RO | Payment Terms RO | Tax Code RO | Override Tax Code RO | Tax Handling RO | Tax Exempt Reason RO | Tax Exempt Number RO | Tax Amount RO | Calculate Price Flag Descr RO | Line Charges RO | INTERCO TP1 RO | TP1 CURRENCY RO | INTERCO TP3 RO | TP3 CURRENCY RO | SUB TP1 RO | SUB TP1 CURRENCY RO | SUB TLP1 RO | Lumpsum Discount RO | [ ] RO |
+      |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+      | **1** | [e395] 1.1 | [e405] R-3051S*69198779 | [e324] 2 | [e254] EA | [e364]  | [e334]  | [e114] 719.37073 | [e104] RMT CORPORATE OCT 2024 | [e244]  | [e314] 14-APR-2026 14:41:36 | [e124] 719.37 | [e84] 1,438.74 | [e94]  | [e234] NET60 | [e64] USVERTEX | [e74]  | [e274] Standard | [e284]  | [e294]  | [e304] 0.00 | [e264] Freeze Price | [e134] 0.00 | [e144]  | [e154]  | [e164]  | [e174]  | [e184]  | [e194]  | [e204]  | [e224]  | [e344]  |
+      | 2 | [e396]  | [e406]  | [e325]  | [e255]  | [e365]  | [e335]  | [e115]  | [e105]  | [e245]  | [e315]  | [e125]  | [e85]  | [e95]  | [e235]  | [e65]  | [e75]  | [e275]  | [e285]  | [e295]  | [e305]  | [e265]  | [e135]  | [e145]  | [e155]  | [e165]  | [e175]  | [e185]  | [e195]  | [e205]  | [e225]  | [e345]  |
+      | 3 | [e397]  | [e407]  | [e326]  | [e256]  | [e366]  | [e336]  | [e116]  | [e106]  | [e246]  | [e316]  | [e126]  | [e86]  | [e96]  | [e236]  | [e66]  | [e76]  | [e276]  | [e286]  | [e296]  | [e306]  | [e266]  | [e136]  | [e146]  | [e156]  | [e166]  | [e176]  | [e186]  | [e196]  | [e206]  | [e226]  | [e346]  |
+      | 4 | [e398]  | [e408]  | [e327]  | [e257]  | [e367]  | [e337]  | [e117]  | [e107]  | [e247]  | [e317]  | [e127]  | [e87]  | [e97]  | [e237]  | [e67]  | [e77]  | [e277]  | [e287]  | [e297]  | [e307]  | [e267]  | [e137]  | [e147]  | [e157]  | [e167]  | [e177]  | [e187]  | [e197]  | [e207]  | [e227]  | [e347]  |
+      | 5 | [e399]  | [e409]  | [e328]  | [e258]  | [e368]  | [e338]  | [e118]  | [e108]  | [e248]  | [e318]  | [e128]  | [e88]  | [e98]  | [e238]  | [e68]  | [e78]  | [e278]  | [e288]  | [e298]  | [e308]  | [e268]  | [e138]  | [e148]  | [e158]  | [e168]  | [e178]  | [e188]  | [e198]  | [e208]  | [e228]  | [e348]  |
+      | 6 | [e400]  | [e410]  | [e329]  | [e259]  | [e369]  | [e339]  | [e119]  | [e109]  | [e249]  | [e319]  | [e129]  | [e89]  | [e99]  | [e239]  | [e69]  | [e79]  | [e279]  | [e289]  | [e299]  | [e309]  | [e269]  | [e139]  | [e149]  | [e159]  | [e169]  | [e179]  | [e189]  | [e199]  | [e209]  | [e229]  | [e349]  |
+      | 7 | [e401]  | [e411]  | [e330]  | [e260]  | [e370]  | [e340]  | [e120]  | [e110]  | [e250]  | [e320]  | [e130]  | [e90]  | [e100]  | [e240]  | [e70]  | [e80]  | [e280]  | [e290]  | [e300]  | [e310]  | [e270]  | [e140]  | [e150]  | [e160]  | [e170]  | [e180]  | [e190]  | [e200]  | [e210]  | [e230]  | [e350]  |
+      | 8 | [e402]  | [e412]  | [e331]  | [e261]  | [e371]  | [e341]  | [e121]  | [e111]  | [e251]  | [e321]  | [e131]  | [e91]  | [e101]  | [e241]  | [e71]  | [e81]  | [e281]  | [e291]  | [e301]  | [e311]  | [e271]  | [e141]  | [e151]  | [e161]  | [e171]  | [e181]  | [e191]  | [e201]  | [e211]  | [e231]  | [e351]  |
+      | 9 | [e403]  | [e413]  | [e332]  | [e262]  | [e372]  | [e342]  | [e122]  | [e112]  | [e252]  | [e322]  | [e132]  | [e92]  | [e102]  | [e242]  | [e72]  | [e82]  | [e282]  | [e292]  | [e302]  | [e312]  | [e272]  | [e142]  | [e152]  | [e162]  | [e172]  | [e182]  | [e192]  | [e202]  | [e212]  | [e232]  | [e352]  |
+      | 10 | [e404]  | [e414]  | [e333]  | [e263]  | [e373]  | [e343]  | [e123]  | [e113]  | [e253]  | [e323]  | [e133]  | [e93]  | [e103]  | [e243]  | [e73]  | [e83]  | [e283]  | [e293]  | [e303]  | [e313]  | [e273]  | [e143]  | [e153]  | [e163]  | [e173]  | [e183]  | [e193]  | [e203]  | [e213]  | [e233]  | [e353]  |
+      [e415] Line Total (read-only) = 1,438.74 , [e416] Line Qty (read-only) = 2 , [e418] Each Total (read-only) = 719.37073
+      [e417] Description (read-only) = 3051S2TG5A2E11A1JD4E5M5P1Q4Q8QTT1Q15
+      [e419] Model String (read-only) , [e420] Cfg Status (read-only)
+    Buttons:
+      [e894] Actions (Button, enabled) , [e896] Availability (Button, enabled) , [e897] Item/Unit (Button, enabled) , [e898] Product Advisor (Button, enabled)
+    Tools Menu:
+      Find Customer
+      Workflow Status
+      Show Line Details
+      Book Sales Order
+      ATO Summary View
+      Copy Sales Order Prgram
+      Pricing Options
+      Star Model Status
+      Mass Price Adjustment Tool

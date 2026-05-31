@@ -1,0 +1,30 @@
+Form: EMR Global Find  Orders/Quotes
+  [e317] Open Folder... (Button, enabled)
+  [e307] Tabs: Quote/Order Information | [*Line Information*] | Advanced | Holds Information | Scheduling (disabled)
+    [e93] Ordered Item (read-only) , [e35] Ordered Item (LOV) , [e36] Model String , [e139] Consol Location (read-only) , [e91] Consol Location (LOV) , [e120] Line type (read-only) , [e37] Line type (LOV)
+    [e129] Internal Item (read-only) , [e33] Internal Item (LOV) , [e121] Division ID (read-only) , [e38] Division ID (LOV) , [e122] Credit Division ID (read-only) , [e39] Credit Division ID (LOV) , [e40] PA Reference ID
+    [e128] Source Type (read-only) , [e41] Source Type (LOV) , [e94] Warehouse (read-only) , [e42] Warehouse (LOV) , [e101] Status (read-only) , [e43] Status (LOV) , [e96] Shipment Priority (read-only) , [e44] Shipment Priority (LOV)
+    [e97] Admin (read-only) , [e45] Admin (LOV) , [e46] PID/Tag , [e47] Serial Number From , [e48] To
+    [e99] Tech Contact (read-only) , [e49] Tech Contact (LOV) , [e130] Project Number (read-only) , [e84] Project Number (LOV) , [e50] Ship Set , [e132] Fulfillment Set (read-only) , [e51] Fulfillment Set (LOV)
+    [e34] KOB3 (read-only) , [e131] Task Number (read-only) , [e85] Task Number (LOV) , [e53] Waybill Number , [e111] Lot Number (read-only) , [e54] Lot Number (LOV)
+    [e86] Related Order No (read-only) , [e88] Customer Reference , [e105] Inland Carrier/Ship Method (read-only) , [e56] Inland Carrier/Ship Method (LOV)
+    [e137] Consolidation Name (read-only) , [e89] Consolidation Name (LOV) , [e138] Intermediate Ship To ID (read-only) , [e90] Intermediate Ship To ID (LOV) , [e107] Requested Delivery Date (read-only) , [e57] Requested Delivery Date (LOV) , [e58] To (LOV)
+    [e59] Bill To (LOV) , [e60] Bill To (read-only) , [e109] Requested Ship Date (read-only) , [e62] Requested Ship Date (LOV) , [e63] To (LOV)
+    [e87] Ship To (read-only) , [e114] Promise Date (read-only) , [e67] Promise Date (LOV) , [e68] To (LOV)
+    [e133] End Customer (read-only) , [e69] End Customer (LOV) , [e70] End User (read-only) , [e112] Orginal Promise Date (read-only) , [e72] Orginal Promise Date (LOV) , [e73] To (LOV)
+    [e102] Invoice Number (read-only) , [e74] Invoice Number (LOV) , [e75] To (LOV) , [e124] Schedule Ship Date (read-only) , [e76] Schedule Ship Date (LOV) , [e77] To (LOV)
+    [e78] Invoice Date (LOV) , [e79] To (LOV) , [e80] On Hold (ComboBox) (read-only) values: ['Yes', 'No'] , [e92] [ ] (read-only)
+    [e118] Invoice Date (read-only)
+    [e82] ACK (ComboBox) (read-only) values: ['Yes', 'No']
+  Buttons:
+    [e315] Clear (Button, enabled) , [e316] Find (Button, enabled)
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    [ ] Show Line Details
+    Book Sales Order
+    [ ] ATO Summary View
+    Copy Sales Order Prgram
+    [ ] Pricing Options
+    [ ] Star Model Status
+    Mass Price Adjustment Tool

@@ -1,0 +1,30 @@
+Form: EMR Global Sales Order Entry Form (RMT_RMD_OU) - 8100499, EMERSON PROCESS MANAGEMENT SA DE CV
+  [e882] Tabs: Order Information | [*Line Items*]
+    [e876] Tabs: [*Main*] | Pricing | Shipping | Addresses | Export | Returns | Services | BU Specific | Others
+      | # | Line RO | Ordered Item RO | Cr Division RO | Model String RO | Qty RO | UOM RO | Unit Selling Price RO | Cust PO Line # RO | Rep Line Number RO | Line Type RO | Admin RO | Related Order RO | Req Delivery RO | Req Ship RO | Original Promise Date RO | Promise Date RO | Schedule Ship Date RO | Transit Time RO | Orig Schedule Ship Date RO | Expected Invoice Date RO | Adjusted Ship Date RO | Pick/Pack Leadtime RO | Reason for Offset RO | Ship Set RO | Quoted Leadtime RO | QS Cause Code RO | Expected Overdue Notification RO | Status RO | External Status RO | Qty Cancelled RO | Qty Shipped RO | Ack'd RO | Ack'd Date RO | PO Received RO | User Item Description RO | PA Reference ID RO | [ ] RO |
+      |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+      | **1** | [e502] 1.1 | [e512] R-3051S*69198779 | [e421]  | [e431]  | [e71] 2 | [e81] EA | [e311] 719.37073 | [e281]  | [e441]  | [e171] Line_Internal_IC_RMT | [e181]  | [e321]  | [e331]  | [e91] 09-APR-2026 00:00:00 | [e261]  | [e271] 09-APR-2026 00:00:00 | [e101]  | [e111]  | [e121]  | [e131]  | [e141]  | [e151]  | [e161]  | [e411]  | [e451]  | [e461]  | [e471]  | [e351] Booked | [e361]  | [e191] 0 | [e201]  | [e211]  | [e221]  | [e231]  | [e241]  | [e251]  | [e341] . |
+      | 2 | [e503]  | [e513]  | [e422]  | [e432]  | [e72]  | [e82]  | [e312]  | [e282]  | [e442]  | [e172]  | [e182]  | [e322]  | [e332]  | [e92]  | [e262]  | [e272]  | [e102]  | [e112]  | [e122]  | [e132]  | [e142]  | [e152]  | [e162]  | [e412]  | [e452]  | [e462]  | [e472]  | [e352]  | [e362]  | [e192]  | [e202]  | [e212]  | [e222]  | [e232]  | [e242]  | [e252]  | [e342]  |
+      | 3 | [e504]  | [e514]  | [e423]  | [e433]  | [e73]  | [e83]  | [e313]  | [e283]  | [e443]  | [e173]  | [e183]  | [e323]  | [e333]  | [e93]  | [e263]  | [e273]  | [e103]  | [e113]  | [e123]  | [e133]  | [e143]  | [e153]  | [e163]  | [e413]  | [e453]  | [e463]  | [e473]  | [e353]  | [e363]  | [e193]  | [e203]  | [e213]  | [e223]  | [e233]  | [e243]  | [e253]  | [e343]  |
+      | 4 | [e505]  | [e515]  | [e424]  | [e434]  | [e74]  | [e84]  | [e314]  | [e284]  | [e444]  | [e174]  | [e184]  | [e324]  | [e334]  | [e94]  | [e264]  | [e274]  | [e104]  | [e114]  | [e124]  | [e134]  | [e144]  | [e154]  | [e164]  | [e414]  | [e454]  | [e464]  | [e474]  | [e354]  | [e364]  | [e194]  | [e204]  | [e214]  | [e224]  | [e234]  | [e244]  | [e254]  | [e344]  |
+      | 5 | [e506]  | [e516]  | [e425]  | [e435]  | [e75]  | [e85]  | [e315]  | [e285]  | [e445]  | [e175]  | [e185]  | [e325]  | [e335]  | [e95]  | [e265]  | [e275]  | [e105]  | [e115]  | [e125]  | [e135]  | [e145]  | [e155]  | [e165]  | [e415]  | [e455]  | [e465]  | [e475]  | [e355]  | [e365]  | [e195]  | [e205]  | [e215]  | [e225]  | [e235]  | [e245]  | [e255]  | [e345]  |
+      | 6 | [e507]  | [e517]  | [e426]  | [e436]  | [e76]  | [e86]  | [e316]  | [e286]  | [e446]  | [e176]  | [e186]  | [e326]  | [e336]  | [e96]  | [e266]  | [e276]  | [e106]  | [e116]  | [e126]  | [e136]  | [e146]  | [e156]  | [e166]  | [e416]  | [e456]  | [e466]  | [e476]  | [e356]  | [e366]  | [e196]  | [e206]  | [e216]  | [e226]  | [e236]  | [e246]  | [e256]  | [e346]  |
+      | 7 | [e508]  | [e518]  | [e427]  | [e437]  | [e77]  | [e87]  | [e317]  | [e287]  | [e447]  | [e177]  | [e187]  | [e327]  | [e337]  | [e97]  | [e267]  | [e277]  | [e107]  | [e117]  | [e127]  | [e137]  | [e147]  | [e157]  | [e167]  | [e417]  | [e457]  | [e467]  | [e477]  | [e357]  | [e367]  | [e197]  | [e207]  | [e217]  | [e227]  | [e237]  | [e247]  | [e257]  | [e347]  |
+      | 8 | [e509]  | [e519]  | [e428]  | [e438]  | [e78]  | [e88]  | [e318]  | [e288]  | [e448]  | [e178]  | [e188]  | [e328]  | [e338]  | [e98]  | [e268]  | [e278]  | [e108]  | [e118]  | [e128]  | [e138]  | [e148]  | [e158]  | [e168]  | [e418]  | [e458]  | [e468]  | [e478]  | [e358]  | [e368]  | [e198]  | [e208]  | [e218]  | [e228]  | [e238]  | [e248]  | [e258]  | [e348]  |
+      | 9 | [e510]  | [e520]  | [e429]  | [e439]  | [e79]  | [e89]  | [e319]  | [e289]  | [e449]  | [e179]  | [e189]  | [e329]  | [e339]  | [e99]  | [e269]  | [e279]  | [e109]  | [e119]  | [e129]  | [e139]  | [e149]  | [e159]  | [e169]  | [e419]  | [e459]  | [e469]  | [e479]  | [e359]  | [e369]  | [e199]  | [e209]  | [e219]  | [e229]  | [e239]  | [e249]  | [e259]  | [e349]  |
+      | 10 | [e511]  | [e521]  | [e430]  | [e440]  | [e80]  | [e90]  | [e320]  | [e290]  | [e450]  | [e180]  | [e190]  | [e330]  | [e340]  | [e100]  | [e270]  | [e280]  | [e110]  | [e120]  | [e130]  | [e140]  | [e150]  | [e160]  | [e170]  | [e420]  | [e460]  | [e470]  | [e480]  | [e360]  | [e370]  | [e200]  | [e210]  | [e220]  | [e230]  | [e240]  | [e250]  | [e260]  | [e350]  |
+      [e522] Line Total (read-only) = 1,438.74 , [e523] Line Qty (read-only) = 2 , [e525] Each Total (read-only) = 719.37073
+      [e524] Description (read-only) = 3051S2TG5A2E11A1JD4E5M5P1Q4Q8QTT1Q15
+      [e526] Model String (read-only) , [e527] Cfg Status (read-only)
+    Buttons:
+      [e894] Actions (Button, enabled) , [e896] Availability (Button, enabled) , [e897] Item/Unit (Button, enabled) , [e898] Product Advisor (Button, enabled)
+    Tools Menu:
+      Find Customer
+      Workflow Status
+      Show Line Details
+      Book Sales Order
+      ATO Summary View
+      Copy Sales Order Prgram
+      Pricing Options
+      Star Model Status
+      Mass Price Adjustment Tool
