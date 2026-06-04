@@ -119,7 +119,7 @@ public final class ComponentClassifier {
                     if (role != null) {
                         String roleName = role.toDisplayString();
                         if (roleName != null) {
-                            return classifyByAccessibleRole(roleName.toLowerCase());
+                            return classifyAccessibleRole(roleName.toLowerCase());
                         }
                     }
                 }
@@ -269,7 +269,13 @@ public final class ComponentClassifier {
 
     // ── Accessible role mapping ────────────────────────────────────────────
 
-    private static String classifyByAccessibleRole(String role) {
+    /**
+     * Maps an accessible-role display string (lowercase) to a semantic type.
+     *
+     * <p>Made public so {@link DomScanner} can classify menu/toolbar items
+     * discovered via the Accessibility API that are not real AWT Components.
+     */
+    public static String classifyAccessibleRole(String role) {
         if (role.contains("frame"))       return "Window";
         if (role.contains("dialog"))      return "Dialog";
         if (role.contains("push button") || role.contains("pushbutton"))

@@ -691,10 +691,9 @@ function ImageCanvas(props: {
           }}
         />
         {props.hoverMode === "all" ? (
-          /* "All" mode: every scanned element from raw DOM is a colored,
-             hoverable box with tooltip. All are draggable onto the tree.
-             Tree elements get a slightly different styling so the user
-             can see what's already curated vs what's still unplaced. */
+          /* "All" mode: every scanned element from raw DOM is hoverable and
+             draggable onto the tree, but invisible until hovered — same
+             visual behavior as discovery elements in "tree" mode. */
           <>
             <div className="overlay-layer discovery-layer">
               {allElements.map((fe) => {
@@ -702,17 +701,14 @@ function ImageCanvas(props: {
                 if (!b.width || !b.height) {
                   return null;
                 }
-                const inTree = treeRefs.has(fe.element_ref);
                 return (
                   <div
                     key={fe.element_ref}
-                    className={inTree ? "box all-in-tree" : "box discovery"}
-                    draggable={!inTree}
+                    className="box discovery"
+                    draggable
                     onDragStart={(e) => {
-                      if (!inTree) {
-                        e.dataTransfer.setData("text/plain", fe.element_ref);
-                        e.dataTransfer.effectAllowed = "copy";
-                      }
+                      e.dataTransfer.setData("text/plain", fe.element_ref);
+                      e.dataTransfer.effectAllowed = "copy";
                     }}
                     style={{
                       left: `${Math.max(0, b.x) * scale}px`,
@@ -728,27 +724,6 @@ function ImageCanvas(props: {
                     onMouseLeave={() => {
                       props.onHover("");
                       setTip(null);
-                    }}
-                  />
-                );
-              })}
-            </div>
-            {/* Dimmed tree overlay to show structure underneath */}
-            <div className="overlay-layer tree-dimmed">
-              {flatNodesSorted.map((node) => {
-                const b = node.bounds;
-                if (!b.width || !b.height) {
-                  return null;
-                }
-                return (
-                  <div
-                    key={node.element_ref}
-                    className="box tree-ghost"
-                    style={{
-                      left: `${Math.max(0, b.x) * scale}px`,
-                      top: `${Math.max(0, b.y) * scale}px`,
-                      width: `${Math.max(1, b.width) * scale}px`,
-                      height: `${Math.max(1, b.height) * scale}px`
                     }}
                   />
                 );

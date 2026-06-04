@@ -10,13 +10,13 @@ from uuid import uuid4
 import config
 from qcs_java_agent.driver import JavaAgentDriver
 from qcs_java_agent.process import list_java_processes
-from qcs_java_agent.settle import settle_forms
 from qcs_java_agent.snapshot import (
     _oracle_forms_active_frame,
     active_form_title,
     active_window_scan,
     build_action_payload,
     build_full_overlay_elements,
+    full_view_scan,
     java_nodes_to_repo_elements,
 )
 from qcs_repo import fingerprint as repo_fingerprint
@@ -25,55 +25,55 @@ from qcs_repo import snapshot as repo_snapshot
 from qcs_repo import store as repo_store
 
 
-def _foreground_window() -> tuple[int, int]:
-    """Return (hwnd, window_state) of current foreground window or (0, 0) on non-Windows.
-    Window state: 0=unknown, 1=normal, 2=minimized, 3=maximized.
+def _restore_foreground() -> None:
+    """Switch the foreground back to the previously-active application.
+
+    Simulates Alt+Esc which is the OS-level "switch to next window" —
+    the most reliable way to move focus away from the Java form back to
+    whichever application was active before the scan.  Does NOT use
+    programmatic SetForegroundWindow which often fails across process
+    boundaries when a maximized window is on top.
     """
     if not hasattr(ctypes, "windll"):
-        return (0, 0)
+        return
     try:
         user32 = ctypes.windll.user32
-        hwnd = int(user32.GetForegroundWindow())
-        if hwnd == 0:
-            return (0, 0)
-        # Get window placement to preserve state.
-        placement = ctypes.c_ubyte * 44
-        pm = placement()
-        pm[0] = 44
-        res = user32.GetWindowPlacement(ctypes.c_void_p(hwnd), ctypes.byref(pm))
-        if res:
-            showCmd = int(pm[4])
-            return (hwnd, showCmd)
-        return (hwnd, 0)
+        # Alt+Esc: activates the next window in the Z-order.
+        # Unlike Alt+Tab, it doesn't show the switcher UI.
+        VK_MENU = 0x12   # Alt
+        VK_ESCAPE = 0x1B # Esc
+        KEYEVENTF_KEYUP = 0x0002
+        user32.keybd_event(VK_MENU, 0, 0, 0)              # Alt down
+        user32.keybd_event(VK_ESCAPE, 0, 0, 0)             # Esc down
+        user32.keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0) # Esc up
+        user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)   # Alt up
     except Exception:
-        return (0, 0)
+        pass
 
 
-def _restore_foreground(hwnd_and_state: tuple[int, int]) -> None:
-    """Best-effort restore focus to a window with its prior state."""
-    if not hasattr(ctypes, "windll"):
-        return
-    hwnd, state = hwnd_and_state
-    if hwnd == 0:
+def _save_window_placement(hwnd: int) -> bytes | None:
+    """Save a window's current placement (position, size, show state) as raw bytes."""
+    if not hasattr(ctypes, "windll") or not hwnd:
+        return None
+    try:
+        user32 = ctypes.windll.user32
+        placement = (ctypes.c_ubyte * 44)()
+        placement[0] = 44  # length field
+        if user32.GetWindowPlacement(ctypes.c_void_p(hwnd), ctypes.byref(placement)):
+            return bytes(placement)
+    except Exception:
+        pass
+    return None
+
+
+def _restore_window_placement(hwnd: int, raw: bytes | None) -> None:
+    """Restore a window's placement from raw bytes saved by _save_window_placement."""
+    if not hasattr(ctypes, "windll") or not hwnd or not raw or len(raw) < 44:
         return
     try:
         user32 = ctypes.windll.user32
-        kernel32 = ctypes.windll.kernel32
-        # State constants: 0=hide, 1=normal, 2=minimized, 3=maximized, 9=restore.
-        # Map to show command that reflects prior state.
-        show_cmd = state if state in (1, 2, 3) else 9
-        user32.ShowWindow(ctypes.c_void_p(hwnd), show_cmd)
-
-        # Cross-thread foreground handoff for more reliable activation.
-        fg_hwnd = user32.GetForegroundWindow()
-        fg_pid = ctypes.c_ulong(0)
-        fg_thread = user32.GetWindowThreadProcessId(ctypes.c_void_p(fg_hwnd), ctypes.byref(fg_pid))
-        this_thread = kernel32.GetCurrentThreadId()
-        user32.AttachThreadInput(fg_thread, this_thread, True)
-        user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
-        user32.BringWindowToTop(ctypes.c_void_p(hwnd))
-        user32.SetFocus(ctypes.c_void_p(hwnd))
-        user32.AttachThreadInput(fg_thread, this_thread, False)
+        placement = (ctypes.c_ubyte * 44).from_buffer_copy(raw)
+        user32.SetWindowPlacement(ctypes.c_void_p(hwnd), ctypes.byref(placement))
     except Exception:
         pass
 
@@ -307,17 +307,11 @@ class StudioService:
         the window is closed).
         """
         driver = JavaAgentDriver.attach(pid=pid, contains=contains)
-        previous_state = _foreground_window()
         hwnd = _bring_process_window_to_front(driver.pid)
-
-        # After maximize/foreground handoff, Oracle Forms can spend a short
-        # period re-laying out. Settling first avoids scanning bounds from one
-        # frame state and capturing a screenshot from another (vertical offset).
-        try:
-            settle_forms(driver, timeout_s=4.0, poll_interval_s=0.15, stable_polls=2, log_prefix="[StudioScan]")
-        except Exception:
-            # Best-effort only: scan should proceed even if settle fails.
-            pass
+        # Save the Java form's original placement. After the screenshot we
+        # restore it so the form goes back to exactly how it looked before
+        # the scan.
+        java_placement = _save_window_placement(hwnd)
 
         raw_dom = driver.scan()
         scoped = active_window_scan(raw_dom)
@@ -337,17 +331,13 @@ class StudioService:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         temp_screenshot = Path(tempfile.gettempdir()) / f"qcs_studio_scan_{ts}_{uuid4().hex[:8]}.png"
         try:
-            # One more short settle right before capture: guards against late
-            # repaint/resize churn after scan-time processing.
-            try:
-                settle_forms(driver, timeout_s=1.5, poll_interval_s=0.1, stable_polls=2, log_prefix="[StudioShot]")
-            except Exception:
-                pass
-
             # Always capture fullscreen, then crop to the Java window region.
             screenshot_result = driver.screenshot(temp_screenshot)
         finally:
-            _restore_foreground(previous_state)
+            # Restore the Java form to its original size/position first,
+            # then switch away from it back to the previous application.
+            _restore_window_placement(hwnd, java_placement)
+            _restore_foreground()
 
         capture_mode = str(screenshot_result.get("captureMode") or "fullscreen")
         # WHY: No longer cropping screenshots — we keep the fullscreen capture
@@ -404,11 +394,11 @@ class StudioService:
 
         payload = build_action_payload(scoped)
 
-        # Full overlay uses the FULL raw DOM (not scoped) so toolbar, menu
-        # bar, status bar, and all non-form-window elements are visible in
-        # the Studio full view mode. The curated tree + AI snapshot remain
-        # scoped to the active form window.
-        all_elements = java_nodes_to_repo_elements(raw_dom)
+        # Full overlay uses the FULL raw DOM filtered to active form window +
+        # toolbar / menu bar only (exclude non-active ExtendedFrame subtrees).
+        # The curated tree + AI snapshot remain scoped to the active form window.
+        full_view_nodes = full_view_scan(raw_dom)
+        all_elements = java_nodes_to_repo_elements({"windows": full_view_nodes})
         full_elements = build_full_overlay_elements(all_elements)
 
         # Update the bundle in-place with tree data.
@@ -536,9 +526,10 @@ class StudioService:
         if not isinstance(raw_dom, dict) or not raw_dom:
             return []
         try:
-            # Full overlay uses the FULL raw DOM (not scoped) so toolbar
-            # and menu elements outside the active form window are visible.
-            elements = java_nodes_to_repo_elements(raw_dom)
+            # Full overlay uses raw DOM filtered to active form window +
+            # toolbar / menu bar only (exclude non-active ExtendedFrame subtrees).
+            nodes = full_view_scan(raw_dom)
+            elements = java_nodes_to_repo_elements({"windows": nodes})
         except Exception:
             return []
         return build_full_overlay_elements(elements)

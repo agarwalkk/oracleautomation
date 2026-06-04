@@ -18,3 +18,4 @@ center.db
 
 # Playwright
 node_modules/
+_*.py*

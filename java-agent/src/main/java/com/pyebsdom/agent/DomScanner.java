@@ -1,7 +1,10 @@
 package com.pyebsdom.agent;
 
 import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleComponent;
 import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleRole;
 import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 import javax.swing.*;
@@ -12,8 +15,11 @@ import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -410,8 +416,17 @@ public final class DomScanner {
         // ── Locators ──────────────────────────────────────────────────────
         buildLocators(node);
 
+        // IMPORTANT: call BEFORE the children loop so items exposed via
+        // accessibility/model do NOT get duplicated as regular Container children.
+        // Returns true when logical children were added — then we skip the
+        // natural Container loop for Toolbar/Tab nodes whose children are the
+        // same set of items (EWT LWMenuBar's getComponents() mirrors
+        // its accessible children; TabBar getComponents() also mirrors tab items).
+        boolean logicalChildrenAdded = expandLogicalChildren(node, comp, idGen, raw);
+
         // ── Children ──────────────────────────────────────────────────────
-        if (comp instanceof Container) {
+        if (comp instanceof Container
+                && !(("Toolbar".equals(node.semanticType) || "Tab".equals(node.semanticType)) && logicalChildrenAdded)) {
             Component[] children = safeGetChildren((Container) comp);
             for (int i = 0; i < children.length; i++) {
                 Component child = children[i];
@@ -439,6 +454,433 @@ public final class DomScanner {
         }
 
         return node;
+    }
+
+    // ── Logical child expansion (menu / toolbar) ─────────────────────────
+
+    /**
+     * Expands menu bar, menu, submenu, toolbar, and tab bar nodes by
+     * discovering their items via the Accessibility API (primary path)
+     * with a reflection model-walk fallback.
+     *
+     * <p>Only acts when {@code parent.semanticType} is one of
+     * {@code "Menu"}, {@code "MenuItem"}, {@code "Toolbar"}, or
+     * {@code "Tab"}.
+     * For all other nodes this is a no-op.
+     *
+     * <p>WHY: Oracle EWT LWMenu / LWMenuBar items live in a model
+     * (getItemCount()/getItem(i)), NOT in getComponents().  Closed Swing
+     * JMenu items sit in a popup.  Oracle Forms TabBar / TabPage items
+     * similarly live in a model and are invisible to Container-children
+     * recursion.  This method makes every item a real DomNode so it
+     * receives its own id (eN), bounds, and locators and flows into the
+     * Python repo as a proper Element.
+     */
+    private static boolean expandLogicalChildren(DomNode parent,
+                                              Component comp,
+                                              AtomicInteger idGen,
+                                              boolean raw) {
+        String st = parent.semanticType;
+        if (!("Menu".equals(st) || "MenuItem".equals(st) || "Toolbar".equals(st) || "Tab".equals(st))) {
+            return false;
+        }
+
+        // ── Build identity set of Components already added as children ──
+        // We must NOT double-emit a node that natural Container recursion
+        // already handled.  IdentityHashMap is essential — we compare by
+        // reference, not by equals().
+        Set<Component> existingComps = new HashSet<>();
+        // IdentityHashSet via IdentityHashMap key set
+        IdentityHashMap<Component, Boolean> identitySet = new IdentityHashMap<>();
+        for (DomNode existing : parent.children) {
+            // We only track the ones reachable from the container; for
+            // synthesized children we rely on the dedup set below.
+        }
+        // Also collect from the Container's getComponents() directly
+        if (comp instanceof Container) {
+            Component[] containerKids = safeGetChildren((Container) comp);
+            for (Component c : containerKids) {
+                identitySet.put(c, Boolean.TRUE);
+            }
+        }
+
+        // Deduplication for synthesized nodes (non-Component proxies)
+        Set<String> synthesizedDedup = new HashSet<>();
+
+        boolean hasAny = false;
+
+        // ── Accessibility-first discovery ────────────────────────────────
+        if (comp instanceof Accessible) {
+            try {
+                AccessibleContext ac = ((Accessible) comp).getAccessibleContext();
+                if (ac != null) {
+                    int count = ac.getAccessibleChildrenCount();
+                    if (count > 0) {
+                        for (int i = 0; i < count && i < 256; i++) {
+                            try {
+                                Accessible accChild = ac.getAccessibleChild(i);
+                                if (accChild == null) continue;
+
+                                if (accChild instanceof Component) {
+                                    Component cChild = (Component) accChild;
+                                    // Bypass !visible guard — closed-menu items
+                                    // report isVisible()==false but are legit.
+                                    if (identitySet.containsKey(cChild)) continue;
+                                    identitySet.put(cChild, Boolean.TRUE);
+                                    try {
+                                        DomNode dn = buildNode(cChild, parent.path,
+                                                parent.depth + 1, parent.children.size(),
+                                                0 /* will be fixed below */,
+                                                idGen, true /* force raw — bypass visibility */);
+                                        if (dn != null) {
+                                            dn.index = parent.children.size();
+                                            parent.children.add(dn);
+                                            hasAny = true;
+                                        }
+                                    } catch (Exception e) {
+                                        // swallow — one broken item cannot abort scan
+                                    }
+                                } else {
+                                    // Non-Component proxy — synthesize
+                                    String dedupKey = dedupKey(accChild, i);
+                                    if (synthesizedDedup.contains(dedupKey)) continue;
+                                    synthesizedDedup.add(dedupKey);
+                                    DomNode dn = buildAccessibleItemNode(
+                                            accChild, parent, parent.children.size(),
+                                            0, idGen);
+                                    if (dn != null) {
+                                        parent.children.add(dn);
+                                        hasAny = true;
+                                    }
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // Fix sibling counts for all children (including existing ones)
+        for (int i = 0; i < parent.children.size(); i++) {
+            parent.children.get(i).index = i;
+            parent.children.get(i).siblingCount = parent.children.size();
+        }
+
+        // ── FALLBACK: model-walk only if accessible pass produced zero ──
+        if (!hasAny) {
+            expandModelChildren(parent, comp, idGen, identitySet, synthesizedDedup);
+            // Re-check: model walk may have added children
+            hasAny = !parent.children.isEmpty();
+        }
+        return hasAny;
+    }
+
+    /**
+     * Model-based fallback for components whose Accessibility API returns
+     * no children but whose model API exposes items.
+     */
+    private static void expandModelChildren(DomNode parent,
+                                            Component comp,
+                                            AtomicInteger idGen,
+                                            IdentityHashMap<Component, Boolean> identitySet,
+                                            Set<String> dedup) {
+        // Collect items for each model strategy
+        List<Object> items = new ArrayList<>();
+
+        try {
+            // JMenu -> getMenuComponents()
+            if (comp instanceof JMenu) {
+                Component[] mc = ((JMenu) comp).getMenuComponents();
+                for (Component c : mc) {
+                    if (!identitySet.containsKey(c)) {
+                        identitySet.put(c, Boolean.TRUE);
+                        items.add(c);
+                    }
+                }
+            }
+            // JPopupMenu -> getComponents()
+            else if (comp instanceof JPopupMenu) {
+                Component[] pc = ((JPopupMenu) comp).getComponents();
+                for (Component c : pc) {
+                    if (!identitySet.containsKey(c)) {
+                        identitySet.put(c, Boolean.TRUE);
+                        items.add(c);
+                    }
+                }
+            }
+            // Generic model: getItemCount() + int-arg getter
+            else {
+                Method countMethod = findMethod(comp.getClass(), "getItemCount");
+                if (countMethod != null) {
+                    Object cntObj = countMethod.invoke(comp);
+                    int count = toInt(cntObj);
+                    if (count > 0 && count <= 256) {
+                        Method getMethod = findIntMethod(comp.getClass(),
+                                "getItem", "getMenuItem", "getItemAt", "getComponentAtIndex");
+                        if (getMethod != null) {
+                            for (int i = 0; i < count; i++) {
+                                try {
+                                    Object item = getMethod.invoke(comp, i);
+                                    if (item != null) items.add(item);
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        for (Object item : items) {
+            try {
+                if (item instanceof Component) {
+                    Component cItem = (Component) item;
+                    if (identitySet.containsKey(cItem)) continue;
+                    identitySet.put(cItem, Boolean.TRUE);
+                    DomNode dn = buildNode(cItem, parent.path,
+                            parent.depth + 1, parent.children.size(),
+                            0, idGen, true);
+                    if (dn != null) {
+                        dn.index = parent.children.size();
+                        parent.children.add(dn);
+                    }
+                } else {
+                    String dk = dedupKey(item, parent.children.size());
+                    if (dedup.contains(dk)) continue;
+                    dedup.add(dk);
+                    // Try via accessible if possible
+                    if (item instanceof Accessible) {
+                        DomNode dn = buildAccessibleItemNode(
+                                (Accessible) item, parent,
+                                parent.children.size(), 0, idGen);
+                        if (dn != null) parent.children.add(dn);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // Fix sibling counts
+        for (int i = 0; i < parent.children.size(); i++) {
+            parent.children.get(i).index = i;
+            parent.children.get(i).siblingCount = parent.children.size();
+        }
+    }
+
+    /**
+     * Builds a DomNode for an {@link Accessible} that is NOT a
+     * {@link java.awt.Component} (e.g. an EWT proxy).
+     *
+     * <p>Returns {@code null} if the item has no AccessibleContext or
+     * no usable label.
+     */
+    private static DomNode buildAccessibleItemNode(Accessible item,
+                                                   DomNode parent,
+                                                   int index,
+                                                   int siblingCount,
+                                                   AtomicInteger idGen) {
+        try {
+            if (item == null) return null;
+            AccessibleContext ac = item.getAccessibleContext();
+            if (ac == null) return null;
+
+            DomNode n = new DomNode();
+            n.id           = idGen.incrementAndGet();
+            n.depth        = parent.depth + 1;
+            n.index        = index;
+            n.siblingCount = siblingCount;
+            n.parentPath   = parent.path;
+
+            n.accessibleName        = ac.getAccessibleName();
+            n.accessibleDescription = ac.getAccessibleDescription();
+            n.text = (notBlank(n.accessibleName))
+                     ? n.accessibleName
+                     : n.accessibleDescription;
+
+            // semanticType: map accessible role via ComponentClassifier
+            AccessibleRole role = ac.getAccessibleRole();
+            if (role != null) {
+                String ds = role.toDisplayString();
+                n.accessibleRole = ds;
+                if (ds != null) {
+                    n.semanticType = ComponentClassifier.classifyAccessibleRole(
+                            ds.toLowerCase());
+                } else {
+                    n.semanticType = "Toolbar".equals(parent.semanticType)
+                                     ? "Button" : "MenuItem";
+                }
+            } else {
+                n.semanticType = "Toolbar".equals(parent.semanticType)
+                                 ? "Button" : "MenuItem";
+            }
+
+            Class<?> clazz = item.getClass();
+            n.type            = clazz.getName();
+            n.className       = clazz.getName();
+            n.simpleClassName = clazz.getSimpleName();
+
+            // ── State from AccessibleStateSet ──────────────────────────
+            AccessibleStateSet ss = ac.getAccessibleStateSet();
+            if (ss != null) {
+                n.enabled   = ss.contains(AccessibleState.ENABLED);
+                n.visible   = ss.contains(AccessibleState.VISIBLE);
+                n.showing   = ss.contains(AccessibleState.SHOWING);
+                n.selected  = ss.contains(AccessibleState.CHECKED)
+                           || ss.contains(AccessibleState.SELECTED);
+                n.focusable = ss.contains(AccessibleState.FOCUSABLE);
+            } else {
+                n.enabled   = true;
+                n.visible   = true;
+                n.focusable = true;
+            }
+
+            // ── Geometry (best-effort, try/catch) ──────────────────────
+            try {
+                AccessibleComponent acomp = ac.getAccessibleComponent();
+                if (acomp != null) {
+                    java.awt.Rectangle b = acomp.getBounds();
+                    if (b != null) {
+                        if (n.showing) {
+                            try {
+                                java.awt.Point sp = acomp.getLocationOnScreen();
+                                n.bounds = new Bounds(b.x, b.y, b.width, b.height);
+                                n.screenBounds = new Bounds(b.x, b.y,
+                                        b.width, b.height,
+                                        sp.x, sp.y, b.width, b.height);
+                            } catch (Exception e2) {
+                                n.bounds = new Bounds(b.x, b.y, b.width, b.height);
+                                n.screenBounds = new Bounds(b.x, b.y,
+                                        b.width, b.height);
+                            }
+                        } else {
+                            n.bounds = new Bounds(b.x, b.y, b.width, b.height);
+                            n.screenBounds = new Bounds(b.x, b.y,
+                                    b.width, b.height);
+                        }
+                    } else {
+                        n.bounds = new Bounds(0, 0, 0, 0);
+                        n.screenBounds = new Bounds(0, 0, 0, 0);
+                    }
+                } else {
+                    n.bounds = new Bounds(0, 0, 0, 0);
+                    n.screenBounds = new Bounds(0, 0, 0, 0);
+                }
+            } catch (Exception e) {
+                n.bounds = new Bounds(0, 0, 0, 0);
+                n.screenBounds = new Bounds(0, 0, 0, 0);
+            }
+
+            // ── Path ──────────────────────────────────────────────────
+            String label = coalesce(n.accessibleName, n.accessibleDescription,
+                                    n.simpleClassName);
+            String pathSegment = n.simpleClassName + "[" + index + "]";
+            n.path = (parent.path != null && !parent.path.isEmpty())
+                     ? parent.path + "/" + pathSegment
+                     : pathSegment;
+
+            // ── displayName + confidence ───────────────────────────────
+            resolveDisplayName(n);
+
+            // ── Locators ───────────────────────────────────────────────
+            buildLocators(n);
+
+            // ── AccessibleAction replay handle ─────────────────────────
+            try {
+                javax.accessibility.AccessibleAction action =
+                        ac.getAccessibleAction();
+                if (action != null && action.getAccessibleActionCount() > 0) {
+                    String a0 = action.getAccessibleActionDescription(0);
+                    if (a0 != null && !a0.isEmpty()) {
+                        n.attributes.put("accessibleAction", a0);
+                        n.locators.add(new LocatorCandidate(
+                                "accessibleAction", a0, 0.95));
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // ── Recurse submenus ───────────────────────────────────────
+            String st = n.semanticType;
+            if ("Menu".equals(st) || "MenuItem".equals(st) || "Toolbar".equals(st) || "Tab".equals(st)) {
+                // Build a synthetic "comp" context for recursion
+                // We use the parent's accessible context to find grand-children
+                try {
+                    int subCount = ac.getAccessibleChildrenCount();
+                    if (subCount > 0 && subCount <= 256) {
+                        int startIdx = n.children.size();
+                        for (int i = 0; i < subCount; i++) {
+                            try {
+                                Accessible subChild = ac.getAccessibleChild(i);
+                                if (subChild == null) continue;
+                                DomNode sub = buildAccessibleItemNode(
+                                        subChild, n, startIdx + n.children.size(),
+                                        0, idGen);
+                                if (sub != null) {
+                                    n.children.add(sub);
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                        for (int i = 0; i < n.children.size(); i++) {
+                            n.children.get(i).index = i;
+                            n.children.get(i).siblingCount = n.children.size();
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            return n;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // ── Helper utility for expandLogicalChildren ───────────────────────
+
+    /** Builds a dedup key from accessible name + role + index. */
+    private static String dedupKey(Object item, int index) {
+        if (item instanceof Accessible) {
+            try {
+                AccessibleContext ac = ((Accessible) item).getAccessibleContext();
+                if (ac != null) {
+                    String name = ac.getAccessibleName();
+                    AccessibleRole r = ac.getAccessibleRole();
+                    String roleStr = r != null ? r.toDisplayString() : "";
+                    return (name != null ? name : "") + "\t" + roleStr + "\t" + index;
+                }
+            } catch (Exception ignored) {}
+        }
+        return item.getClass().getName() + "\t" + index;
+    }
+
+    /** Resolves a zero-arg method by name. */
+    private static Method findMethod(Class<?> clazz, String name) {
+        for (Method m : clazz.getMethods()) {
+            if (m.getName().equals(name) && m.getParameterCount() == 0) {
+                return m;
+            }
+        }
+        return null;
+    }
+
+    /** Resolves a single-int-arg method from a list of candidate names. */
+    private static Method findIntMethod(Class<?> clazz, String... names) {
+        for (String name : names) {
+            for (Method m : clazz.getMethods()) {
+                if (m.getName().equals(name)
+                        && m.getParameterCount() == 1
+                        && m.getParameterTypes()[0] == int.class) {
+                    return m;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Safe numeric conversion from an Object (Number, String, Boolean). */
+    private static int toInt(Object value) {
+        if (value instanceof Number) return ((Number) value).intValue();
+        if (value instanceof String) {
+            try { return Integer.parseInt((String) value); } catch (Exception ignored) {}
+        }
+        if (value instanceof Boolean) return ((Boolean) value) ? 1 : 0;
+        return 0;
     }
 
     // ── displayName resolution ────────────────────────────────────────────

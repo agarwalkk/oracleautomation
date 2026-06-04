@@ -154,6 +154,66 @@ def active_window_scan(scan: dict) -> dict:
     return {"windows": [root]}
 
 
+def full_view_scan(scan: dict) -> list[dict]:
+    """Return the list of nodes for the full-view overlay — active frame +
+    shared toolbar/menu bar, excluding non-active ExtendedFrame subtrees.
+
+    WHY: The full view in Studio should show ALL elements from the active
+    form window, plus the menu bar and toolbar (which sit outside the
+    ExtendedFrame in the DOM), but NOT elements from other inactive form
+    windows that happen to be open in the same JVM session.
+    """
+    nodes = flatten_nodes(scan)
+    if not nodes:
+        return []
+
+    # Collect IDs to exclude: all descendants of non-active ExtendedFrames
+    exclude_ids: set[int] = set()
+    active_ef_id: int | None = None
+
+    for n in nodes:
+        sc = str(n.get("simpleClassName") or "")
+        if sc != "ExtendedFrame":
+            continue
+        nid = n.get("id")
+        if n.get("focusable") and n.get("showing"):
+            active_ef_id = nid
+        else:
+            # Collect this EF and all its descendants for exclusion
+            exclude_ids.add(nid)
+            _collect_descendant_ids(n, exclude_ids)
+
+    if not active_ef_id:
+        # No active ExtendedFrame found — fallback to active_window_scan
+        return flatten_nodes(active_window_scan(scan))
+
+    # Build result: include all nodes EXCEPT those in inactive EFs.
+    # This keeps the top-level JFrame, menu bar, toolbar, and the active
+    # form window, while excluding background form modules.
+    # IMPORTANT: We strip `children` from every returned node because
+    # flatten_nodes() (used downstream in java_nodes_to_repo_elements)
+    # recursively walks children arrays.  If we didn't strip children,
+    # excluded subtrees would be re-discovered through parent→child links.
+    # The flat list only contains nodes that survived the exclusion filter
+    # and the caller only needs the flat list — not the original tree
+    # structure.
+    result: list[dict] = []
+    for n in nodes:
+        nid = n.get("id")
+        if nid not in exclude_ids:
+            result.append(n)
+    for n in result:
+        n.pop("children", None)
+    return result
+
+
+def _collect_descendant_ids(node: dict, ids: set[int]) -> None:
+    """Collect the id of *node* and all its descendants into *ids*."""
+    ids.add(node.get("id"))
+    for child in node.get("children") or []:
+        _collect_descendant_ids(child, ids)
+
+
 def flatten_nodes(scan: dict) -> list[dict]:
     """Return all Java agent DOM nodes in depth-first order."""
     result: list[dict] = []
