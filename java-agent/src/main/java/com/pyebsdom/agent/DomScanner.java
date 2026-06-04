@@ -425,8 +425,18 @@ public final class DomScanner {
         boolean logicalChildrenAdded = expandLogicalChildren(node, comp, idGen, raw);
 
         // ── Children ──────────────────────────────────────────────────────
-        if (comp instanceof Container
-                && !(("Toolbar".equals(node.semanticType) || "Tab".equals(node.semanticType)) && logicalChildrenAdded)) {
+        // WHY: Toolbar and Tab containers (TabBar, FormsTabPanel) have
+        // BOTH accessible children (menu items, tab headers) AND natural
+        // Container children (content panels).  We must run BOTH scans
+        // — accessibility for the headers, Container loop for the content.
+        // The dedup logic in expandLogicalChildren prevents duplicates.
+        //
+        // Only skip the Container loop when the node is a leaf-level tab
+        // item (TabPanelPage) whose children are purely accessible.
+        boolean skipContainerLoop = logicalChildrenAdded &&
+                (("Toolbar".equals(node.semanticType) && !"TabBar".equals(node.simpleClassName) && !"FormsTabPanel".equals(node.simpleClassName))
+                || ("Tab".equals(node.semanticType) && !"TabBar".equals(node.simpleClassName) && !"FormsTabPanel".equals(node.simpleClassName)));
+        if (comp instanceof Container && !skipContainerLoop) {
             Component[] children = safeGetChildren((Container) comp);
             for (int i = 0; i < children.length; i++) {
                 Component child = children[i];
@@ -484,6 +494,8 @@ public final class DomScanner {
         if (!("Menu".equals(st) || "MenuItem".equals(st) || "Toolbar".equals(st) || "Tab".equals(st))) {
             return false;
         }
+
+        
 
         // ── Build identity set of Components already added as children ──
         // We must NOT double-emit a node that natural Container recursion

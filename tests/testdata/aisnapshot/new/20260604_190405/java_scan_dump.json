@@ -6,7 +6,7 @@
     "version": "0.1.0"
   },
   "scan": {
-    "timestamp": "2026-06-04T13:37:59.616Z",
+    "timestamp": "2026-06-04T13:34:04.825Z",
     "windowCount": 5,
     "visibleWindowCount": 1,
     "raw": false
@@ -1010,14 +1010,14 @@
                                                   "cursorType": 0,
                                                   "cursorName": "Default Cursor",
                                                   "attributes": {
-                                                    "getBackground": "java.awt.Color[r=66,g=70,b=60]",
+                                                    "getBackground": "java.awt.Color[r=166,g=172,b=158]",
                                                     "getForeground": "sun.swing.PrintColorUIResource[r=51,g=51,b=51]",
                                                     "treeRowCount": "1",
                                                     "treeRows": "1\t0\t0\tEMR Global Find  Orders/Quotes"
                                                   },
                                                   "reflection": {
                                                     "getName": "TitleBar10",
-                                                    "getBackground": "java.awt.Color[r=66,g=70,b=60]",
+                                                    "getBackground": "java.awt.Color[r=166,g=172,b=158]",
                                                     "getForeground": "sun.swing.PrintColorUIResource[r=51,g=51,b=51]",
                                                     "isVisible": "true",
                                                     "isShowing": "true",
@@ -1083,13 +1083,13 @@
                                                       "cursorType": 0,
                                                       "cursorName": "Default Cursor",
                                                       "attributes": {
-                                                        "getBackground": "java.awt.Color[r=66,g=70,b=60]",
+                                                        "getBackground": "java.awt.Color[r=166,g=172,b=158]",
                                                         "getForeground": "sun.swing.PrintColorUIResource[r=51,g=51,b=51]"
                                                       },
                                                       "reflection": {
                                                         "getName": "TitleBar$SystemMenuBar11",
                                                         "getSelectedItem": "null",
-                                                        "getBackground": "java.awt.Color[r=66,g=70,b=60]",
+                                                        "getBackground": "java.awt.Color[r=166,g=172,b=158]",
                                                         "getForeground": "sun.swing.PrintColorUIResource[r=51,g=51,b=51]",
                                                         "isVisible": "true",
                                                         "isShowing": "true",
@@ -1155,14 +1155,14 @@
                                                           "cursorType": 0,
                                                           "cursorName": "Default Cursor",
                                                           "attributes": {
-                                                            "getBackground": "java.awt.Color[r=66,g=70,b=60]",
-                                                            "getForeground": "java.awt.Color[r=255,g=255,b=255]"
+                                                            "getBackground": "java.awt.Color[r=166,g=172,b=158]",
+                                                            "getForeground": "java.awt.Color[r=0,g=0,b=0]"
                                                           },
                                                           "reflection": {
                                                             "getName": "TitleBar$SystemMenu0",
                                                             "getLabel": "null",
-                                                            "getBackground": "java.awt.Color[r=66,g=70,b=60]",
-                                                            "getForeground": "java.awt.Color[r=255,g=255,b=255]",
+                                                            "getBackground": "java.awt.Color[r=166,g=172,b=158]",
+                                                            "getForeground": "java.awt.Color[r=0,g=0,b=0]",
                                                             "isVisible": "true",
                                                             "isShowing": "true",
                                                             "isEnabled": "true",
@@ -1231,14 +1231,14 @@
                                                       "cursorType": 0,
                                                       "cursorName": "Default Cursor",
                                                       "attributes": {
-                                                        "getBackground": "java.awt.Color[r=66,g=70,b=60]",
+                                                        "getBackground": "java.awt.Color[r=166,g=172,b=158]",
                                                         "getForeground": "sun.swing.PrintColorUIResource[r=51,g=51,b=51]",
                                                         "treeRowCount": "1",
                                                         "treeRows": "0\t0\t0\tEMR Global Find  Orders/Quotes"
                                                       },
                                                       "reflection": {
                                                         "getName": "LWComponent12",
-                                                        "getBackground": "java.awt.Color[r=66,g=70,b=60]",
+                                                        "getBackground": "java.awt.Color[r=166,g=172,b=158]",
                                                         "getForeground": "sun.swing.PrintColorUIResource[r=51,g=51,b=51]",
                                                         "isVisible": "true",
                                                         "isShowing": "true",
@@ -1304,14 +1304,14 @@
                                                           "cursorType": 0,
                                                           "cursorName": "Default Cursor",
                                                           "attributes": {
-                                                            "getBackground": "java.awt.Color[r=66,g=70,b=60]",
-                                                            "getForeground": "java.awt.Color[r=255,g=255,b=255]"
+                                                            "getBackground": "java.awt.Color[r=166,g=172,b=158]",
+                                                            "getForeground": "java.awt.Color[r=204,g=204,b=204]"
                                                           },
                                                           "reflection": {
                                                             "getText": "EMR Global Find  Orders/Quotes",
                                                             "getName": "LWLabel0",
-                                                            "getBackground": "java.awt.Color[r=66,g=70,b=60]",
-                                                            "getForeground": "java.awt.Color[r=255,g=255,b=255]",
+                                                            "getBackground": "java.awt.Color[r=166,g=172,b=158]",
+                                                            "getForeground": "java.awt.Color[r=204,g=204,b=204]",
                                                             "isVisible": "true",
                                                             "isShowing": "true",
                                                             "isEnabled": "true",
@@ -1387,12 +1387,12 @@
                                                           "cursorType": 0,
                                                           "cursorName": "Default Cursor",
                                                           "attributes": {
-                                                            "getBackground": "java.awt.Color[r=66,g=70,b=60]",
+                                                            "getBackground": "java.awt.Color[r=166,g=172,b=158]",
                                                             "getForeground": "sun.swing.PrintColorUIResource[r=51,g=51,b=51]"
                                                           },
                                                           "reflection": {
                                                             "getName": "TitleBar$CaptionComp13",
-                                                            "getBackground": "java.awt.Color[r=66,g=70,b=60]",
+                                                            "getBackground": "java.awt.Color[r=166,g=172,b=158]",
                                                             "getForeground": "sun.swing.PrintColorUIResource[r=51,g=51,b=51]",
                                                             "isVisible": "true",
                                                             "isShowing": "true",
@@ -1462,14 +1462,14 @@
                                                       "cursorName": "Default Cursor",
                                                       "attributes": {
                                                         "getItemCount": "4",
-                                                        "getBackground": "java.awt.Color[r=66,g=70,b=60]",
-                                                        "getForeground": "java.awt.Color[r=255,g=255,b=255]"
+                                                        "getBackground": "java.awt.Color[r=166,g=172,b=158]",
+                                                        "getForeground": "java.awt.Color[r=0,g=0,b=0]"
                                                       },
                                                       "reflection": {
                                                         "getName": "ToolBar14",
                                                         "getItemCount": "4",
-                                                        "getBackground": "java.awt.Color[r=66,g=70,b=60]",
-                                                        "getForeground": "java.awt.Color[r=255,g=255,b=255]",
+                                                        "getBackground": "java.awt.Color[r=166,g=172,b=158]",
+                                                        "getForeground": "java.awt.Color[r=0,g=0,b=0]",
                                                         "isVisible": "true",
                                                         "isShowing": "true",
                                                         "isEnabled": "true",
@@ -2574,7 +2574,7 @@
                                                                                   "showing": true,
                                                                                   "enabled": true,
                                                                                   "focusable": true,
-                                                                                  "focused": true,
+                                                                                  "focused": false,
                                                                                   "editable": true,
                                                                                   "selected": false,
                                                                                   "cursorType": 2,
@@ -2592,7 +2592,7 @@
                                                                                     "isShowing": "true",
                                                                                     "isEnabled": "true",
                                                                                     "isFocusable": "true",
-                                                                                    "isFocusOwner": "true",
+                                                                                    "isFocusOwner": "false",
                                                                                     "isEditable": "true"
                                                                                   },
                                                                                   "locators": [
@@ -63034,7 +63034,7 @@
                                               "screenBounds": null,
                                               "visible": true,
                                               "showing": false,
-                                              "enabled": true,
+                                              "enabled": false,
                                               "focusable": false,
                                               "focused": false,
                                               "editable": false,
@@ -63052,7 +63052,7 @@
                                                 "getForeground": "java.awt.Color[r=0,g=0,b=0]",
                                                 "isVisible": "true",
                                                 "isShowing": "false",
-                                                "isEnabled": "true",
+                                                "isEnabled": "false",
                                                 "isFocusable": "false",
                                                 "isFocusOwner": "false",
                                                 "isSelected": "false"
@@ -72910,7 +72910,7 @@
                                       },
                                       "visible": true,
                                       "showing": true,
-                                      "enabled": true,
+                                      "enabled": false,
                                       "focusable": false,
                                       "focused": false,
                                       "editable": false,

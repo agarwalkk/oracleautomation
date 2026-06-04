@@ -246,13 +246,37 @@ def active_form_title(scan: dict) -> str:
                             if name and name != "null":
                                 return name
 
+    # WHY: When the scoped scan is an ExtendedFrame, the form title should
+    # come from the ExtendedFrame itself, not from a focused VTextField whose
+    # displayName is a field label (e.g. "Order Number").  Find the
+    # ExtendedFrame node first for Oracle Forms MDI sessions.
+    ef_nodes = [n for n in nodes if str(n.get("simpleClassName") or "") == "ExtendedFrame"]
     focused = [node for node in nodes if node.get("focused")]
+
+    # Prefer ExtendedFrame title over focused field labels
+    if ef_nodes and focused:
+        ef = ef_nodes[0]
+        for key in ("title", "displayName", "accessibleName", "name", "text"):
+            value = str(ef.get(key) or "").strip()
+            if value and value != "null":
+                return value
+
+    # General case: focused node, or Window/Dialog semanticType
     candidates = focused or [node for node in nodes if node.get("semanticType") in {"Dialog", "Window"}]
     for node in candidates:
         for key in ("title", "displayName", "accessibleName", "name", "text"):
             value = str(node.get(key) or "").strip()
             if value and value != "null":
                 return value
+
+    # Fallback: ExtendedFrame title (when no focused field exists)
+    if ef_nodes:
+        ef = ef_nodes[0]
+        for key in ("title", "displayName", "accessibleName", "name", "text"):
+            value = str(ef.get(key) or "").strip()
+            if value and value != "null":
+                return value
+
     return "Oracle Forms"
 
 
@@ -595,6 +619,7 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
 
     # --- Detect tab structure from the scoped DOM tree ---
     scoped_nodes = flatten_nodes(scoped)
+    full_nodes = flatten_nodes(scan)  # full scan — needed for TabBar children
     tab_info = _detect_tabs(scoped_nodes)
     form_title = active_form_title(scoped)
 
@@ -725,6 +750,35 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
 
         tools_menu_items = _extract_tools_menu(flatten_nodes(scan))
 
+        # ── Per-tab element partitioning ───────────────────────────────
+        # Partition actionable tab elements so each tab gets its own list.
+        # This lets _format_hierarchical render each tab as an individual
+        # section rather than collapsing everything into one block.
+        per_tab_elements: dict[str, list[dict]] = {}
+        all_prefixes = {t: f"{t} tab page " for t in tab_titles}
+        for el in tab_elements:
+            name = el.get("name") or ""
+            matched = False
+            for t, prefix in all_prefixes.items():
+                if name.startswith(prefix) or (
+                    # Also match unstripped names (pre-tab-prefix removal)
+                    str(el.get("java", {}).get("accessibleName") or "").startswith(prefix)
+                ):
+                    per_tab_elements.setdefault(t, []).append(el)
+                    matched = True
+                    break
+            if not matched:
+                # Fallback: put unmatched into selected tab
+                per_tab_elements.setdefault(selected_tab, []).append(el)
+
+        # ── TabBar DOM nodes (for mapping tab titles → element IDs) ───
+        tab_bar_nodes: list[dict] = []
+        for n in full_nodes:
+            if str(n.get("simpleClassName") or "") == "TabBar":
+                attrs = n.get("attributes") or {}
+                if attrs.get("tabTitles"):
+                    tab_bar_nodes.append(n)
+
         snapshot_text = _format_hierarchical(
             form_title, tab_titles, tab_states, selected_tab,
             tab_elements, toolbar_buttons, footer_buttons,
@@ -735,6 +789,8 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
             tab_content_ids=tab_content_ids,
             outer_tab_bars=tab_info.get("outer_tab_bars"),
             tools_menu_items=tools_menu_items,
+            per_tab_elements=per_tab_elements,
+            tab_bar_nodes=tab_bar_nodes,
         )
     else:
         # Check if this is an Oracle Forms overlay (dialog or popup)
@@ -1566,8 +1622,22 @@ def _format_hierarchical(
     tab_content_ids: set[str] | None = None,
     outer_tab_bars: list[dict] | None = None,
     tools_menu_items: list[tuple[str, bool, bool]] | None = None,
+    per_tab_elements: dict[str, list[dict]] | None = None,
+    tab_bar_nodes: list[dict] | None = None,
 ) -> str:
-    """Format a hierarchical snapshot string."""
+    """Format a hierarchical snapshot string with individual tab sections.
+
+    Each tab gets its own section. Unselected tabs show only their name
+    (and element ID). The selected tab shows its name plus all elements
+    nested under it. Tabs appear in the order they appear in the UI
+    (left-to-right), so the selected tab is surrounded by unselected tabs
+    in their natural positions.
+
+    WHY: Previously all tabs were collapsed into one "Tabs:" bar and only
+    the selected tab's content was shown. Now each tab is independently
+    referenceable (it has its own eNN ID from the Java agent) and the AI
+    can see the full tab structure including unselected tab names.
+    """
     lines: list[str] = []
 
     # Form header
@@ -1598,7 +1668,6 @@ def _format_hierarchical(
             lines.append(f"  {_format_tree(el)}")
 
     # Outer (higher-level) tab bars — rendered before the inner tab bar.
-    # Each outer level adds indentation depth for nested content.
     outer_depth = len(outer_tab_bars or [])
     for otb in (outer_tab_bars or []):
         otb_labels = []
@@ -1620,61 +1689,85 @@ def _format_hierarchical(
     indent = "  " * (1 + outer_depth)  # base "  " + one per outer level
     field_indent = "  " * (2 + outer_depth)
 
-    # Tab bar — hide invisible tabs, mark disabled ones
-    tab_labels = []
-    eid_prefix = f"[{tab_bar_element_id}] " if tab_bar_element_id else ""
+    # ── Individual tab sections ────────────────────────────────────────
+    # Each tab gets its own [eNN] header. The selected tab expands to show
+    # its elements; unselected tabs show only their name.
+    per_tab = per_tab_elements or {}
+
+    # Build a map from tab title → element ID (from the TabBar's tab labels)
+    tab_title_to_eid: dict[str, str] = {}
+    if tab_bar_nodes and tab_bar_element_id:
+        for n in tab_bar_nodes:
+            nid = n.get("id")
+            eid = f"e{nid}" if nid is not None else ""
+            if eid == tab_bar_element_id:
+                for child in n.get("children") or []:
+                    child_sc = str(child.get("simpleClassName") or "")
+                    child_name = str(child.get("accessibleName") or child.get("displayName") or "").strip()
+                    child_id = child.get("id")
+                    if (child_sc == "TabBarItem" or child.get("semanticType") == "Tab") and child_name and child_id is not None:
+                        tab_title_to_eid[child_name] = f"e{child_id}"
+
+    # Build tab-page prefix to strip from element names
+    tab_page_prefix = f"{selected_tab} tab page " if selected_tab else None
+
     for i, t in enumerate(tab_titles):
         st = tab_states[i] if i < len(tab_states) else {}
         if not st.get("visible", True):
             continue  # invisible tab — omit entirely
+
+        tab_eid = tab_title_to_eid.get(t, "")
+        eid_prefix = f"[{tab_eid}] " if tab_eid else ""
+
         if t == selected_tab:
-            tab_labels.append(f"[*{t}*]")
-        elif not st.get("enabled", True):
-            tab_labels.append(f"{t} (disabled)")
+            # ── Selected tab: show header + all elements ───────────────
+            is_disabled = not st.get("enabled", True)
+            state = "disabled, selected" if is_disabled else "enabled, selected"
+            lines.append(f"{indent}{eid_prefix}{t} (Tab, {state})")
+
+            tab_els = per_tab.get(t, tab_elements)
+
+            # Group by visual rows (similar y), sort by x
+            rows = _group_by_rows(tab_els)
+
+            # Detect multi-record table: consecutive rows with same field names
+            table_rows, pre_rows, post_rows = _detect_table(rows, tab_page_prefix)
+
+            # Render pre-table rows (toolbar area, standalone fields)
+            for row in pre_rows:
+                parts = [
+                    _format_button(el, tab_page_prefix)
+                    if str(el.get("role") or "") == "Button"
+                    else _format_field(el, tab_page_prefix)
+                    for el in row
+                ]
+                lines.append(f"{field_indent}{' , '.join(parts)}")
+
+            # Render table if detected
+            if table_rows:
+                selected_y = _detect_record_indicator_y(
+                    scoped_nodes or [], tab_content_ids
+                )
+                lines.extend(
+                    _format_table(table_rows, tab_page_prefix, selected_y, field_indent)
+                )
+
+            # Render post-table rows (buttons below the table)
+            for row in post_rows:
+                parts = [
+                    _format_button(el, tab_page_prefix)
+                    if str(el.get("role") or "") == "Button"
+                    else _format_field(el, tab_page_prefix)
+                    for el in row
+                ]
+                lines.append(f"{field_indent}{' , '.join(parts)}")
         else:
-            tab_labels.append(t)
-    lines.append(f"{indent}{eid_prefix}Tabs: {' | '.join(tab_labels)}")
+            # ── Unselected tab: show only name ─────────────────────────
+            is_disabled = not st.get("enabled", True)
+            state = "disabled" if is_disabled else "enabled"
+            lines.append(f"{indent}{eid_prefix}{t} (Tab, {state})")
 
-    # Build tab-page prefix to strip from element names
-    # Oracle Forms prepends "<Tab Name> tab page " to accessible names
-    tab_page_prefix = f"{selected_tab} tab page " if selected_tab else None
-
-    # Selected tab fields — group by visual rows (similar y), sort by x
-    rows = _group_by_rows(tab_elements)
-
-    # Detect multi-record table: consecutive rows with same field names
-    table_rows, pre_rows, post_rows = _detect_table(rows, tab_page_prefix)
-
-    # Render pre-table rows (toolbar area, standalone fields)
-    for row in pre_rows:
-        parts = [
-            _format_button(el, tab_page_prefix)
-            if str(el.get("role") or "") == "Button"
-            else _format_field(el, tab_page_prefix)
-            for el in row
-        ]
-        lines.append(f"{field_indent}{' , '.join(parts)}")
-
-    # Render table if detected
-    if table_rows:
-        selected_y = _detect_record_indicator_y(
-            scoped_nodes or [], tab_content_ids
-        )
-        lines.extend(
-            _format_table(table_rows, tab_page_prefix, selected_y, field_indent)
-        )
-
-    # Render post-table rows (buttons below the table)
-    for row in post_rows:
-        parts = [
-            _format_button(el, tab_page_prefix)
-            if str(el.get("role") or "") == "Button"
-            else _format_field(el, tab_page_prefix)
-            for el in row
-        ]
-        lines.append(f"{field_indent}{' , '.join(parts)}")
-
-    # Form-level fields below the grid (e.g. Line Total, Description)
+    # ── Form-level fields below the grid (e.g. Line Total, Description) ──
     if form_field_elements:
         form_rows = _group_by_rows(form_field_elements)
         for row in form_rows:

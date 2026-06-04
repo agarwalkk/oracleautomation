@@ -1,6 +1,6 @@
-Form: EMR Global Find  Orders/Quotes
+Form: Quote/Order Information tab page Order Number
   [e228] Open Folder... (Button, enabled)
-  [e213] Quote/Order Information (Tab, enabled, selected)
+  [e213] [*Quote/Order Information*] (selected):
     [e36] Order Number , [e39] Order Type (LOV) , [e50] Requisition Number (LOV)
     [e41] Customer PO (LOV) , [e37] Quote Number , [e55] Invoice Number (LOV)
     [e68] Rep Order # , [e67] Opportunity No , [e38] Order Category (LOV)
@@ -16,9 +16,9 @@ Form: EMR Global Find  Orders/Quotes
     [e64] End User (LOV) , [e60] Warehouse (LOV)
     [e84] Mail Invoice To Customer (LOV) , [e74] Ack'd (LOV)
     [e59] Inland Carrier/Ship Method (LOV) , [e61] On Hold (ComboBox) (read-only) values: ['Yes', 'No']
-  [e214] Line Information (Tab, enabled)
-  [e215] Advanced (Tab, enabled)
-  [e216] Holds Information (Tab, enabled)
-  [e217] Scheduling (Tab, disabled)
+  [e214] Line Information
+  [e215] Advanced
+  [e216] Holds Information
+  [e217] Scheduling (disabled)
   Buttons:
     [e226] Clear (Button, enabled) , [e227] Find (Button, enabled)

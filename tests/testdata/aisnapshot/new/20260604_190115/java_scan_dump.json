@@ -6,7 +6,7 @@
     "version": "0.1.0"
   },
   "scan": {
-    "timestamp": "2026-06-04T13:37:59.616Z",
+    "timestamp": "2026-06-04T13:31:15.013Z",
     "windowCount": 5,
     "visibleWindowCount": 1,
     "raw": false
@@ -71,7 +71,6 @@
         "isShowing": "true",
         "isEnabled": "true",
         "isFocusable": "true",
-        "isFocusOwner": "false",
         "getState": "0"
       },
       "locators": [
@@ -155,8 +154,7 @@
             "isVisible": "true",
             "isShowing": "true",
             "isEnabled": "true",
-            "isFocusable": "true",
-            "isFocusOwner": "false"
+            "isFocusable": "true"
           },
           "locators": [
             {
@@ -224,8 +222,7 @@
                 "isVisible": "true",
                 "isShowing": "true",
                 "isEnabled": "true",
-                "isFocusable": "true",
-                "isFocusOwner": "false"
+                "isFocusable": "true"
               },
               "locators": [
                 {
@@ -293,8 +290,7 @@
                     "isVisible": "true",
                     "isShowing": "true",
                     "isEnabled": "true",
-                    "isFocusable": "true",
-                    "isFocusOwner": "false"
+                    "isFocusable": "true"
                   },
                   "locators": [
                     {
@@ -361,8 +357,7 @@
                         "isVisible": "true",
                         "isShowing": "true",
                         "isEnabled": "true",
-                        "isFocusable": "true",
-                        "isFocusOwner": "false"
+                        "isFocusable": "true"
                       },
                       "locators": [
                         {
