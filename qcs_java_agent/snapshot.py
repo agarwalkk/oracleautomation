@@ -273,6 +273,112 @@ def java_nodes_to_repo_elements(scan: dict) -> list[dict]:
     return elements
 
 
+_ROLE_ACTIONS: dict[str, list[str]] = {
+    "Button": ["click"],
+    "Field": ["type", "clear"],
+    "ComboBox": ["select"],
+    "Checkbox": ["toggle"],
+    "RadioButton": ["select"],
+    "List": ["select"],
+    "Tree": ["select", "expand"],
+    "Table": ["select"],
+    "Menu": ["open"],
+    "MenuItem": ["click"],
+    "Tab": ["activate"],
+}
+
+
+def build_full_overlay_elements(elements: list[dict]) -> list[dict]:
+    """Build the full hoverable element overlay from all scanned elements.
+
+    WHY: Every element from the full scan must be hoverable and inspectable
+    (id, name, type, possible actions, Java locator) and draggable into the
+    curated tree. Bounds are raw (unadjusted) Java-window client coordinates
+    that align directly with the fullscreen screenshot. Zero-size elements
+    are skipped. We intentionally do NOT require a "showing"/"visible" state
+    here: Oracle Forms omits those flags on many real, on-screen widgets.
+    """
+    out: list[dict] = []
+    seen: set[str] = set()
+    for el in elements:
+        ref = str(el.get("elementid") or "")
+        if not ref or ref in seen:
+            continue
+        bounds = el.get("bounds") or {}
+        w = int(bounds.get("width", el.get("width", 0)) or 0)
+        h = int(bounds.get("height", el.get("height", 0)) or 0)
+        if w <= 0 or h <= 0:
+            continue
+        x = int(bounds.get("x", el.get("x", 0)) or 0)
+        y = int(bounds.get("y", el.get("y", 0)) or 0)
+        java = el.get("java") or {}
+        states = el.get("states") or []
+        out.append({
+            "element_ref": ref,
+            "name": str(el.get("name") or el.get("friendly_name") or ""),
+            "role": str(el.get("role") or ""),
+            "type": str(java.get("simpleClassName") or el.get("role") or ""),
+            "actions": _element_actions(el),
+            "value": str(java.get("value") or el.get("text") or ""),
+            "enabled": "enabled" in states,
+            "bounds": {"x": x, "y": y, "width": w, "height": h},
+            "descriptor": str(java.get("descriptor") or ""),
+            "locator_params": java.get("locator_params") or {},
+        })
+        seen.add(ref)
+    return out
+
+
+def _element_actions(el: dict) -> list[str]:
+    """Determine possible action verbs for a scanned element.
+
+    WHY: The full-element hover overlay shows users what they can do with
+    any element on screen. Actions are inferred from role + Oracle-specific
+    signals (LOV name suffix, editability) so the tooltip is helpful
+    without invoking AI.
+    """
+    role = str(el.get("role") or "")
+    name = str(el.get("name") or "").lower()
+    states: list[str] = el.get("states") or []
+    if "list of values" in name or "(lov)" in name:
+        return ["click", "open list"]
+    base = _ROLE_ACTIONS.get(role, [])
+    if not base:
+        return ["inspect"]  # read-only display / unknown: inspectable only
+    if role == "Field" and "editable" not in states:
+        return ["inspect"]
+    return base
+
+
+def build_full_scan(raw_dom: dict) -> dict[str, object]:
+    """Single entry point: produce everything from one raw Java agent DOM.
+
+    Returns a dict with:
+        scoped_dom       — active-window-scoped DOM (dict)
+        snapshot_text    — AI-friendly action snapshot (str)
+        tree             — Studio UI tree (list[dict])
+        full_elements    — hoverable overlay for every scanned element (list[dict])
+        title            — best-effort form title (str)
+
+    All coordinates are raw (unadjusted) and align with a fullscreen
+    screenshot.  Callers (Studio, dump_scan, etc.) should use this as the
+    one canonical source for scan data.
+    """
+    scoped = active_window_scan(raw_dom)
+    elements = java_nodes_to_repo_elements(scoped)
+    payload = build_action_payload(scoped)
+    overlay = build_full_overlay_elements(elements)
+    title = active_form_title(scoped)
+
+    return {
+        "scoped_dom": scoped,
+        "snapshot_text": str(payload.get("text") or ""),
+        "tree": list(payload.get("tree") or []),
+        "full_elements": overlay,
+        "title": title,
+    }
+
+
 def actioned_element_at(scan: dict, screen_x: int, screen_y: int) -> dict | None:
     """Return the best action-worthy repo element containing screen coords."""
     nodes = flatten_nodes(scan)
@@ -593,9 +699,6 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
 
 def build_action_payload(
     scan: dict,
-    *,
-    origin_x: int = 0,
-    origin_y: int = 0,
 ) -> dict[str, Any]:
     """Return AI text + UI tree from one canonical snapshot source.
 
@@ -603,6 +706,9 @@ def build_action_payload(
     the AI snapshot text, which caused drift and incorrect box placement.
     This helper guarantees both outputs are produced from the same filtered
     element set used by ``build_action_context``.
+
+    Since screenshots are no longer cropped, element coordinates are raw
+    (unadjusted) and align directly with the fullscreen screenshot.
     """
     snapshot_text, id_map = build_action_context(scan)
     # WHY: ``id_map`` carries every actionable element (incl. menu/toolbar/tab
@@ -614,9 +720,7 @@ def build_action_payload(
     # "Buttons:", menu items under "Tools Menu:") instead of a flattened DOM
     # dump. Parsing the text (not the id_map graph) keeps the tree and the AI
     # prompt from ever drifting apart.
-    tree = _parse_snapshot_tree(
-        snapshot_text, id_map, origin_x=origin_x, origin_y=origin_y
-    )
+    tree = _parse_snapshot_tree(snapshot_text, id_map)
     return {
         "text": snapshot_text,
         "tree": tree,
@@ -627,9 +731,6 @@ def build_action_payload(
 def _parse_snapshot_tree(
     snapshot_text: str,
     id_map: dict[str, dict],
-    *,
-    origin_x: int = 0,
-    origin_y: int = 0,
 ) -> list[dict[str, Any]]:
     """Build a nested UI tree that mirrors the AI snapshot text hierarchy.
 
@@ -653,6 +754,8 @@ def _parse_snapshot_tree(
     siblings; a single-segment / header line becomes a container that following
     deeper lines nest under. Element bounds (for screenshot overlays) come from
     ``id_map``; header / menu rows get zero-size bounds (no overlay box).
+
+    Coordinates are raw (unadjusted) since screenshots are no longer cropped.
     """
 
     seg_re = re.compile(r"^\[(e\d+)\]\s*(.*)$")
@@ -671,8 +774,8 @@ def _parse_snapshot_tree(
         w = int(b.get("width", el.get("width", 0)) or 0)
         h = int(b.get("height", el.get("height", 0)) or 0)
         return {
-            "x": x - int(origin_x),
-            "y": y - int(origin_y),
+            "x": x,
+            "y": y,
             "width": w,
             "height": h,
         }
@@ -783,9 +886,6 @@ def _parse_snapshot_tree(
 
 def _build_ui_tree_from_id_map(
     id_map: dict[str, dict],
-    *,
-    origin_x: int = 0,
-    origin_y: int = 0,
 ) -> list[dict[str, Any]]:
     """Build a stable tree payload for Studio from action-context elements."""
     nodes: dict[str, dict[str, Any]] = {}
@@ -797,11 +897,9 @@ def _build_ui_tree_from_id_map(
         y = int(b.get("y", element.get("y", 0)) or 0)
         w = int(b.get("width", element.get("width", 0)) or 0)
         h = int(b.get("height", element.get("height", 0)) or 0)
-        nx = x - int(origin_x)
-        ny = y - int(origin_y)
         return {
-            "x": nx,
-            "y": ny,
+            "x": x,
+            "y": y,
             "width": w,
             "height": h,
         }

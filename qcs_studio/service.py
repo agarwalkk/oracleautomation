@@ -16,6 +16,7 @@ from qcs_java_agent.snapshot import (
     active_form_title,
     active_window_scan,
     build_action_payload,
+    build_full_overlay_elements,
     java_nodes_to_repo_elements,
 )
 from qcs_repo import fingerprint as repo_fingerprint
@@ -258,95 +259,6 @@ def _frame_form_title(frame: dict | None) -> str:
     return ""
 
 
-_ROLE_ACTIONS: dict[str, list[str]] = {
-    "Button": ["click"],
-    "Field": ["type", "clear"],
-    "ComboBox": ["select"],
-    "Checkbox": ["toggle"],
-    "RadioButton": ["select"],
-    "List": ["select"],
-    "Tree": ["select", "expand"],
-    "Table": ["select"],
-    "Menu": ["open"],
-    "MenuItem": ["click"],
-    "Tab": ["activate"],
-}
-
-
-def _element_actions(element: dict) -> list[str]:
-    """Derive the plausible user actions for a scanned element.
-
-    WHY: The full-element hover overlay shows users what they can do with any
-    element on screen. Actions are inferred from the element role plus a couple
-    of Oracle-specific signals (LOV name suffix, editability) so the tooltip is
-    helpful without invoking AI.
-    """
-    role = str(element.get("role") or "")
-    name = str(element.get("name") or "").lower()
-    states = element.get("states") or []
-    if "list of values" in name or "(lov)" in name:
-        return ["click", "open list"]
-    base = _ROLE_ACTIONS.get(role, [])
-    if not base:
-        return ["inspect"]  # read-only display / unknown: inspectable only
-    if role == "Field" and "editable" not in states:
-        return ["inspect"]
-    return base
-
-
-def _full_overlay_elements(
-    elements: list[dict]
-) -> list[dict]:
-    """Build the full hoverable element overlay from all scanned elements.
-
-    WHY: Requirement is that EVERY element from the full scan is hoverable and
-    inspectable (id, name, type, possible actions) and can be dragged into the
-    curated tree. Since we no longer crop screenshots, bounds are raw
-    (unadjusted) Java-window client coordinates that align directly with the
-    fullscreen screenshot. Zero-size elements are skipped. We intentionally do
-    NOT require a "showing"/"visible" state here: Oracle Forms omits those flags
-    on many real, on-screen widgets, and filtering on them would hide most of
-    the elements the user expects to hover over.
-    """
-    out: list[dict] = []
-    seen: set[str] = set()
-    for el in elements:
-        ref = str(el.get("elementid") or "")
-        if not ref or ref in seen:
-            continue
-        bounds = el.get("bounds") or {}
-        w = int(bounds.get("width", el.get("width", 0)) or 0)
-        h = int(bounds.get("height", el.get("height", 0)) or 0)
-        if w <= 0 or h <= 0:
-            continue
-        # WHY: Raw coordinates — no origin subtraction because screenshots
-        # are no longer cropped. Fullscreen capture aligns with element bounds.
-        x = int(bounds.get("x", el.get("x", 0)) or 0)
-        y = int(bounds.get("y", el.get("y", 0)) or 0)
-        java = el.get("java") or {}
-        states = el.get("states") or []
-        out.append(
-            {
-                "element_ref": ref,
-                "name": str(el.get("name") or el.get("friendly_name") or ""),
-                "role": str(el.get("role") or ""),
-                "type": str(java.get("simpleClassName") or el.get("role") or ""),
-                "actions": _element_actions(el),
-                "value": str(java.get("value") or el.get("text") or ""),
-                "enabled": "enabled" in states,
-                "bounds": {"x": x, "y": y, "width": w, "height": h},
-                # WHY: Java locator data (descriptor + locator_params) is needed by
-                # the Studio UI to display tooltips showing how an element is
-                # addressed by the Java agent, enabling users to understand and
-                # debug locator strategies.
-                "descriptor": str(java.get("descriptor") or ""),
-                "locator_params": java.get("locator_params") or {},
-            }
-        )
-        seen.add(ref)
-    return out
-
-
 @dataclass
 class ScanBundle:
     scan_id: str
@@ -490,10 +402,10 @@ class StudioService:
         scoped = active_window_scan(raw_dom)
         enriched = repo_snapshot.enrich_java_elements(java_nodes_to_repo_elements(scoped))
 
-        payload = build_action_payload(scoped, origin_x=0, origin_y=0)
+        payload = build_action_payload(scoped)
 
         elements = java_nodes_to_repo_elements(scoped)
-        full_elements = _full_overlay_elements(elements)
+        full_elements = build_full_overlay_elements(elements)
 
         # Update the bundle in-place with tree data.
         bundle.snapshot_text = str(payload.get("text") or "")
@@ -624,5 +536,5 @@ class StudioService:
             elements = java_nodes_to_repo_elements(scoped)
         except Exception:
             return []
-        return _full_overlay_elements(elements)
+        return build_full_overlay_elements(elements)
 

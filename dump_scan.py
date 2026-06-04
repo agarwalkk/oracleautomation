@@ -12,22 +12,25 @@ from pathlib import Path
 import config
 from qcs_java_agent import JavaAgentDriver
 from qcs_java_agent.snapshot import (
-    build_action_context,
+    build_full_scan,
     _oracle_forms_active_frame,
 )
 
 driver = JavaAgentDriver.attach(contains=config.JAVA_AGENT_PROCESS_MATCH)
 scan = driver.scan()
 
-# --- Project-root quick-debug copies (unchanged) ---
+# Single source of truth: build all outputs from the raw scan.
+result = build_full_scan(scan)
+snapshot_text: str = str(result["snapshot_text"])
+
+# --- Project-root quick-debug copies ---
 with open("scan_dump.json", "w", encoding="utf-8") as f:
     json.dump(scan, f, indent=2, default=str)
 print("wrote scan_dump.json")
 
-snapshot_text, id_map = build_action_context(scan)
 with open("snapshot_output.txt", "w", encoding="utf-8") as f:
     f.write(snapshot_text)
-print(f"wrote snapshot_output.txt  ({len(id_map)} elements)")
+print(f"wrote snapshot_output.txt")
 
 # --- Archived test-data copy (timestamped folder) ---
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
