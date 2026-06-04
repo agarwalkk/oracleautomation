@@ -54,10 +54,11 @@ agent = [
 qcs        = "qcs.__main__:main"
 qcs-center = "qcs_center.app:main"
 qcs-agent  = "qcs_agent.main:main"
+qcs-studio = "qcs_studio.app:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["qcs*", "qcs_repo*", "qcs_replay*", "qcs_java_agent*", "generator*", "oracle_ai_agent*", "qcs_center*", "qcs_agent*"]
+include = ["qcs*", "qcs_repo*", "qcs_replay*", "qcs_java_agent*", "generator*", "oracle_ai_agent*", "qcs_center*", "qcs_agent*", "qcs_studio*"]
 
 [tool.pytest.ini_options]
 markers = [

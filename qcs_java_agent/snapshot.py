@@ -478,6 +478,14 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
                 w = el.get("width", 0)
                 if not text or text in human_field_names or w <= 15:
                     continue  # label, empty, invisible, or indicator — skip
+            # Skip read-only display mirrors (the "(read-only)" field labels).
+            # WHY: Oracle Forms pairs each LOV/input field with a non-editable
+            # element that merely echoes the resolved value. Per qcs_studio UX
+            # decision these clutter the curated tree + AI snapshot, so we drop
+            # them here; they stay discoverable via the full-element hover
+            # overlay. Interactive controls are never treated as read-only.
+            if _is_readonly_display(el):
+                continue
             if eid in form_level_ids:
                 if role == "Button":
                     button_elements.append(el)
@@ -491,6 +499,11 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
         # Include display-only Panel elements that carry real data values.
         # Oracle Forms marks some read-only fields as Panel (not Field),
         # so _actionable_elements excludes them.  Re-add qualifying ones.
+        #
+        # NOTE: Per the qcs_studio "exclude read-only display elements" rule,
+        # _is_readonly_display() now suppresses these Panel mirrors as well, so
+        # this block is effectively inert for non-editable panels. It is kept
+        # only to re-add any (rare) editable Panel-typed inputs with data.
         included_ids = {el.get("elementid") for el in tab_elements}
         for el in all_elements:
             eid = el.get("elementid", "")
@@ -499,6 +512,8 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
             role = str(el.get("role") or "")
             if role != "Panel":
                 continue
+            if _is_readonly_display(el):
+                continue  # read-only display mirror — excluded (hover-only)
             states = el.get("states") or []
             if "showing" not in states:
                 continue
@@ -574,6 +589,259 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
         if el.get("elementid")
     }
     return snapshot_text, id_map
+
+
+def build_action_payload(
+    scan: dict,
+    *,
+    origin_x: int = 0,
+    origin_y: int = 0,
+) -> dict[str, Any]:
+    """Return AI text + UI tree from one canonical snapshot source.
+
+    WHY: Studio previously assembled overlay/render data independently from
+    the AI snapshot text, which caused drift and incorrect box placement.
+    This helper guarantees both outputs are produced from the same filtered
+    element set used by ``build_action_context``.
+    """
+    snapshot_text, id_map = build_action_context(scan)
+    # WHY: ``id_map`` carries every actionable element (incl. menu/toolbar/tab
+    # chrome), but the human-friendly snapshot text only lists meaningful
+    # fields/buttons via ``[eNN]`` tokens. We build the Studio tree by parsing
+    # the canonical snapshot text directly so the tree mirrors EXACTLY the
+    # hierarchical structure the recorder AI sees in ai_snapshot.txt (sections
+    # nested under the form, fields nested under their tab, buttons under
+    # "Buttons:", menu items under "Tools Menu:") instead of a flattened DOM
+    # dump. Parsing the text (not the id_map graph) keeps the tree and the AI
+    # prompt from ever drifting apart.
+    tree = _parse_snapshot_tree(
+        snapshot_text, id_map, origin_x=origin_x, origin_y=origin_y
+    )
+    return {
+        "text": snapshot_text,
+        "tree": tree,
+        "id_map": id_map,
+    }
+
+
+def _parse_snapshot_tree(
+    snapshot_text: str,
+    id_map: dict[str, dict],
+    *,
+    origin_x: int = 0,
+    origin_y: int = 0,
+) -> list[dict[str, Any]]:
+    """Build a nested UI tree that mirrors the AI snapshot text hierarchy.
+
+    WHY: Studio must display the same hierarchy the recorder AI consumes (see
+    ai_snapshot.txt / snapshot_output.txt). The snapshot text is indentation
+    based:
+
+    ::
+
+        Form: <title>
+          [e207] Open Folder... (Button, enabled)
+          [e197] Tabs: [*Quote/Order Information*] | Line Information | ...
+            [e33] Order Number , [e84] Order Type (read-only) , ...
+          Buttons:
+            [e205] Clear (Button, enabled) , [e206] Find (Button, enabled)
+          Tools Menu:
+            Find Customer
+
+    We reconstruct nesting from leading-space indentation. A line containing
+    multiple comma-separated ``[eNN] label`` segments becomes several leaf
+    siblings; a single-segment / header line becomes a container that following
+    deeper lines nest under. Element bounds (for screenshot overlays) come from
+    ``id_map``; header / menu rows get zero-size bounds (no overlay box).
+    """
+
+    seg_re = re.compile(r"^\[(e\d+)\]\s*(.*)$")
+    roots: list[dict[str, Any]] = []
+    # Stack of (indent, children_list) describing the current open containers.
+    stack: list[tuple[int, list]] = []
+    synth = 0
+
+    def _bounds_for(element_id: str) -> dict[str, int]:
+        el = id_map.get(element_id)
+        if not el:
+            return {"x": 0, "y": 0, "width": 0, "height": 0}
+        b = dict(el.get("bounds") or {})
+        x = int(b.get("x", el.get("x", 0)) or 0)
+        y = int(b.get("y", el.get("y", 0)) or 0)
+        w = int(b.get("width", el.get("width", 0)) or 0)
+        h = int(b.get("height", el.get("height", 0)) or 0)
+        return {
+            "x": x - int(origin_x),
+            "y": y - int(origin_y),
+            "width": w,
+            "height": h,
+        }
+
+    def _role_for(element_id: str, label: str) -> str:
+        el = id_map.get(element_id)
+        if el and el.get("role"):
+            return str(el.get("role"))
+        low = label.lower()
+        if "(button" in low:
+            return "Button"
+        if "(lov)" in low:
+            return "LOV"
+        if "(combobox" in low:
+            return "ComboBox"
+        if "(read-only)" in low:
+            return "Field"
+        return "Field"
+
+    def _make_segment_node(segment: str) -> dict[str, Any]:
+        nonlocal synth
+        m = seg_re.match(segment)
+        if m:
+            eid, label = m.group(1), m.group(2).strip()
+            return {
+                "element_ref": eid,
+                "label": label or eid,
+                "role": _role_for(eid, label),
+                "included": True,
+                "bounds": _bounds_for(eid),
+                "children": [],
+            }
+        # Label-only row (e.g. a Tools Menu item) — no element/overlay.
+        synth += 1
+        return {
+            "element_ref": f"grp-{synth}",
+            "label": segment.rstrip(":").strip() or f"item-{synth}",
+            "role": "Item",
+            "included": True,
+            "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
+            "children": [],
+        }
+
+    for raw in snapshot_text.split("\n"):
+        if not raw.strip():
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        content = raw.strip()
+
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        parent_children = stack[-1][1] if stack else roots
+
+        if content.startswith("Form:"):
+            synth += 1
+            node = {
+                "element_ref": f"grp-{synth}",
+                "label": content[len("Form:"):].strip() or "Form",
+                "role": "Form",
+                "included": True,
+                "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
+                "children": [],
+            }
+            parent_children.append(node)
+            stack.append((indent, node["children"]))
+            continue
+
+        if " , " in content:
+            # Multiple leaf segments on one visual row — all siblings.
+            for seg in content.split(" , "):
+                seg = seg.strip()
+                if seg:
+                    parent_children.append(_make_segment_node(seg))
+            continue
+
+        # Single-segment / header line: becomes a container that may hold
+        # deeper-indented children (e.g. "Buttons:", the Tabs line, a section).
+        node = _make_segment_node(content)
+        parent_children.append(node)
+        stack.append((indent, node["children"]))
+
+    # Flatten the synthetic "Buttons" group: buttons should appear at the same
+    # level as their sibling fields/tabs, not nested under a "Buttons" header.
+    # WHY: the AI snapshot text groups footer/toolbar buttons under a "Buttons:"
+    # heading for readability, but the curated UI tree should not introduce that
+    # extra grouping level (per qcs_studio UX request). Other group headers
+    # (e.g. "Tools Menu") are preserved.
+    def _flatten_button_groups(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for node in nodes:
+            children = _flatten_button_groups(node.get("children") or [])
+            node["children"] = children
+            is_group = str(node.get("element_ref", "")).startswith("grp-")
+            if is_group and str(node.get("label", "")).strip().lower() == "buttons":
+                out.extend(children)  # splice buttons up to this level
+            else:
+                out.append(node)
+        return out
+
+    # The form line wraps everything; surface its children as the top-level
+    # tree so the container name is not duplicated (it is shown separately as
+    # the container title in the UI).
+    if len(roots) == 1 and roots[0].get("role") == "Form":
+        return _flatten_button_groups(list(roots[0].get("children") or []))
+    return _flatten_button_groups(roots)
+
+
+
+def _build_ui_tree_from_id_map(
+    id_map: dict[str, dict],
+    *,
+    origin_x: int = 0,
+    origin_y: int = 0,
+) -> list[dict[str, Any]]:
+    """Build a stable tree payload for Studio from action-context elements."""
+    nodes: dict[str, dict[str, Any]] = {}
+    roots: list[dict[str, Any]] = []
+
+    def _normalize_bounds(element: dict) -> dict[str, int]:
+        b = dict(element.get("bounds") or {})
+        x = int(b.get("x", element.get("x", 0)) or 0)
+        y = int(b.get("y", element.get("y", 0)) or 0)
+        w = int(b.get("width", element.get("width", 0)) or 0)
+        h = int(b.get("height", element.get("height", 0)) or 0)
+        nx = x - int(origin_x)
+        ny = y - int(origin_y)
+        return {
+            "x": nx,
+            "y": ny,
+            "width": w,
+            "height": h,
+        }
+
+    for element_id, element in id_map.items():
+        name = str(element.get("name") or element.get("friendly_name") or element_id)
+        role = str(element.get("role") or "")
+        bounds = _normalize_bounds(element)
+        node = {
+            "element_ref": element_id,
+            "label": name,
+            "role": role,
+            "included": bool(element.get("included", True)),
+            "bounds": bounds,
+            "children": [],
+        }
+        nodes[element_id] = node
+
+    for element_id, element in id_map.items():
+        node = nodes[element_id]
+        parent_ref = str(element.get("filteredparentid") or element.get("parent_ref") or "")
+        parent_node = nodes.get(parent_ref)
+        if parent_node is None:
+            roots.append(node)
+        else:
+            parent_node["children"].append(node)
+
+    def _sort_nodes(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        items.sort(
+            key=lambda n: (
+                int((n.get("bounds") or {}).get("y", 0)),
+                int((n.get("bounds") or {}).get("x", 0)),
+                str(n.get("label") or ""),
+            )
+        )
+        for item in items:
+            item["children"] = _sort_nodes(list(item.get("children") or []))
+        return items
+
+    return _sort_nodes(roots)
 
 
 # ---------------------------------------------------------------------------
@@ -695,7 +963,8 @@ def _detect_tabs(nodes: list[dict]) -> dict | None:
                 break
         if matched_tab == selected:
             _collect_ids(box, selected_content_ids)
-            matched_tab_names.add(matched_tab)
+            if matched_tab is not None:
+                matched_tab_names.add(matched_tab)
         elif matched_tab is not None:
             matched_tab_names.add(matched_tab)
             pass  # belongs to another tab — skip
@@ -1167,7 +1436,7 @@ def _format_hierarchical(
 
     # Tree panels before tabs (sidebar on the left)
     if tree_before_tabs:
-        for el in tree_elements:
+        for el in (tree_elements or []):
             lines.append(f"  {_format_tree(el)}")
 
     # Outer (higher-level) tab bars — rendered before the inner tab bar.
@@ -1501,6 +1770,31 @@ def _tree_rows_to_table(
                 cells.append(part.strip())
         data_rows.append((cells, row["selected"]))
     return {"headers": headers, "rows": data_rows}
+
+
+def _is_readonly_display(el: dict) -> bool:
+    """True if ``el`` is a read-only display mirror to exclude from the snapshot.
+
+    WHY: Oracle Forms pairs each LOV/input field with a non-editable element
+    that merely echoes the resolved value (rendered as ``(read-only)``). Per the
+    qcs_studio "exclude field labels" UX decision, these mirrors clutter the
+    curated element tree and the AI action snapshot, so they are dropped here
+    and surfaced only via the full-element hover overlay. Interactive controls
+    (LOV, ComboBox, Checkbox, RadioButton, List, Tree, Table, Button, menus,
+    tabs) are NEVER treated as read-only display even when not editable.
+    """
+    states = el.get("states") or []
+    if "editable" in states:
+        return False
+    role = str(el.get("role") or "")
+    if role in (
+        "Button", "ComboBox", "Checkbox", "RadioButton",
+        "List", "Tree", "Table", "Menu", "MenuItem", "Tab", "Toolbar",
+    ):
+        return False
+    if _LOV_SUFFIX.search(str(el.get("name") or "")):
+        return False
+    return True
 
 
 def _strip_tab_prefix(name: str, tab_page_prefix: str | None) -> str:

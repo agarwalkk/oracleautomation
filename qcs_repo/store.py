@@ -82,6 +82,60 @@ def _db_connect(repo_dir: Path = config.REPO_DIR) -> sqlite3.Connection:
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS containers (
+            container_ref TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT '',
+            surface TEXT NOT NULL DEFAULT '',
+            fingerprint TEXT,
+            screenshot TEXT,
+            raw_dom_path TEXT,
+            tree_path TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            source TEXT NOT NULL DEFAULT 'recording',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_containers_surface ON containers(surface)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_containers_status ON containers(status)")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS container_elements (
+            container_ref TEXT NOT NULL,
+            element_ref TEXT NOT NULL,
+            parent_ref TEXT,
+            raw_node_id TEXT,
+            friendly_name TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT '',
+            included INTEGER NOT NULL DEFAULT 1,
+            x INTEGER NOT NULL DEFAULT 0,
+            y INTEGER NOT NULL DEFAULT 0,
+            width INTEGER NOT NULL DEFAULT 0,
+            height INTEGER NOT NULL DEFAULT 0,
+            screen_x INTEGER NOT NULL DEFAULT 0,
+            screen_y INTEGER NOT NULL DEFAULT 0,
+            screen_width INTEGER NOT NULL DEFAULT 0,
+            screen_height INTEGER NOT NULL DEFAULT 0,
+            source TEXT NOT NULL DEFAULT 'recording',
+            status TEXT NOT NULL DEFAULT 'active',
+            confidence REAL NOT NULL DEFAULT 1.0,
+            descriptor_json TEXT NOT NULL DEFAULT '{}',
+            locator_candidates_json TEXT NOT NULL DEFAULT '[]',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            data_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (container_ref, element_ref),
+            FOREIGN KEY (container_ref) REFERENCES containers(container_ref) ON DELETE CASCADE
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_container_elements_parent ON container_elements(container_ref, parent_ref)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_container_elements_role ON container_elements(container_ref, role)")
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS forms (
             id TEXT PRIMARY KEY,
             surface TEXT NOT NULL DEFAULT '',
@@ -156,6 +210,97 @@ def _json_dump(data: Any) -> str:
 
 def _json_load(raw: str) -> Any:
     return json.loads(raw) if raw else None
+
+
+def _artifact_dir(container_ref: str, repo_dir: Path = config.REPO_DIR) -> Path:
+    safe_ref = repo_identity.normalize_ref(container_ref)
+    return Path(repo_dir) / "containers" / safe_ref
+
+
+def _element_ref_from_tree_node(node: dict, used: set[str]) -> str:
+    candidate = (
+        node.get("element_ref")
+        or node.get("semantic_ref")
+        or node.get("friendly_name")
+        or node.get("name")
+        or node.get("elementid")
+        or "element"
+    )
+    base = repo_identity.normalize_ref(str(candidate) or "element")
+    if base not in used:
+        used.add(base)
+        return base
+    idx = 2
+    while f"{base}_{idx}" in used:
+        idx += 1
+    ref = f"{base}_{idx}"
+    used.add(ref)
+    return ref
+
+
+def _descriptor_from_node(node: dict) -> dict[str, Any]:
+    java = node.get("java") or {}
+    bounds = node.get("bounds") or {}
+    descriptor: dict[str, Any] = {}
+    path = node.get("path") or node.get("xpath") or java.get("path")
+    if path:
+        descriptor["locatorPath"] = str(path)
+    name = node.get("name") or java.get("name")
+    if name:
+        descriptor["locatorName"] = str(name)
+    acc_name = java.get("accessibleName")
+    if acc_name:
+        descriptor["locatorAccessibleName"] = str(acc_name)
+    text = node.get("text") or java.get("displayName")
+    if text:
+        descriptor["locatorText"] = str(text)
+    if bounds:
+        bx = int(bounds.get("x") or 0)
+        by = int(bounds.get("y") or 0)
+        bw = int(bounds.get("width") or 0)
+        bh = int(bounds.get("height") or 0)
+        descriptor["locatorBounds"] = f"{bx},{by},{bw},{bh}"
+    return descriptor
+
+
+def _normalize_tree_elements(tree_elements: list[dict]) -> list[dict]:
+    now = _now_iso()
+    used_refs: set[str] = set()
+    normalized: list[dict] = []
+    for node in tree_elements:
+        element_ref = _element_ref_from_tree_node(node, used_refs)
+        parent = node.get("parent_ref") or node.get("filteredparentid")
+        role = str(node.get("role") or "")
+        bounds = node.get("bounds") or {}
+        x = int(node.get("x", bounds.get("x", 0)) or 0)
+        y = int(node.get("y", bounds.get("y", 0)) or 0)
+        width = int(node.get("width", bounds.get("width", 0)) or 0)
+        height = int(node.get("height", bounds.get("height", 0)) or 0)
+        descriptor = dict(node.get("descriptor") or _descriptor_from_node(node))
+        candidates = list(node.get("locator_candidates") or repo_identity.locator_candidates(node))
+        entry = {
+            **node,
+            "element_ref": element_ref,
+            "parent_ref": parent,
+            "raw_node_id": str(node.get("elementid") or node.get("raw_node_id") or ""),
+            "friendly_name": str(node.get("friendly_name") or node.get("name") or element_ref),
+            "role": role,
+            "included": bool(node.get("included", True)),
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "bounds": {"x": x, "y": y, "width": width, "height": height},
+            "descriptor": descriptor,
+            "locator_candidates": candidates,
+            "source": str(node.get("source") or "recording"),
+            "status": str(node.get("status") or "active"),
+            "confidence": float(node.get("confidence") if node.get("confidence") is not None else 1.0),
+            "created_at": str(node.get("created_at") or now),
+            "updated_at": now,
+        }
+        normalized.append(entry)
+    return normalized
 
 
 def load_snapshot_db(snapshot_db: Path | str) -> list[dict]:
@@ -547,6 +692,323 @@ def _element_number(elementid: str) -> int:
         except ValueError:
             pass
     return 10**9
+
+
+def list_containers(repo_dir: Path = config.REPO_DIR) -> list[dict]:
+    """List all stored containers in the new container-first repository model."""
+    with _db_connect(repo_dir) as conn:
+        rows = conn.execute(
+            """
+            SELECT container_ref, title, surface, fingerprint, screenshot,
+                   raw_dom_path, tree_path, status, source, created_at, updated_at, metadata_json
+            FROM containers
+            ORDER BY container_ref
+            """
+        ).fetchall()
+    containers: list[dict] = []
+    for row in rows:
+        containers.append({
+            "container_ref": row["container_ref"],
+            "title": row["title"],
+            "surface": row["surface"],
+            "fingerprint": row["fingerprint"],
+            "screenshot": row["screenshot"],
+            "raw_dom_path": row["raw_dom_path"],
+            "tree_path": row["tree_path"],
+            "status": row["status"],
+            "source": row["source"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "metadata": _json_load(row["metadata_json"]) or {},
+        })
+    return containers
+
+
+def load_container(container_ref: str, repo_dir: Path = config.REPO_DIR) -> dict | None:
+    """Load one container with persisted tree and raw-dom artifacts."""
+    with _db_connect(repo_dir) as conn:
+        row = conn.execute(
+            """
+            SELECT container_ref, title, surface, fingerprint, screenshot,
+                   raw_dom_path, tree_path, status, source, created_at, updated_at, metadata_json
+            FROM containers
+            WHERE container_ref=?
+            """,
+            (container_ref,),
+        ).fetchone()
+        if row is None:
+            return None
+        element_rows = conn.execute(
+            """
+            SELECT data_json
+            FROM container_elements
+            WHERE container_ref=?
+            ORDER BY element_ref
+            """,
+            (container_ref,),
+        ).fetchall()
+
+    repo_dir = Path(repo_dir)
+    raw_dom: dict | None = None
+    tree: list[dict] = [_json_load(r["data_json"]) for r in element_rows]
+
+    raw_dom_rel = row["raw_dom_path"]
+    if raw_dom_rel:
+        raw_path = repo_dir / str(raw_dom_rel)
+        if raw_path.exists():
+            raw_dom = _json_load(raw_path.read_text(encoding="utf-8"))
+
+    tree_rel = row["tree_path"]
+    if tree_rel:
+        tree_path = repo_dir / str(tree_rel)
+        if tree_path.exists():
+            try:
+                file_tree = _json_load(tree_path.read_text(encoding="utf-8"))
+                if isinstance(file_tree, list):
+                    tree = file_tree
+            except json.JSONDecodeError:
+                pass
+
+    return {
+        "container_ref": row["container_ref"],
+        "title": row["title"],
+        "surface": row["surface"],
+        "fingerprint": row["fingerprint"],
+        "screenshot": row["screenshot"],
+        "raw_dom_path": row["raw_dom_path"],
+        "tree_path": row["tree_path"],
+        "status": row["status"],
+        "source": row["source"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "metadata": _json_load(row["metadata_json"]) or {},
+        "raw_dom": raw_dom,
+        "tree": tree,
+    }
+
+
+def save_container_tree(
+    container_ref: str,
+    tree_elements: list[dict],
+    *,
+    title: str | None = None,
+    surface: str = "java_forms",
+    fingerprint: str | None = None,
+    screenshot: str | None = None,
+    raw_dom_path: str | None = None,
+    source: str = "recording",
+    status: str = "active",
+    metadata: dict | None = None,
+    repo_dir: Path = config.REPO_DIR,
+) -> dict:
+    """Persist normalized container tree into the new repository tables/files."""
+    repo_dir = Path(repo_dir)
+    now = _now_iso()
+    normalized = _normalize_tree_elements(tree_elements)
+    artifacts_dir = _artifact_dir(container_ref, repo_dir)
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    tree_file = artifacts_dir / "tree.json"
+    tree_file.write_text(_json_dump(normalized), encoding="utf-8")
+    tree_rel = tree_file.relative_to(repo_dir).as_posix()
+    meta = dict(metadata or {})
+
+    with _db_connect(repo_dir) as conn:
+        existing = conn.execute(
+            "SELECT created_at, title, surface, metadata_json, screenshot, raw_dom_path, fingerprint "
+            "FROM containers WHERE container_ref=?",
+            (container_ref,),
+        ).fetchone()
+        created_at = existing["created_at"] if existing else now
+        merged_meta = dict(_json_load(existing["metadata_json"]) or {}) if existing else {}
+        merged_meta.update(meta)
+
+        conn.execute(
+            """
+            INSERT INTO containers (
+                container_ref, title, surface, fingerprint, screenshot, raw_dom_path, tree_path,
+                status, source, created_at, updated_at, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(container_ref) DO UPDATE SET
+                title=excluded.title,
+                surface=excluded.surface,
+                fingerprint=COALESCE(excluded.fingerprint, containers.fingerprint),
+                screenshot=COALESCE(excluded.screenshot, containers.screenshot),
+                raw_dom_path=COALESCE(excluded.raw_dom_path, containers.raw_dom_path),
+                tree_path=excluded.tree_path,
+                status=excluded.status,
+                source=excluded.source,
+                updated_at=excluded.updated_at,
+                metadata_json=excluded.metadata_json
+            """,
+            (
+                container_ref,
+                title or (existing["title"] if existing else container_ref),
+                surface or (existing["surface"] if existing else "java_forms"),
+                fingerprint if fingerprint is not None else (existing["fingerprint"] if existing else None),
+                screenshot if screenshot is not None else (existing["screenshot"] if existing else None),
+                raw_dom_path if raw_dom_path is not None else (existing["raw_dom_path"] if existing else None),
+                tree_rel,
+                status,
+                source,
+                created_at,
+                now,
+                _json_dump(merged_meta),
+            ),
+        )
+
+        conn.execute("DELETE FROM container_elements WHERE container_ref=?", (container_ref,))
+        for element in normalized:
+            bounds = element.get("bounds") or {}
+            conn.execute(
+                """
+                INSERT INTO container_elements (
+                    container_ref, element_ref, parent_ref, raw_node_id, friendly_name, role,
+                    included, x, y, width, height, screen_x, screen_y, screen_width, screen_height,
+                    source, status, confidence, descriptor_json, locator_candidates_json,
+                    metadata_json, data_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    container_ref,
+                    element["element_ref"],
+                    element.get("parent_ref"),
+                    element.get("raw_node_id"),
+                    element.get("friendly_name") or element["element_ref"],
+                    element.get("role") or "",
+                    0 if element.get("included") is False else 1,
+                    int(element.get("x", bounds.get("x", 0)) or 0),
+                    int(element.get("y", bounds.get("y", 0)) or 0),
+                    int(element.get("width", bounds.get("width", 0)) or 0),
+                    int(element.get("height", bounds.get("height", 0)) or 0),
+                    int(element.get("x", bounds.get("x", 0)) or 0),
+                    int(element.get("y", bounds.get("y", 0)) or 0),
+                    int(element.get("width", bounds.get("width", 0)) or 0),
+                    int(element.get("height", bounds.get("height", 0)) or 0),
+                    element.get("source") or source,
+                    element.get("status") or status,
+                    float(element.get("confidence") if element.get("confidence") is not None else 1.0),
+                    _json_dump(element.get("descriptor") or {}),
+                    _json_dump(element.get("locator_candidates") or []),
+                    _json_dump(element.get("metadata") or {}),
+                    _json_dump(element),
+                    element.get("created_at") or now,
+                    now,
+                ),
+            )
+        conn.commit()
+
+    saved = load_container(container_ref, repo_dir)
+    if saved is None:
+        raise RuntimeError(f"Failed to load saved container {container_ref!r}")
+    return saved
+
+
+def save_container_scan(
+    container_ref: str,
+    *,
+    title: str,
+    raw_dom: dict,
+    tree_elements: list[dict],
+    screenshot_path: str | Path,
+    surface: str = "java_forms",
+    source: str = "recording",
+    status: str = "active",
+    metadata: dict | None = None,
+    repo_dir: Path = config.REPO_DIR,
+) -> dict:
+    """Persist raw DOM, editable tree, and screenshot for a container."""
+    repo_dir = Path(repo_dir)
+    artifacts_dir = _artifact_dir(container_ref, repo_dir)
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_file = artifacts_dir / "raw_dom.json"
+    raw_file.write_text(_json_dump(raw_dom), encoding="utf-8")
+    raw_rel = raw_file.relative_to(repo_dir).as_posix()
+
+    src = Path(screenshot_path)
+    screenshots_dir = repo_dir / "screenshots"
+    screenshots_dir.mkdir(parents=True, exist_ok=True)
+    screenshot_dest = screenshots_dir / f"{repo_identity.normalize_ref(container_ref)}{src.suffix or '.png'}"
+    if src.exists() and src.resolve() != screenshot_dest.resolve():
+        shutil.copy2(src, screenshot_dest)
+    screenshot_rel = screenshot_dest.relative_to(repo_dir).as_posix()
+
+    return save_container_tree(
+        container_ref,
+        tree_elements,
+        title=title,
+        surface=surface,
+        screenshot=screenshot_rel,
+        raw_dom_path=raw_rel,
+        source=source,
+        status=status,
+        metadata=metadata,
+        repo_dir=repo_dir,
+    )
+
+
+def upsert_container_element(
+    container_ref: str,
+    element_ref: str,
+    updates: dict,
+    repo_dir: Path = config.REPO_DIR,
+) -> dict:
+    """Update or insert a single element inside a container tree."""
+    container = load_container(container_ref, repo_dir)
+    if container is None:
+        raise KeyError(f"Unknown container_ref {container_ref!r}")
+    tree = list(container.get("tree") or [])
+    found = False
+    for idx, element in enumerate(tree):
+        if str(element.get("element_ref") or "") == element_ref:
+            merged = {**element, **updates, "element_ref": element_ref}
+            tree[idx] = merged
+            found = True
+            break
+    if not found:
+        tree.append({"element_ref": element_ref, **updates})
+    return save_container_tree(
+        container_ref,
+        tree,
+        title=container.get("title") or container_ref,
+        surface=container.get("surface") or "java_forms",
+        fingerprint=container.get("fingerprint"),
+        screenshot=container.get("screenshot"),
+        raw_dom_path=container.get("raw_dom_path"),
+        source=container.get("source") or "manual",
+        status=container.get("status") or "active",
+        metadata=container.get("metadata") or {},
+        repo_dir=repo_dir,
+    )
+
+
+def delete_container_element(
+    container_ref: str,
+    element_ref: str,
+    repo_dir: Path = config.REPO_DIR,
+) -> dict:
+    """Delete one element from a container tree."""
+    container = load_container(container_ref, repo_dir)
+    if container is None:
+        raise KeyError(f"Unknown container_ref {container_ref!r}")
+    tree = [
+        element
+        for element in (container.get("tree") or [])
+        if str(element.get("element_ref") or "") != element_ref
+    ]
+    return save_container_tree(
+        container_ref,
+        tree,
+        title=container.get("title") or container_ref,
+        surface=container.get("surface") or "java_forms",
+        fingerprint=container.get("fingerprint"),
+        screenshot=container.get("screenshot"),
+        raw_dom_path=container.get("raw_dom_path"),
+        source=container.get("source") or "manual",
+        status=container.get("status") or "active",
+        metadata=container.get("metadata") or {},
+        repo_dir=repo_dir,
+    )
 
 
 def find_element_by_ref(

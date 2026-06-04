@@ -128,6 +128,11 @@ QCS_CENTER_PORT    = int(os.environ.get("QCS_CENTER_PORT", "8080"))
 QCS_CENTER_API_KEY = os.environ.get("QCS_CENTER_API_KEY", "")
 QCS_CENTER_DB_PATH = os.environ.get("QCS_CENTER_DB_PATH", str(ROOT_DIR / "center.db"))
 
+# ── QCS Studio (container/element repository UI) ───────────────────────────
+QCS_STUDIO_HOST    = os.environ.get("QCS_STUDIO_HOST", "127.0.0.1")
+QCS_STUDIO_PORT    = int(os.environ.get("QCS_STUDIO_PORT", "8090"))
+QCS_STUDIO_API_KEY = os.environ.get("QCS_STUDIO_API_KEY", "")
+
 # ── Distributed agent (run on each Oracle EBS Windows machine) ─────────────
 QCS_CENTER_URL  = os.environ.get("QCS_CENTER_URL",  "http://localhost:8080")
 QCS_AGENT_TOKEN = os.environ.get("QCS_AGENT_TOKEN", "")   # same as QCS_CENTER_API_KEY
