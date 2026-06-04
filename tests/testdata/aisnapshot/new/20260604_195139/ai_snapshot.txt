@@ -1,0 +1,20 @@
+Form: Oracle Forms
+  [e438] Open Folder... (Button, enabled)
+  [e460] Open (Button, enabled)
+  [e461] Actions (Button, enabled)
+  [e503] Open (Button, enabled)
+  [e504] Actions (Button, enabled)
+  Tabs: [*Summary*] | Lines:
+  [e484] Orders (Tab, enabled, selected)
+    | # | On Hold (CB) RO |
+    |---|---|
+    | **1** | On Hold |
+    | 2 | On Hold |
+    | 3 | On Hold |
+    | 4 | On Hold |
+    | 5 | On Hold |
+    | 6 | On Hold |
+    | 7 | On Hold |
+    | 8 | On Hold |
+    | 9 | On Hold |
+    | 10 | On Hold |
