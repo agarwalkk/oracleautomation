@@ -21,12 +21,15 @@ import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 import config
 from qcs_repo import identity as repo_identity
+
+if TYPE_CHECKING:
+    from qcs_repo.schema import RepoEntry
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -295,7 +298,7 @@ def _normalize_tree_elements(tree_elements: list[dict]) -> list[dict]:
             "locator_candidates": candidates,
             "source": str(node.get("source") or "recording"),
             "status": str(node.get("status") or "active"),
-            "confidence": float(node.get("confidence") if node.get("confidence") is not None else 1.0),
+            "confidence": float(node.get("confidence") or 1.0),
             "created_at": str(node.get("created_at") or now),
             "updated_at": now,
         }
@@ -669,7 +672,7 @@ def save_form_capture(
     }
     if screenshot_rel:
         capture_meta["screenshot"] = screenshot_rel
-    form_updates = {"capture": capture_meta}
+    form_updates: dict = {"capture": capture_meta}
     if screenshot_rel:
         form_updates["screenshot"] = screenshot_rel
     update_form(form_id, form_updates, repo_dir)
@@ -886,7 +889,7 @@ def save_container_tree(
                     int(element.get("height", bounds.get("height", 0)) or 0),
                     element.get("source") or source,
                     element.get("status") or status,
-                    float(element.get("confidence") if element.get("confidence") is not None else 1.0),
+                    float(element.get("confidence") or 1.0),
                     _json_dump(element.get("descriptor") or {}),
                     _json_dump(element.get("locator_candidates") or []),
                     _json_dump(element.get("metadata") or {}),

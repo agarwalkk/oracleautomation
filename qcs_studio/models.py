@@ -18,6 +18,11 @@ class ScanSaveRequest(BaseModel):
     display_tree: list[dict] | None = None
 
 
+class RecalculateTreeRequest(BaseModel):
+    """Request to rebuild the AI snapshot tree from a previously captured raw DOM."""
+    scan_id: str
+
+
 class ContainerTreeUpdateRequest(BaseModel):
     title: str | None = None
     metadata: dict | None = None

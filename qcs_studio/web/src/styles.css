@@ -101,7 +101,18 @@ body {
   flex-direction: column;
 }
 
-.container-panel,
+.container-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
 .canvas-panel,
 .tree-panel {
   background: var(--panel);
@@ -160,7 +171,7 @@ body {
 
 .container-list,
 .tree-list {
-  overflow: auto;
+  overflow: visible;
   display: grid;
   gap: 6px;
 }
@@ -216,6 +227,102 @@ body {
   color: #fff;
 }
 
+.draft-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.draft-action-btn {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.draft-action-btn:hover {
+  background: var(--accent-1);
+  color: #fff;
+}
+
+.draft-delete-btn:hover {
+  background: #dc3545;
+}
+
+.recalc-btn {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--accent-2);
+  background: transparent;
+  color: var(--accent-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.recalc-btn:hover:not(:disabled) {
+  background: var(--accent-2);
+  color: #fff;
+}
+
+.recalc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-btn {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.toggle-btn:hover {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+
+.toggle-btn.active {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: #fff;
+}
+
+/* "All" mode: tree elements that are already in the curated set */
+.box.all-in-tree {
+  border-color: var(--accent-2);
+  opacity: 0.5;
+  pointer-events: auto;
+}
+
+.box.all-in-tree:hover {
+  opacity: 0.8;
+  border-color: var(--accent-1);
+}
+
+/* Dimmed tree structure visible underneath in "All" mode */
+.tree-dimmed {
+  pointer-events: none;
+  z-index: 0 !important;
+}
+
+.box.tree-ghost {
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+}
+
 .canvas-title {
   display: flex;
   align-items: center;
@@ -261,10 +368,11 @@ body {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .tree-context {
@@ -578,6 +686,72 @@ body {
 
 .tree-item.hovered {
   background: rgba(15, 118, 110, 0.14);
+}
+
+/* Tree root node: container title at the top of the tree */
+.tree-item.tree-root {
+  font-weight: 700;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+  background: rgba(15, 118, 110, 0.04);
+}
+
+.tree-item.tree-root:hover {
+  background: rgba(15, 118, 110, 0.08);
+}
+
+/* Tooltip on tree row hover — rendered with position:fixed outside
+   any scroll container so it's never clipped. Position is driven by
+   mouse event clientX/clientY. */
+.tree-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background: var(--ink);
+  color: var(--panel);
+  border-radius: 10px;
+  padding: 10px 14px;
+  min-width: 280px;
+  max-width: 480px;
+  max-height: 60vh;
+  overflow-y: auto;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.30);
+  font-size: 12px;
+  font-family: "IBM Plex Mono", monospace;
+  line-height: 1.6;
+  pointer-events: none;
+}
+
+.tree-tooltip .tt-row {
+  margin-bottom: 3px;
+  word-break: break-all;
+}
+
+.tree-tooltip .tt-row:last-child {
+  margin-bottom: 0;
+}
+
+.tree-tooltip .tt-row strong {
+  font-size: 14px;
+  color: var(--accent-2);
+}
+
+.tree-tooltip code {
+  background: rgba(255,255,255,0.12);
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.tree-tooltip .tt-pre {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  font-size: 11px;
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .tree-list {

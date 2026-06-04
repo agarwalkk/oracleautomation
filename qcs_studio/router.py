@@ -8,6 +8,7 @@ from qcs_studio.models import (
     ContainerTreeUpdateRequest,
     DisplayTreeUpdateRequest,
     ElementUpdateRequest,
+    RecalculateTreeRequest,
     ScanRequest,
     ScanSaveRequest,
 )
@@ -25,6 +26,10 @@ def list_windows() -> dict:
 
 @router.post("/scan")
 def run_scan(request: ScanRequest) -> dict:
+    """Phase 1: capture raw DOM + screenshot from a live Oracle window.
+
+    Returns the scan immediately with empty tree. The client should then call
+    POST /scan/recalculate to compute the AI snapshot tree (Phase 2)."""
     try:
         bundle = _service.run_scan(pid=request.pid, contains=request.contains)
     except Exception as exc:  # pragma: no cover - pass-through for UI diagnostics
@@ -35,6 +40,34 @@ def run_scan(request: ScanRequest) -> dict:
         "title": bundle.title,
         "container_ref": bundle.container_ref,
         "raw_dom": bundle.raw_dom,
+        "snapshot_text": bundle.snapshot_text,
+        "tree": bundle.tree,
+        "full_elements": bundle.full_elements,
+        "screenshot_origin": bundle.screenshot_origin,
+        "capture_mode": bundle.capture_mode,
+        "screenshot_path": str(bundle.screenshot_path),
+        "created_at": bundle.created_at,
+    }
+
+
+@router.post("/scan/recalculate")
+def recalculate_tree(request: RecalculateTreeRequest) -> dict:
+    """Phase 2: rebuild AI snapshot + tree + full_elements from cached raw DOM.
+
+    Does NOT require a live Oracle window — works from the persisted raw DOM
+    captured in Phase 1. Can be called repeatedly (e.g. after prompt tuning).
+    """
+    try:
+        bundle = _service.compute_tree(request.scan_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "scan_id": bundle.scan_id,
+        "title": bundle.title,
+        "container_ref": bundle.container_ref,
         "snapshot_text": bundle.snapshot_text,
         "tree": bundle.tree,
         "full_elements": bundle.full_elements,
@@ -74,7 +107,58 @@ def get_scan_screenshot(scan_id: str):
 
 @router.get("/containers")
 def list_containers() -> dict:
-    return {"items": repo_store.list_containers()}
+    # Include both persisted containers and in-memory draft scans. Drafts
+    # appear at the top so the user can see their unsaved work immediately.
+    persisted = [item for item in repo_store.list_containers() if str(item.get("status") or "") != "draft"]
+    # Merge drafts as lightweight entries.
+    draft_entries = []
+    for d in _service.list_drafts():
+        draft_entries.append({
+            "container_ref": d["scan_id"],  # draft keyed by scan_id
+            "title": d["title"],
+            "screenshot": None,
+            "status": "draft",
+            "scan_id": d["scan_id"],
+            "has_tree": d["has_tree"],
+            "created_at": d["created_at"],
+        })
+    # Drafts first, then persisted
+    items = draft_entries + persisted
+    return {"items": items}
+
+
+@router.get("/drafts")
+def list_drafts() -> dict:
+    """List all in-memory draft scans (survive page refresh, not persisted to repo)."""
+    return {"items": _service.list_drafts()}
+
+
+@router.get("/drafts/{scan_id}")
+def get_draft(scan_id: str) -> dict:
+    """Load a cached draft scan bundle (includes screenshot path, tree, etc.)."""
+    bundle = _service.load_draft(scan_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail=f"Unknown draft {scan_id!r}")
+    return {
+        "scan_id": bundle.scan_id,
+        "title": bundle.title,
+        "container_ref": bundle.container_ref,
+        "snapshot_text": bundle.snapshot_text,
+        "tree": bundle.tree,
+        "full_elements": bundle.full_elements,
+        "screenshot_origin": bundle.screenshot_origin,
+        "capture_mode": bundle.capture_mode,
+        "screenshot_path": str(bundle.screenshot_path),
+        "created_at": bundle.created_at,
+    }
+
+
+@router.delete("/drafts/{scan_id}")
+def delete_draft(scan_id: str) -> dict:
+    """Delete an in-memory draft scan and its temporary screenshot."""
+    if not _service.delete_draft(scan_id):
+        raise HTTPException(status_code=404, detail=f"Unknown draft {scan_id!r}")
+    return {"ok": True}
 
 
 @router.get("/containers/{container_ref}")

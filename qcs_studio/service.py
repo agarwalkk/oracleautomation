@@ -10,6 +10,7 @@ from uuid import uuid4
 import config
 from qcs_java_agent.driver import JavaAgentDriver
 from qcs_java_agent.process import list_java_processes
+from qcs_java_agent.settle import settle_forms
 from qcs_java_agent.snapshot import (
     _oracle_forms_active_frame,
     active_form_title,
@@ -128,6 +129,43 @@ def _bring_process_window_to_front(pid: int) -> int:
     except Exception:
         pass
     return int(hwnd)
+
+
+def _window_rect(hwnd: int) -> dict | None:
+    """Return the **client area** bounds in screen coordinates.
+
+    WHY: GetWindowRect returns the outer window frame (title bar + borders
+    + invisible shadow padding on Win10/11). Java element coordinates are
+    relative to the client area (inside the window chrome). Using the outer
+    rect for crop/origin causes both vertical offset (title bar height ≈30px)
+    and horizontal offset (left border + shadow padding ≈8-10px).
+
+    We use GetClientRect for dimensions and ClientToScreen to convert the
+    (0,0) origin to screen space, giving the true pixel-aligned client origin.
+    """
+    if not hasattr(ctypes, "windll") or not hwnd:
+        return None
+    try:
+        user32 = ctypes.windll.user32
+        # Get client rect (width/height of content area)
+        client_rect = (ctypes.c_long * 4)()
+        ok = user32.GetClientRect(ctypes.c_void_p(hwnd), ctypes.byref(client_rect))
+        if not ok:
+            return None
+        width = int(client_rect[2])
+        height = int(client_rect[3])
+        if width <= 0 or height <= 0:
+            return None
+
+        # Convert client (0,0) to screen coordinates to get the true origin
+        pt = (ctypes.c_long * 2)(0, 0)
+        ok = user32.ClientToScreen(ctypes.c_void_p(hwnd), ctypes.byref(pt))
+        if not ok:
+            return None
+        x, y = int(pt[0]), int(pt[1])
+        return {"x": x, "y": y, "width": width, "height": height}
+    except Exception:
+        return None
 
 
 def _java_window_bounds(raw_dom: dict, frame: dict | None) -> dict | None:
@@ -297,6 +335,12 @@ def _full_overlay_elements(
                 "value": str(java.get("value") or el.get("text") or ""),
                 "enabled": "enabled" in states,
                 "bounds": {"x": x, "y": y, "width": w, "height": h},
+                # WHY: Java locator data (descriptor + locator_params) is needed by
+                # the Studio UI to display tooltips showing how an element is
+                # addressed by the Java agent, enabling users to understand and
+                # debug locator strategies.
+                "descriptor": str(java.get("descriptor") or ""),
+                "locator_params": java.get("locator_params") or {},
             }
         )
         seen.add(ref)
@@ -320,8 +364,13 @@ class ScanBundle:
 class StudioService:
     """Application service for Studio scan and container operations."""
 
+    # Drafts survive StudioService re-creation within the same process
+    # (e.g. on uvicorn reload). Each draft holds raw_dom + screenshot so
+    # the tree can be recalculated later without a live Oracle window.
+    _drafts: dict[str, ScanBundle] = {}
+
     def __init__(self) -> None:
-        self._scan_cache: dict[str, ScanBundle] = {}
+        self._scan_cache: dict[str, ScanBundle] = StudioService._drafts
 
     def list_windows(self) -> list[dict]:
         windows: list[dict] = []
@@ -338,19 +387,36 @@ class StudioService:
         return windows
 
     def run_scan(self, pid: int | None = None, contains: str | None = None) -> ScanBundle:
+        """Phase 1: capture raw DOM + screenshot from a live Oracle window.
+
+        Returns a ScanBundle with raw_dom and screenshot populated but tree/
+        full_elements empty. Call ``compute_tree(scan_id)`` afterwards to
+        build the tree from the cached raw DOM (can be done later, even after
+        the window is closed).
+        """
         driver = JavaAgentDriver.attach(pid=pid, contains=contains)
         previous_state = _foreground_window()
-        _bring_process_window_to_front(driver.pid)
+        hwnd = _bring_process_window_to_front(driver.pid)
+
+        # After maximize/foreground handoff, Oracle Forms can spend a short
+        # period re-laying out. Settling first avoids scanning bounds from one
+        # frame state and capturing a screenshot from another (vertical offset).
+        try:
+            settle_forms(driver, timeout_s=4.0, poll_interval_s=0.15, stable_polls=2, log_prefix="[StudioScan]")
+        except Exception:
+            # Best-effort only: scan should proceed even if settle fails.
+            pass
+
         raw_dom = driver.scan()
         scoped = active_window_scan(raw_dom)
-        elements = java_nodes_to_repo_elements(scoped)
-        enriched = repo_snapshot.enrich_java_elements(elements)
 
         # Resolve the active frame and the top-level Java window. The window's
         # screen origin becomes the coordinate origin so element overlays align
         # to the cropped Java-window screenshot.
         frame = _oracle_forms_active_frame(raw_dom)
-        window_bounds = _java_window_bounds(raw_dom, frame)
+        # Prefer OS window rect (pixel-truth for screenshot crop/origin). Fallback
+        # to Java DOM-derived bounds only if Win32 rect is unavailable.
+        window_bounds = _window_rect(hwnd) or _java_window_bounds(raw_dom, frame)
         origin_x = int((window_bounds or {}).get("x", 0) or 0)
         origin_y = int((window_bounds or {}).get("y", 0) or 0)
 
@@ -361,6 +427,13 @@ class StudioService:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         temp_screenshot = Path(tempfile.gettempdir()) / f"qcs_studio_scan_{ts}_{uuid4().hex[:8]}.png"
         try:
+            # One more short settle right before capture: guards against late
+            # repaint/resize churn after scan-time processing.
+            try:
+                settle_forms(driver, timeout_s=1.5, poll_interval_s=0.1, stable_polls=2, log_prefix="[StudioShot]")
+            except Exception:
+                pass
+
             # Always capture fullscreen, then crop to the Java window region.
             screenshot_result = driver.screenshot(temp_screenshot)
         finally:
@@ -370,50 +443,71 @@ class StudioService:
         if window_bounds and _crop_to_bounds(temp_screenshot, window_bounds):
             capture_mode = "java-window"
 
-        payload = build_action_payload(scoped, origin_x=origin_x, origin_y=origin_y)
-
-        # Full hoverable element overlay: every scanned element (origin-adjusted)
-        # so the UI can show details on hover and allow dragging non-tree
-        # elements into the curated tree. Use the raw flat element list (every
-        # DOM node), not the grouped/enriched list, so nothing is hidden.
-        full_elements = _full_overlay_elements(
-            elements, origin_x=origin_x, origin_y=origin_y
-        )
-
         scan_id = uuid4().hex
+
+        # Compute fingerprint from the DOM elements (lightweight, no AI payload).
+        elements = java_nodes_to_repo_elements(scoped)
+        enriched = repo_snapshot.enrich_java_elements(elements)
+        title_for_fp = _frame_form_title(frame) or active_form_title(scoped)
         fingerprint = repo_fingerprint.fingerprint_java_form(
-            title,
+            title_for_fp,
             [{"role": str(el.get("role") or ""), "name": str(el.get("name") or "")} for el in enriched],
         )
-        container_ref = repo_fingerprint.suggest_form_id(title, surface="java")
+        container_ref = repo_fingerprint.suggest_form_id(title_for_fp, surface="java")
         container_ref = f"{repo_identity.normalize_ref(container_ref)}_{fingerprint[-6:]}"
 
-
+        # Build bundle with Phase 1 data only — tree is empty until computed.
         bundle = ScanBundle(
             scan_id=scan_id,
             title=title,
             container_ref=container_ref,
             raw_dom=raw_dom,
-            snapshot_text=str(payload.get("text") or ""),
-            tree=list(payload.get("tree") or []),
+            snapshot_text="",  # populated by compute_tree
+            tree=[],           # populated by compute_tree
             raw_elements=enriched,
-            full_elements=full_elements,
+            full_elements=[],  # populated by compute_tree
             screenshot_path=temp_screenshot,
             screenshot_origin={"x": origin_x, "y": origin_y},
             capture_mode=capture_mode,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
+        StudioService._drafts[scan_id] = bundle
         self._scan_cache[scan_id] = bundle
 
-        # Persist the scan immediately as a DRAFT container so it survives a page
-        # reload and shows up in the navigator marked "New" until the user
-        # explicitly saves it. The hierarchical display tree is stored in
-        # metadata so a reloaded draft renders the same structure as the live
-        # scan. Best-effort: a persistence failure must not break scanning.
-        try:
-            self._persist_container(bundle, status="draft", saved_from="scan_draft")
-        except Exception:
-            pass
+        return bundle
+
+    def compute_tree(self, scan_id: str) -> ScanBundle:
+        """Phase 2: compute AI snapshot + tree + full_elements from cached raw DOM.
+
+        WHY: Separated from run_scan so tree calculation can be repeated
+        later (e.g. after AI prompt tuning) without a live Oracle window.
+        The raw DOM and screenshot origin are already captured in Phase 1.
+        """
+        bundle = self._scan_cache.get(scan_id)
+        if bundle is None:
+            raise KeyError(f"Unknown scan_id {scan_id!r}")
+
+        raw_dom = bundle.raw_dom
+        origin_x = bundle.screenshot_origin.get("x", 0) or 0
+        origin_y = bundle.screenshot_origin.get("y", 0) or 0
+
+        scoped = active_window_scan(raw_dom)
+        enriched = repo_snapshot.enrich_java_elements(java_nodes_to_repo_elements(scoped))
+
+        payload = build_action_payload(scoped, origin_x=origin_x, origin_y=origin_y)
+
+        elements = java_nodes_to_repo_elements(scoped)
+        full_elements = _full_overlay_elements(elements, origin_x=origin_x, origin_y=origin_y)
+
+        # Update the bundle in-place with tree data.
+        bundle.snapshot_text = str(payload.get("text") or "")
+        bundle.tree = list(payload.get("tree") or [])
+        bundle.raw_elements = enriched
+        bundle.full_elements = full_elements
+
+        # Persist the updated bundle back into the shared draft cache.
+        StudioService._drafts[scan_id] = bundle
+        self._scan_cache[scan_id] = bundle
 
         return bundle
 
@@ -468,11 +562,7 @@ class StudioService:
         if bundle is None:
             raise KeyError(f"Unknown scan_id {scan_id!r}")
 
-        # Saving promotes the draft to an active container, applying any
-        # user-edited name. The display tree + snapshot text are carried in
-        # metadata via ``_persist_container``. A user-edited tree (e.g. after
-        # dragging elements in) overrides the auto-built scan tree.
-        return self._persist_container(
+        saved = self._persist_container(
             bundle,
             status="active",
             container_ref=container_ref,
@@ -481,8 +571,45 @@ class StudioService:
             extra_metadata=dict(metadata or {}),
             display_tree=display_tree,
         )
+        # Once saved, remove the draft so it no longer appears as a draft.
+        # The container is now in the persisted repo.
+        self.delete_draft(scan_id)
+        return saved
 
     def get_cached_scan(self, scan_id: str) -> ScanBundle | None:
+        return self._scan_cache.get(scan_id)
+
+    def list_drafts(self) -> list[dict]:
+        """Return all in-memory draft scans as lightweight summaries."""
+        out: list[dict] = []
+        for scan_id, bundle in StudioService._drafts.items():
+            out.append({
+                "scan_id": scan_id,
+                "title": bundle.title,
+                "container_ref": bundle.container_ref,
+                "has_tree": bool(bundle.tree),
+                "capture_mode": bundle.capture_mode,
+                "created_at": bundle.created_at,
+            })
+        out.sort(key=lambda d: d["created_at"] or "", reverse=True)
+        return out
+
+    def delete_draft(self, scan_id: str) -> bool:
+        """Delete an in-memory draft scan. Returns True if it existed."""
+        bundle = StudioService._drafts.pop(scan_id, None)
+        self._scan_cache.pop(scan_id, None)
+        if bundle is not None:
+            # Clean up the temp screenshot file.
+            try:
+                if bundle.screenshot_path.exists():
+                    bundle.screenshot_path.unlink()
+            except Exception:
+                pass
+            return True
+        return False
+
+    def load_draft(self, scan_id: str) -> ScanBundle | None:
+        """Return a cached draft scan bundle, or None if not found."""
         return self._scan_cache.get(scan_id)
 
     def full_elements_for_container(self, container: dict) -> list[dict]:
