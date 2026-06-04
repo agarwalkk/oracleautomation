@@ -295,14 +295,15 @@ def _element_actions(element: dict) -> list[str]:
 
 
 def _full_overlay_elements(
-    elements: list[dict], *, origin_x: int, origin_y: int
+    elements: list[dict]
 ) -> list[dict]:
     """Build the full hoverable element overlay from all scanned elements.
 
     WHY: Requirement is that EVERY element from the full scan is hoverable and
     inspectable (id, name, type, possible actions) and can be dragged into the
-    curated tree. Bounds are origin-adjusted to align with the cropped
-    Java-window screenshot. Zero-size elements are skipped. We intentionally do
+    curated tree. Since we no longer crop screenshots, bounds are raw
+    (unadjusted) Java-window client coordinates that align directly with the
+    fullscreen screenshot. Zero-size elements are skipped. We intentionally do
     NOT require a "showing"/"visible" state here: Oracle Forms omits those flags
     on many real, on-screen widgets, and filtering on them would hide most of
     the elements the user expects to hover over.
@@ -318,11 +319,10 @@ def _full_overlay_elements(
         h = int(bounds.get("height", el.get("height", 0)) or 0)
         if w <= 0 or h <= 0:
             continue
-        x = int(bounds.get("x", el.get("x", 0)) or 0) - int(origin_x)
-        y = int(bounds.get("y", el.get("y", 0)) or 0) - int(origin_y)
-        # Skip elements fully outside the captured window region.
-        if x + w <= 0 or y + h <= 0:
-            continue
+        # WHY: Raw coordinates — no origin subtraction because screenshots
+        # are no longer cropped. Fullscreen capture aligns with element bounds.
+        x = int(bounds.get("x", el.get("x", 0)) or 0)
+        y = int(bounds.get("y", el.get("y", 0)) or 0)
         java = el.get("java") or {}
         states = el.get("states") or []
         out.append(
@@ -414,11 +414,9 @@ class StudioService:
         # screen origin becomes the coordinate origin so element overlays align
         # to the cropped Java-window screenshot.
         frame = _oracle_forms_active_frame(raw_dom)
-        # Prefer OS window rect (pixel-truth for screenshot crop/origin). Fallback
-        # to Java DOM-derived bounds only if Win32 rect is unavailable.
+        # Prefer OS window rect for hwnd management. Fallback to Java DOM-derived
+        # bounds only if Win32 rect is unavailable.
         window_bounds = _window_rect(hwnd) or _java_window_bounds(raw_dom, frame)
-        origin_x = int((window_bounds or {}).get("x", 0) or 0)
-        origin_y = int((window_bounds or {}).get("y", 0) or 0)
 
         # Container name defaults to the form name (frame caption), falling back
         # to the generic active-form title only when the frame has no caption.
@@ -440,8 +438,8 @@ class StudioService:
             _restore_foreground(previous_state)
 
         capture_mode = str(screenshot_result.get("captureMode") or "fullscreen")
-        if window_bounds and _crop_to_bounds(temp_screenshot, window_bounds):
-            capture_mode = "java-window"
+        # WHY: No longer cropping screenshots — we keep the fullscreen capture
+        # so element bounds align directly with the image without origin adjustment.
 
         scan_id = uuid4().hex
 
@@ -467,7 +465,7 @@ class StudioService:
             raw_elements=enriched,
             full_elements=[],  # populated by compute_tree
             screenshot_path=temp_screenshot,
-            screenshot_origin={"x": origin_x, "y": origin_y},
+            screenshot_origin={"x": 0, "y": 0},
             capture_mode=capture_mode,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
@@ -488,16 +486,14 @@ class StudioService:
             raise KeyError(f"Unknown scan_id {scan_id!r}")
 
         raw_dom = bundle.raw_dom
-        origin_x = bundle.screenshot_origin.get("x", 0) or 0
-        origin_y = bundle.screenshot_origin.get("y", 0) or 0
 
         scoped = active_window_scan(raw_dom)
         enriched = repo_snapshot.enrich_java_elements(java_nodes_to_repo_elements(scoped))
 
-        payload = build_action_payload(scoped, origin_x=origin_x, origin_y=origin_y)
+        payload = build_action_payload(scoped, origin_x=0, origin_y=0)
 
         elements = java_nodes_to_repo_elements(scoped)
-        full_elements = _full_overlay_elements(elements, origin_x=origin_x, origin_y=origin_y)
+        full_elements = _full_overlay_elements(elements)
 
         # Update the bundle in-place with tree data.
         bundle.snapshot_text = str(payload.get("text") or "")
@@ -617,20 +613,16 @@ class StudioService:
 
         WHY: Reloaded containers must support the same hover-inspect and
         drag-to-tree workflow as a live scan. We rebuild the overlay from the
-        persisted raw DOM, using the stored screenshot origin so bounds align
-        with the saved screenshot.
+        persisted raw DOM using raw (unadjusted) coordinates that align
+        directly with the fullscreen screenshot.
         """
         raw_dom = container.get("raw_dom")
         if not isinstance(raw_dom, dict) or not raw_dom:
             return []
-        metadata = container.get("metadata") or {}
-        origin = metadata.get("screenshot_origin") or {}
-        origin_x = int(origin.get("x", 0) or 0)
-        origin_y = int(origin.get("y", 0) or 0)
         try:
             scoped = active_window_scan(raw_dom)
             elements = java_nodes_to_repo_elements(scoped)
         except Exception:
             return []
-        return _full_overlay_elements(elements, origin_x=origin_x, origin_y=origin_y)
+        return _full_overlay_elements(elements)
 

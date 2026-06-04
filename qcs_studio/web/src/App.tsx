@@ -58,7 +58,6 @@ type ScanResult = {
   title: string;
   container_ref: string;
   snapshot_text?: string;
-  screenshot_origin?: { x: number; y: number };
   capture_mode?: string;
   screenshot_path: string;
   tree: TreeNode[];
@@ -250,21 +249,19 @@ export function App() {
     }
   }
 
+  // WHY: Screenshots are no longer cropped, so element coordinates already
+  // align with the full screenshot. No origin adjustment needed.
   const baseTree = useMemo<TreeNode[]>(() => {
-    if (scan?.tree) {
-      return normalizeTree(scan.tree, scan.screenshot_origin ?? { x: 0, y: 0 });
+    if (scan?.tree?.length) {
+      return normalizeTree(scan.tree);
     }
     if (detail) {
-      // Prefer the persisted hierarchical display tree (mirrors ai_snapshot.txt)
-      // so a reloaded container shows the same structure as a live scan.
       const displayTree = detail.metadata?.display_tree as TreeNode[] | undefined;
       if (Array.isArray(displayTree) && displayTree.length > 0) {
-        return normalizeTree(displayTree, { x: 0, y: 0 });
+        return normalizeTree(displayTree);
       }
-      if (detail.tree) {
-        const rawOrigin = (detail.metadata?.screenshot_origin as { x?: number; y?: number } | undefined) ??
-          inferOrigin(detail.tree as TreeElement[]);
-        return normalizeTree(detail.tree, { x: Number(rawOrigin?.x || 0), y: Number(rawOrigin?.y || 0) });
+      if (detail.tree?.length) {
+        return normalizeTree(detail.tree);
       }
     }
     return [];
@@ -486,6 +483,10 @@ export function App() {
             <div className="tree-tooltip" style={{ left: treeTooltip.x + 14, top: treeTooltip.y + 8 }}>
               <div className="tt-row"><strong>{treeTooltip.fe.name || treeTooltip.fe.element_ref}</strong></div>
               <div className="tt-row">Ref: <code>{treeTooltip.fe.element_ref}</code></div>
+              <div className="tt-row">
+                Bounds: x={treeTooltip.fe.bounds.x}, y={treeTooltip.fe.bounds.y},
+                w={treeTooltip.fe.bounds.width}, h={treeTooltip.fe.bounds.height}
+              </div>
               {treeTooltip.fe.role ? <div className="tt-row">Role: {treeTooltip.fe.role}</div> : null}
               {treeTooltip.fe.type ? <div className="tt-row">Type: {treeTooltip.fe.type}</div> : null}
               {treeTooltip.fe.value ? <div className="tt-row">Value: <code>{treeTooltip.fe.value}</code></div> : null}
@@ -650,7 +651,7 @@ function ImageCanvas(props: {
     setTip({ fe, x: e.clientX - rect.left + 12, y: e.clientY - rect.top + 12 });
   };
 
-  // All elements from raw DOM (fullByRef values), origin-adjusted.
+  // All elements from raw DOM (fullByRef values).
   // Sort by area DESCENDING so the smallest elements render last (on top)
   // and catch mouse/drag events before larger parent containers at the
   // same screen location.
@@ -906,7 +907,6 @@ function renderTreeRows(
         </button>
         <span
           className={meta.enabled ? "tree-icon" : "tree-icon disabled"}
-          title={`${meta.typeLabel}${meta.enabled ? "" : " · disabled"}`}
         >
           {meta.icon}
         </span>
@@ -934,7 +934,9 @@ function explorerModeExpandedState(nodes: TreeNode[]): Record<string, boolean> {
   return state;
 }
 
-function normalizeTree(input: TreeElement[] | TreeNode[], origin: { x: number; y: number }): TreeNode[] {
+// WHY: No origin parameter — screenshots are no longer cropped so coordinates
+// are raw (unadjusted) and align directly with the full screenshot.
+function normalizeTree(input: TreeElement[] | TreeNode[]): TreeNode[] {
   const items = input || [];
   if (!items.length) {
     return [];
@@ -944,7 +946,7 @@ function normalizeTree(input: TreeElement[] | TreeNode[], origin: { x: number; y
   if (Array.isArray(first.children)) {
     return (items as TreeNode[]).map((node) => ({
       ...node,
-      children: normalizeTree(node.children || [], { x: 0, y: 0 }),
+      children: normalizeTree(node.children || []),
     }));
   }
 
@@ -969,8 +971,8 @@ function normalizeTree(input: TreeElement[] | TreeNode[], origin: { x: number; y
       role: String(raw.role || ""),
       included: raw.included !== false,
       bounds: {
-        x: Number(b.x || 0) - Number(origin.x || 0),
-        y: Number(b.y || 0) - Number(origin.y || 0),
+        x: Number(b.x || 0),
+        y: Number(b.y || 0),
         width: Number(b.width || 0),
         height: Number(b.height || 0),
       },
@@ -1088,27 +1090,4 @@ function insertChild(nodes: TreeNode[], targetRef: string, child: TreeNode): Tre
   return nodes;
 }
 
-function inferOrigin(items: TreeElement[]): { x: number; y: number } {
-  if (!Array.isArray(items) || items.length === 0) {
-    return { x: 0, y: 0 };
-  }
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  for (const item of items) {
-    const b = item.bounds || {
-      x: Number(item.x || 0),
-      y: Number(item.y || 0),
-      width: Number(item.width || 0),
-      height: Number(item.height || 0),
-    };
-    if (Number(b.width || 0) <= 0 || Number(b.height || 0) <= 0) {
-      continue;
-    }
-    minX = Math.min(minX, Number(b.x || 0));
-    minY = Math.min(minY, Number(b.y || 0));
-  }
-  if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
-    return { x: 0, y: 0 };
-  }
-  return { x: Math.max(0, minX), y: Math.max(0, minY) };
-}
+
