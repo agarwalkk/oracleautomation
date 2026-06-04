@@ -1,0 +1,20 @@
+Form: EMR Global Find  Orders/Quotes
+  [e207] Open Folder... (Button, enabled)
+  [e197] Tabs: [*Quote/Order Information*] | Line Information | Advanced | Holds Information | Scheduling (disabled)
+    [e33] Order Number , [e36] Order Type (LOV) , [e47] Requisition Number (LOV)
+    [e38] Customer PO (LOV) , [e34] Quote Number , [e52] Invoice Number (LOV)
+    [e65] Rep Order # , [e64] Opportunity No , [e35] Order Category (LOV)
+    [e48] Order Source (LOV) , [e72] Cust Proj Name/No
+    [e54] Agreement (LOV) , [e55] Price List (LOV) , [e66] KOB (LOV) , [e67] Order Tier (LOV)
+    [e80] Intermediate Ship To ID (LOV) , [e79] Consolidation Name (LOV) , [e82] Consol Location (LOV)
+    [e63] Order Admin (LOV) , [e37] Created By (LOV) , [e70] Booked By (LOV)
+    [e62] PO Received (LOV) , [e50] Entered Date (LOV) , [e51] To (LOV) , [e39] Status (LOV)
+    [e46] Salesperson (LOV) , [e77] Booked Date From (LOV) , [e78] To (LOV)
+    [e40] Customer (LOV) , [e68] Tech Contact (LOV)
+    [e42] Invoice To Cust (LOV) , [e69] Ultimate Dest (LOV) , [e73] Shipment Priority (LOV)
+    [e41] Ship To Cust (LOV) , [e76] End Use , [e74] SIC Code (LOV)
+    [e61] End User (LOV) , [e57] Warehouse (LOV)
+    [e81] Mail Invoice To Customer (LOV) , [e71] Ack'd (LOV)
+    [e56] Inland Carrier/Ship Method (LOV) , [e58] On Hold (ComboBox) (read-only) values: ['Yes', 'No']
+  Buttons:
+    [e205] Clear (Button, enabled) , [e206] Find (Button, enabled)

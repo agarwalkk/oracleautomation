@@ -404,8 +404,12 @@ class StudioService:
 
         payload = build_action_payload(scoped)
 
-        elements = java_nodes_to_repo_elements(scoped)
-        full_elements = build_full_overlay_elements(elements)
+        # Full overlay uses the FULL raw DOM (not scoped) so toolbar, menu
+        # bar, status bar, and all non-form-window elements are visible in
+        # the Studio full view mode. The curated tree + AI snapshot remain
+        # scoped to the active form window.
+        all_elements = java_nodes_to_repo_elements(raw_dom)
+        full_elements = build_full_overlay_elements(all_elements)
 
         # Update the bundle in-place with tree data.
         bundle.snapshot_text = str(payload.get("text") or "")
@@ -532,8 +536,9 @@ class StudioService:
         if not isinstance(raw_dom, dict) or not raw_dom:
             return []
         try:
-            scoped = active_window_scan(raw_dom)
-            elements = java_nodes_to_repo_elements(scoped)
+            # Full overlay uses the FULL raw DOM (not scoped) so toolbar
+            # and menu elements outside the active form window are visible.
+            elements = java_nodes_to_repo_elements(raw_dom)
         except Exception:
             return []
         return build_full_overlay_elements(elements)
