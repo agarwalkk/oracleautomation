@@ -67,7 +67,68 @@ public final class ActionExecutor {
      */
     public static String executeClick(AgentCommand cmd) throws Exception {
         Component comp = resolveOrThrow(cmd, "click");
-        Point centre   = screenCentreOrThrow(comp, "click");
+        Point centre   = null;
+
+        String tabIndexStr = cmd.getParam("tab_index");
+        if (tabIndexStr != null && !tabIndexStr.isEmpty()) {
+            final int index = Integer.parseInt(tabIndexStr);
+            
+            // Resolve the actual TabBar component from comp (e.g. if comp is FormsTabPanel)
+            final AtomicReference<Component> targetRef = new AtomicReference<>(comp);
+            invokeOnEDT(() -> {
+                try {
+                    java.lang.reflect.Method getTabBar = comp.getClass().getMethod("getTabBar");
+                    Component tb = (Component) getTabBar.invoke(comp);
+                    if (tb != null) {
+                        targetRef.set(tb);
+                    }
+                } catch (Exception ignored) {}
+            });
+            Component target = targetRef.get();
+
+            final AtomicReference<Rectangle> rectRef = new AtomicReference<>();
+            invokeOnEDT(() -> {
+                rectRef.set(getEwtTabBounds(target, index));
+            });
+            Rectangle rect = rectRef.get();
+            if (rect != null) {
+                final AtomicReference<Point> locRef = new AtomicReference<>();
+                invokeOnEDT(() -> {
+                    if (target.isShowing()) {
+                        locRef.set(target.getLocationOnScreen());
+                    }
+                });
+                Point loc = locRef.get();
+                if (loc != null) {
+                    centre = new Point(loc.x + rect.x + rect.width / 2,
+                                       loc.y + rect.y + rect.height / 2);
+                }
+            } else {
+                // Fallback: divide width of target evenly
+                String countStr = cmd.getParam("tab_count");
+                int count = 1;
+                if (countStr != null && !countStr.isEmpty()) {
+                    count = Integer.parseInt(countStr);
+                }
+                if (count > 0) {
+                    final AtomicReference<Point> locRef = new AtomicReference<>();
+                    final int finalCount = count;
+                    invokeOnEDT(() -> {
+                        if (target.isShowing()) {
+                            Point loc = target.getLocationOnScreen();
+                            int tabW = target.getWidth() / finalCount;
+                            locRef.set(new Point(loc.x + index * tabW + tabW / 2,
+                                                 loc.y + target.getHeight() / 2));
+                        }
+                    });
+                    centre = locRef.get();
+                }
+            }
+        }
+
+        if (centre == null) {
+            centre = screenCentreOrThrow(comp, "click");
+        }
 
         SafeRobot robot = newSafeRobot();
         robot.click(centre.x, centre.y);
@@ -523,5 +584,87 @@ public final class ActionExecutor {
                     + "running action step directly.");
             r.run();
         }
+    }
+
+    private static Rectangle getEwtTabBounds(Component comp, int index) {
+        // 1. Direct method lookup on comp (including non-public declared methods)
+        Rectangle r = queryBoundsMethod(comp, index);
+        if (r != null) {
+            return r;
+        }
+
+        // 2. Lookup via item/page object (e.g. TabBar.getItem(index) -> TabBarItem.getBounds())
+        try {
+            Object item = null;
+            Class<?> clazz = comp.getClass();
+            while (clazz != null && clazz != Object.class) {
+                for (java.lang.reflect.Method m : clazz.getDeclaredMethods()) {
+                    if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == int.class) {
+                        String name = m.getName().toLowerCase();
+                        if (name.equals("getitem") || name.equals("getpage")) {
+                            try {
+                                m.setAccessible(true);
+                                item = m.invoke(comp, index);
+                                if (item != null) {
+                                    break;
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                }
+                if (item != null) break;
+                clazz = clazz.getSuperclass();
+            }
+
+            if (item != null) {
+                // Query bounds on the item object
+                Class<?> itemClass = item.getClass();
+                while (itemClass != null && itemClass != Object.class) {
+                    for (java.lang.reflect.Method m : itemClass.getDeclaredMethods()) {
+                        if (m.getParameterTypes().length == 0) {
+                            if (Rectangle.class.isAssignableFrom(m.getReturnType())) {
+                                String name = m.getName().toLowerCase();
+                                if (name.equals("getbounds") || name.equals("getrect") || name.contains("bounds")) {
+                                    try {
+                                        m.setAccessible(true);
+                                        Rectangle rect = (Rectangle) m.invoke(item);
+                                        if (rect != null) {
+                                            return rect;
+                                        }
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+                        }
+                    }
+                    itemClass = itemClass.getSuperclass();
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return null;
+    }
+
+    private static Rectangle queryBoundsMethod(Component comp, int index) {
+        Class<?> clazz = comp.getClass();
+        while (clazz != null && clazz != Object.class) {
+            for (java.lang.reflect.Method m : clazz.getDeclaredMethods()) {
+                if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == int.class) {
+                    if (Rectangle.class.isAssignableFrom(m.getReturnType())) {
+                        String name = m.getName().toLowerCase();
+                        if (name.contains("tab") || name.contains("item") || name.contains("rect") || name.contains("bounds")) {
+                            try {
+                                m.setAccessible(true);
+                                Rectangle r = (Rectangle) m.invoke(comp, index);
+                                if (r != null) {
+                                    return r;
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                }
+            }
+            clazz = clazz.getSuperclass();
+        }
+        return null;
     }
 }

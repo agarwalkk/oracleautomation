@@ -381,12 +381,17 @@ def build_full_overlay_elements(elements: list[dict]) -> list[dict]:
     that align directly with the fullscreen screenshot. Zero-size elements
     are skipped. We intentionally do NOT require a "showing"/"visible" state
     here: Oracle Forms omits those flags on many real, on-screen widgets.
+
+    Multi-tab merged DOMs may contain the same logical widget under fresh
+    element IDs.  Deduplicate by (name, x, y, width, height) to prevent
+    multiple overlay boxes at the same screen position.
     """
     out: list[dict] = []
-    seen: set[str] = set()
+    seen_ids: set[str] = set()
+    seen_identity: set[tuple] = set()  # (name, x, y, w, h)
     for el in elements:
         ref = str(el.get("elementid") or "")
-        if not ref or ref in seen:
+        if not ref or ref in seen_ids:
             continue
         bounds = el.get("bounds") or {}
         w = int(bounds.get("width", el.get("width", 0)) or 0)
@@ -395,11 +400,15 @@ def build_full_overlay_elements(elements: list[dict]) -> list[dict]:
             continue
         x = int(bounds.get("x", el.get("x", 0)) or 0)
         y = int(bounds.get("y", el.get("y", 0)) or 0)
+        name = str(el.get("name") or el.get("friendly_name") or "")
+        identity = (name, x, y, w, h)
+        if name and identity in seen_identity:
+            continue  # duplicate from another tab state scan
         java = el.get("java") or {}
         states = el.get("states") or []
         out.append({
             "element_ref": ref,
-            "name": str(el.get("name") or el.get("friendly_name") or ""),
+            "name": name,
             "role": str(el.get("role") or ""),
             "type": str(java.get("simpleClassName") or el.get("role") or ""),
             "actions": _element_actions(el),
@@ -409,7 +418,9 @@ def build_full_overlay_elements(elements: list[dict]) -> list[dict]:
             "descriptor": str(java.get("descriptor") or ""),
             "locator_params": java.get("locator_params") or {},
         })
-        seen.add(ref)
+        seen_ids.add(ref)
+        if name:
+            seen_identity.add(identity)
     return out
 
 
@@ -634,7 +645,7 @@ def _populate_bounds(nodes: list[dict]) -> dict | None:
     return None
 
 
-def build_action_tree(scan: dict) -> tuple[list[dict[str, Any]], dict[str, dict]]:
+def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str, Any]], dict[str, dict]]:
     """Return ``(action_tree, {element_id: repo_element})`` for a scan.
 
     The tree is the PRIMARY output. It is a hierarchical list of nodes
@@ -659,7 +670,7 @@ def build_action_tree(scan: dict) -> tuple[list[dict[str, Any]], dict[str, dict]
     # --- Detect tab structure from the scoped DOM tree ---
     scoped_nodes = flatten_nodes(scoped)
     full_nodes = flatten_nodes(scan)  # full scan — needed for TabBar children
-    tab_info = _detect_tabs(scoped_nodes)
+    tab_info = _detect_tabs(scoped_nodes, all_tabs=all_tabs)
     form_title = active_form_title(scoped)
 
     if tab_info:
@@ -798,6 +809,30 @@ def build_action_tree(scan: dict) -> tuple[list[dict[str, Any]], dict[str, dict]
 
         tools_menu_items = _extract_tools_menu(flatten_nodes(scan))
 
+        # ── Deduplicate tab_elements by name+bounds ────────────────────
+        # Multi-tab merged DOMs produce duplicate elements when the same
+        # widget appears in multiple tab states (Oracle Forms re-creates
+        # elements with fresh IDs on each tab switch).  Deduplicate by
+        # (name, x, y, width, height) so each logical widget appears once.
+        _dedup_seen: set[tuple] = set()
+        deduped_tab_elements: list[dict] = []
+        for el in tab_elements:
+            name = el.get("name") or ""
+            bnd = el.get("bounds") or {}
+            ident = (
+                name,
+                int(bnd.get("x", el.get("x", 0)) or 0),
+                int(bnd.get("y", el.get("y", 0)) or 0),
+                int(bnd.get("width", el.get("width", 0)) or 0),
+                int(bnd.get("height", el.get("height", 0)) or 0),
+            )
+            if name and ident in _dedup_seen:
+                continue
+            deduped_tab_elements.append(el)
+            if name:
+                _dedup_seen.add(ident)
+        tab_elements = deduped_tab_elements
+
         # ── Per-tab element partitioning ───────────────────────────────
         # Partition actionable tab elements so each tab gets its own list.
         # This lets _build_action_tree render each tab as an individual
@@ -870,8 +905,6 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
     :func:`render_snapshot_text`.
     """
     tree, id_map = build_action_tree(scan)
-    if not id_map:
-        return "(no actionable elements found)", id_map
     form_title = active_form_title(active_window_scan(scan))
     snapshot_text = render_snapshot_text(tree, form_title)
     return snapshot_text, id_map
@@ -879,6 +912,7 @@ def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
 
 def build_action_payload(
     scan: dict,
+    all_tabs: bool = False,
 ) -> dict[str, Any]:
     """Return AI text + UI tree from one canonical snapshot source.
 
@@ -890,13 +924,7 @@ def build_action_payload(
     Since screenshots are no longer cropped, element coordinates are raw
     (unadjusted) and align directly with the fullscreen screenshot.
     """
-    tree, id_map = build_action_tree(scan)
-    if not id_map:
-        return {
-            "text": "(no actionable elements found)",
-            "tree": tree,
-            "id_map": id_map,
-        }
+    tree, id_map = build_action_tree(scan, all_tabs=all_tabs)
     # Extract form title from the scoped scan, not from the tree root.
     # The tree is a flat list of top-level children (no Form wrapper),
     # so active_form_title() is the canonical source for the title.
@@ -913,7 +941,7 @@ def build_action_payload(
 # Tab detection helpers
 # ---------------------------------------------------------------------------
 
-def _detect_tabs(nodes: list[dict]) -> dict | None:
+def _detect_tabs(nodes: list[dict], all_tabs: bool = False) -> dict | None:
     """Find FormsTabPanel/TabBar info and map selected tab to content node IDs.
 
     Returns ``None`` if no tab bar is found.
@@ -1026,7 +1054,7 @@ def _detect_tabs(nodes: list[dict]) -> dict | None:
             if _subtree_has_prefix(box, prefix):
                 matched_tab = t
                 break
-        if matched_tab == selected:
+        if matched_tab == selected or (all_tabs and matched_tab is not None):
             _collect_ids(box, selected_content_ids)
             if matched_tab is not None:
                 matched_tab_names.add(matched_tab)
@@ -1758,13 +1786,20 @@ def _build_action_tree(
             "children": [],
         }
 
-        if is_selected:
-            tab_els = per_tab.get(t, tab_elements)
+        tab_els = per_tab.get(t)
+        if tab_els is not None or is_selected:
+            if tab_els is None:
+                tab_els = tab_elements if is_selected else []
+            t_prefix = f"{t} tab page "
             rows = _group_by_rows(tab_els)
-            table_rows, pre_rows, post_rows = _detect_table(rows, tab_page_prefix)
+            table_rows, pre_rows, post_rows = _detect_table(rows, t_prefix)
 
             for row in pre_rows:
-                row_children = [_field_node(el, tab_page_prefix) for el in row]
+                row_children = []
+                for el in row:
+                    fn = _field_node(el, t_prefix)
+                    fn["tab_path"] = t
+                    row_children.append(fn)
                 tab_node["children"].extend(row_children)
 
             if table_rows:
@@ -1772,12 +1807,23 @@ def _build_action_tree(
                     scoped_nodes or [], tab_content_ids
                 )
                 table_node = _build_table_node(
-                    table_rows, tab_page_prefix, selected_y, _synth_ref, _field_node
+                    table_rows, t_prefix, selected_y, _synth_ref, _field_node
                 )
+                table_node["tab_path"] = t
+                for col in table_node.get("columns") or []:
+                    col["tab_path"] = t
+                for r in table_node.get("children") or []:
+                    r["tab_path"] = t
+                    for cell in r.get("children") or []:
+                        cell["tab_path"] = t
                 tab_node["children"].append(table_node)
 
             for row in post_rows:
-                row_children = [_field_node(el, tab_page_prefix) for el in row]
+                row_children = []
+                for el in row:
+                    fn = _field_node(el, t_prefix)
+                    fn["tab_path"] = t
+                    row_children.append(fn)
                 tab_node["children"].extend(row_children)
 
         inner_tab_nodes.append(tab_node)
@@ -2670,3 +2716,91 @@ def _screen_x(screen_bounds: dict) -> int:
 
 def _screen_y(screen_bounds: dict) -> int:
     return _int(screen_bounds.get("screenY", screen_bounds.get("y")), -1)
+
+
+def _has_tab_prefix(node: dict) -> bool:
+    for key in ("name", "accessibleName", "displayName"):
+        val = str(node.get(key) or "")
+        if " tab page " in val:
+            return True
+    attrs = node.get("attributes") or {}
+    if attrs.get("tabSelectedTitle"):
+        return True
+    return False
+
+
+def _node_identity(node: dict) -> tuple | None:
+    """Return a semantic identity tuple for a DOM node, or None if unnamed.
+
+    WHY: Oracle Forms produces fresh element IDs and sometimes different
+    ``path`` values on each tab switch, but the widget's ``accessibleName``
+    and ``simpleClassName`` remain stable.  Using (name, className) as a
+    secondary merge key prevents duplicate children when path-based lookup
+    misses.
+    """
+    name = str(node.get("accessibleName") or node.get("name") or "")
+    cls = str(node.get("simpleClassName") or "")
+    if not name:
+        return None
+    return (name, cls)
+
+
+def _merge_dom_nodes(n1: dict, n2: dict) -> None:
+    """Recursively merge children and attributes of n2 into n1."""
+    n1_has_prefix = _has_tab_prefix(n1)
+    n2_has_prefix = _has_tab_prefix(n2)
+
+    # If n2 has a active tab prefix/selection and n1 doesn't (or n1 is unnamed and n2 is named),
+    # overwrite n1's attributes with n2's to preserve active state metadata.
+    if (n2_has_prefix and not n1_has_prefix) or (not n1_has_prefix and not n1.get("name") and n2.get("name")):
+        for k, v in n2.items():
+            if k != "children":
+                n1[k] = v
+
+    c1 = n1.get("children") or []
+    c2 = n2.get("children") or []
+    if not c1 and c2:
+        n1["children"] = c2
+        return
+    if c1 and c2:
+        c1_by_path = {c.get("path"): c for c in c1 if c.get("path")}
+        # Build a secondary identity index for name+className fallback.
+        # This catches children that shifted positions across tab switches
+        # (same widget, different path).
+        c1_by_identity: dict[tuple, dict] = {}
+        for c in c1:
+            ident = _node_identity(c)
+            if ident:
+                c1_by_identity.setdefault(ident, c)
+        for child2 in c2:
+            path2 = child2.get("path")
+            if path2 in c1_by_path:
+                _merge_dom_nodes(c1_by_path[path2], child2)
+            else:
+                # Fallback: check by name+className identity
+                ident2 = _node_identity(child2)
+                if ident2 and ident2 in c1_by_identity:
+                    _merge_dom_nodes(c1_by_identity[ident2], child2)
+                else:
+                    c1.append(child2)
+                    # Register the new child in the identity index
+                    if ident2:
+                        c1_by_identity.setdefault(ident2, child2)
+        n1["children"] = c1
+
+
+def merge_scans(scan1: dict, scan2: dict) -> dict:
+    """Recursively merge the DOM trees of scan2 into scan1."""
+    import copy
+    res = copy.deepcopy(scan1)
+    w1 = res.get("windows") or []
+    w2 = scan2.get("windows") or []
+    w1_by_path = {w.get("path"): w for w in w1 if w.get("path")}
+    for win2 in w2:
+        path2 = win2.get("path")
+        if path2 in w1_by_path:
+            _merge_dom_nodes(w1_by_path[path2], win2)
+        else:
+            w1.append(win2)
+    res["windows"] = w1
+    return res

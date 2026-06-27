@@ -70,8 +70,13 @@ class JavaAgentDriver:
     def focus(self, descriptor: dict) -> dict:
         return self._run({"command": "focus", **locator_params(descriptor)})
 
-    def click(self, descriptor: dict) -> dict:
-        return self._run({"command": "click", **locator_params(descriptor)})
+    def click(self, descriptor: dict, tab_index: int | None = None, tab_count: int | None = None) -> dict:
+        command = {"command": "click", **locator_params(descriptor)}
+        if tab_index is not None:
+            command["tab_index"] = str(tab_index)
+        if tab_count is not None:
+            command["tab_count"] = str(tab_count)
+        return self._run(command)
 
     def set_text(self, descriptor: dict, text: str) -> dict:
         encoded_text = base64.b64encode(text.encode("utf-8")).decode("ascii")

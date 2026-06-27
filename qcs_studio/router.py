@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
@@ -47,6 +48,7 @@ def run_scan(request: ScanRequest) -> dict:
         "capture_mode": bundle.capture_mode,
         "screenshot_path": str(bundle.screenshot_path),
         "created_at": bundle.created_at,
+        "tab_screenshots": bundle.tab_screenshots,
     }
 
 
@@ -75,6 +77,7 @@ def recalculate_tree(request: RecalculateTreeRequest) -> dict:
         "capture_mode": bundle.capture_mode,
         "screenshot_path": str(bundle.screenshot_path),
         "created_at": bundle.created_at,
+        "tab_screenshots": bundle.tab_screenshots,
     }
 
 
@@ -96,13 +99,20 @@ def save_scan(request: ScanSaveRequest) -> dict:
 
 
 @router.get("/scans/{scan_id}/screenshot")
-def get_scan_screenshot(scan_id: str):
+def get_scan_screenshot(scan_id: str, tab: str | None = None):
     bundle = _service.get_cached_scan(scan_id)
     if bundle is None:
         raise HTTPException(status_code=404, detail=f"Unknown scan_id {scan_id!r}")
-    if not bundle.screenshot_path.exists():
+    
+    path = bundle.screenshot_path
+    if tab and bundle.tab_screenshots and tab in bundle.tab_screenshots:
+        tab_path = Path(bundle.tab_screenshots[tab])
+        if tab_path.exists():
+            path = tab_path
+
+    if not path.exists():
         raise HTTPException(status_code=404, detail="Scan screenshot not found")
-    return FileResponse(bundle.screenshot_path)
+    return FileResponse(path)
 
 
 @router.get("/containers")

@@ -64,6 +64,7 @@ type ScanResult = {
   screenshot_path: string;
   tree: TreeNode[];
   full_elements?: FullElement[];
+  tab_screenshots?: Record<string, string>;
 };
 
 type TreeNode = {
@@ -73,6 +74,7 @@ type TreeNode = {
   included: boolean;
   bounds: { x: number; y: number; width: number; height: number };
   children: TreeNode[];
+  tab_path?: string;
 };
 
 function screenshotUrl(detail: { screenshot?: string | null } | null): string | null {
@@ -366,12 +368,26 @@ export function App() {
   }
 
 
+  const tabPathMap = useMemo(() => {
+    return buildTabPathMap(displayTree);
+  }, [displayTree]);
+
   const activeScreenshot = useMemo(() => {
+    let tabPath: string | undefined = undefined;
+    const targetRef = hoveredRef || selectedRef;
+    if (targetRef) {
+      tabPath = tabPathMap[targetRef];
+    }
+
     if (scan?.screenshot_path) {
-      return `/api/v1/scans/${encodeURIComponent(scan.scan_id)}/screenshot`;
+      const base = `/api/v1/scans/${encodeURIComponent(scan.scan_id)}/screenshot`;
+      if (tabPath && scan.tab_screenshots && scan.tab_screenshots[tabPath]) {
+        return `${base}?tab=${encodeURIComponent(tabPath)}`;
+      }
+      return base;
     }
     return screenshotUrl(detail);
-  }, [detail, scan]);
+  }, [detail, scan, hoveredRef, selectedRef, tabPathMap]);
 
   useEffect(() => {
     setExpanded(explorerModeExpandedState(displayTree));
@@ -832,18 +848,24 @@ function renderTreeRows(
   onDropElement: (targetRef: string, elementRef: string) => void,
   fullByRef: Map<string, FullElement>,
   showTooltip: (fe: FullElement | null, x: number, y: number) => void,
-  depth = 0
+  depth = 0,
+  keyPrefix = ""
 ): JSX.Element[] {
   const rows: JSX.Element[] = [];
-  for (const node of nodes) {
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
     const hasChildren = (node.children || []).length > 0;
     const isExpanded = hasChildren ? !!expanded[node.element_ref] : false;
     const meta = elementMeta(node);
     const fe = fullByRef.get(node.element_ref);
     const isRoot = node.element_ref === "__container_root__";
+    // Build a unique key: parent path + index + ref.  This prevents React
+    // key collisions when the merged multi-tab DOM produces nodes that
+    // share the same element_ref at different tree positions.
+    const nodeKey = `${keyPrefix}${i}:${node.element_ref}`;
     rows.push(
       <div
-        key={node.element_ref}
+        key={nodeKey}
         className={`tree-item${hoveredRef === node.element_ref ? " hovered" : ""}${isRoot ? " tree-root" : ""}`}
         style={{ paddingLeft: `${6 + depth * 14}px` }}
         onMouseEnter={(e) => {
@@ -900,7 +922,7 @@ function renderTreeRows(
       </div>
     );
     if (hasChildren && isExpanded) {
-      rows.push(...renderTreeRows(node.children, hoveredRef, setHoveredRef, expanded, toggleNode, onDropElement, fullByRef, showTooltip, depth + 1));
+      rows.push(...renderTreeRows(node.children, hoveredRef, setHoveredRef, expanded, toggleNode, onDropElement, fullByRef, showTooltip, depth + 1, `${nodeKey}/`));
     }
   }
   return rows;
@@ -1072,6 +1094,24 @@ function insertChild(nodes: TreeNode[], targetRef: string, child: TreeNode): Tre
     insertChild(node.children || [], targetRef, child);
   }
   return nodes;
+}
+
+function buildTabPathMap(nodes: TreeNode[], parentPath: string[] = []): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const node of nodes) {
+    const currentPath = [...parentPath];
+    if (node.role === "Tab") {
+      const tabName = node.label.endsWith(" Tab") ? node.label.slice(0, -4) : node.label;
+      currentPath.push(tabName);
+    }
+    if (currentPath.length > 0) {
+      map[node.element_ref] = currentPath.join(" -> ");
+    }
+    if (node.children && node.children.length > 0) {
+      Object.assign(map, buildTabPathMap(node.children, currentPath));
+    }
+  }
+  return map;
 }
 
 

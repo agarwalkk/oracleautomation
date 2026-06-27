@@ -18,6 +18,9 @@ from qcs_java_agent.snapshot import (
     build_full_overlay_elements,
     full_view_scan,
     java_nodes_to_repo_elements,
+    merge_scans,
+    flatten_nodes,
+    _detect_tabs,
 )
 from qcs_repo import fingerprint as repo_fingerprint
 from qcs_repo import identity as repo_identity
@@ -273,6 +276,7 @@ class ScanBundle:
     screenshot_origin: dict
     capture_mode: str
     created_at: str
+    tab_screenshots: dict[str, str]
 class StudioService:
     """Application service for Studio scan and container operations."""
 
@@ -365,23 +369,145 @@ class StudioService:
         raw_dom = driver.scan()
         scoped = active_window_scan(raw_dom)
 
-        # Resolve the active frame and the top-level Java window. The window's
-        # screen origin becomes the coordinate origin so element overlays align
-        # to the cropped Java-window screenshot.
+        # Resolve the active frame and the top-level Java window.
         frame = _oracle_forms_active_frame(raw_dom)
-        # Prefer OS window rect for hwnd management. Fallback to Java DOM-derived
-        # bounds only if Win32 rect is unavailable.
         window_bounds = _window_rect(hwnd) or _java_window_bounds(raw_dom, frame)
-
-        # Container name defaults to the form name (frame caption), falling back
-        # to the generic active-form title only when the frame has no caption.
         title = _frame_form_title(frame) or active_form_title(scoped)
 
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        temp_screenshot = Path(tempfile.gettempdir()) / f"qcs_studio_scan_{ts}_{uuid4().hex[:8]}.png"
+        temp_dir = Path(tempfile.gettempdir())
+        
+        tab_screenshots: dict[str, str] = {}
+        merged_dom = raw_dom
+        temp_screenshot = None
+
+        # Helper to find all TabBar nodes sorted by y-coordinate
+        def _get_sorted_tab_bars(dom_tree):
+            sc = active_window_scan(dom_tree)
+            nodes = flatten_nodes(sc)
+            tab_bars = [n for n in nodes if str(n.get("simpleClassName") or "") == "TabBar"]
+            tab_bars.sort(key=lambda n: (n.get("screenBounds") or {}).get("y", 0))
+            return tab_bars, nodes
+
+        scoped_nodes = flatten_nodes(scoped)
+        tab_info = _detect_tabs(scoped_nodes)
+        screenshot_result = {}
+
         try:
-            # Always capture fullscreen, then crop to the Java window region.
-            screenshot_result = driver.screenshot(temp_screenshot)
+            if tab_info:
+                # Multi-tab DFS scan
+                from qcs_java_agent.settle import settle_forms
+                
+                # Find initial tab paths/selections so we can restore them at the end
+                initial_tab_bars, initial_nodes = _get_sorted_tab_bars(raw_dom)
+                original_path = []
+                for tb in initial_tab_bars:
+                    attrs = tb.get("attributes") or {}
+                    original_path.append(str(attrs.get("tabSelectedTitle", "")).strip())
+                
+                visited = set()
+                results = {}
+
+                def dfs(current_path):
+                    # 1. Click to select the tab path sequentially from Level 1
+                    for level, tab_title in enumerate(current_path):
+                        state_dom = driver.scan()
+                        tab_bars, nodes = _get_sorted_tab_bars(state_dom)
+                        if level < len(tab_bars):
+                            tb = tab_bars[level]
+                            attrs = tb.get("attributes") or {}
+                            titles = [t.strip() for t in str(attrs.get("tabTitles", "")).split("|") if t.strip()]
+                            selected = str(attrs.get("tabSelectedTitle", "")).strip()
+                            if selected != tab_title and tab_title in titles:
+                                idx = titles.index(tab_title)
+                                driver.click(tb, tab_index=idx, tab_count=len(titles))
+                                settle_forms(driver, timeout_s=3.0)
+
+                    # 2. Scan the current fully selected tab state
+                    state_dom = driver.scan()
+                    tab_bars, nodes = _get_sorted_tab_bars(state_dom)
+                    
+                    # Check if there is a nested tab bar at the next level
+                    depth = len(current_path)
+                    if depth < len(tab_bars):
+                        tb = tab_bars[depth]
+                        attrs = tb.get("attributes") or {}
+                        titles = [t.strip() for t in str(attrs.get("tabTitles", "")).split("|") if t.strip()]
+                        tab_states_raw = str(attrs.get("tabStates", ""))
+                        enabled_flags = []
+                        for part in tab_states_raw.split("|"):
+                            bits = [b.strip() for b in part.strip().split(",")]
+                            enabled_flags.append(bits[0] == "1" if len(bits) > 0 else True)
+
+                        for idx, t in enumerate(titles):
+                            if idx < len(enabled_flags) and not enabled_flags[idx]:
+                                continue # skip disabled tabs
+                            
+                            next_path = current_path + (t,)
+                            if next_path not in visited:
+                                visited.add(next_path)
+                                dfs(next_path)
+                    else:
+                        # Leaf state - capture screenshot
+                        safe_path_name = "_".join(current_path).replace("/", "_").replace("\\", "_")
+                        shot_path = temp_dir / f"qcs_studio_scan_{ts}_{uuid4().hex[:8]}_{safe_path_name}.png"
+                        res_shot = driver.screenshot(shot_path)
+                        screenshot_result.update(res_shot)
+                        results[current_path] = {
+                            "dom": state_dom,
+                            "screenshot_path": shot_path
+                        }
+
+                # Start DFS on each top-level tab
+                top_tb = initial_tab_bars[0]
+                top_attrs = top_tb.get("attributes") or {}
+                top_titles = [t.strip() for t in str(top_attrs.get("tabTitles", "")).split("|") if t.strip()]
+                top_states_raw = str(top_attrs.get("tabStates", ""))
+                top_enabled = []
+                for part in top_states_raw.split("|"):
+                    bits = [b.strip() for b in part.strip().split(",")]
+                    top_enabled.append(bits[0] == "1" if len(bits) > 0 else True)
+
+                for idx, t in enumerate(top_titles):
+                    if idx < len(top_enabled) and not top_enabled[idx]:
+                        continue
+                    path = (t,)
+                    visited.add(path)
+                    dfs(path)
+
+                # Restore original tab state
+                for level, tab_title in enumerate(original_path):
+                    state_dom = driver.scan()
+                    tab_bars, nodes = _get_sorted_tab_bars(state_dom)
+                    if level < len(tab_bars):
+                        tb = tab_bars[level]
+                        attrs = tb.get("attributes") or {}
+                        titles = [t.strip() for t in str(attrs.get("tabTitles", "")).split("|") if t.strip()]
+                        selected = str(attrs.get("tabSelectedTitle", "")).strip()
+                        if selected != tab_title and tab_title in titles:
+                            idx = titles.index(tab_title)
+                            driver.click(tb, tab_index=idx, tab_count=len(titles))
+                            settle_forms(driver, timeout_s=3.0)
+
+                # Merge all raw DOMs and collect screenshots mapping
+                if results:
+                    first_path = list(results.keys())[0]
+                    merged_dom = results[first_path]["dom"]
+                    for path, res in results.items():
+                        if path != first_path:
+                            merged_dom = merge_scans(merged_dom, res["dom"])
+                        tab_screenshots[" -> ".join(path)] = str(res["screenshot_path"])
+                    temp_screenshot = Path(results[first_path]["screenshot_path"])
+                else:
+                    # Fallback to standard capture if DFS produced no results
+                    temp_screenshot = temp_dir / f"qcs_studio_scan_{ts}_{uuid4().hex[:8]}.png"
+                    screenshot_result = driver.screenshot(temp_screenshot)
+                    tab_screenshots["default"] = str(temp_screenshot)
+            else:
+                # Standard scan flow
+                temp_screenshot = temp_dir / f"qcs_studio_scan_{ts}_{uuid4().hex[:8]}.png"
+                screenshot_result = driver.screenshot(temp_screenshot)
+                tab_screenshots["default"] = str(temp_screenshot)
         finally:
             # Restore the Java form to its original size/position first,
             # then switch away from it back to the previous application.
@@ -389,15 +515,12 @@ class StudioService:
             _restore_foreground()
 
         capture_mode = str(screenshot_result.get("captureMode") or "fullscreen")
-        # WHY: No longer cropping screenshots — we keep the fullscreen capture
-        # so element bounds align directly with the image without origin adjustment.
-
         scan_id = uuid4().hex
 
         # Compute fingerprint from the DOM elements (lightweight, no AI payload).
-        elements = java_nodes_to_repo_elements(scoped)
+        elements = java_nodes_to_repo_elements(active_window_scan(merged_dom))
         enriched = repo_snapshot.enrich_java_elements(elements)
-        title_for_fp = _frame_form_title(frame) or active_form_title(scoped)
+        title_for_fp = _frame_form_title(frame) or active_form_title(active_window_scan(merged_dom))
         fingerprint = repo_fingerprint.fingerprint_java_form(
             title_for_fp,
             [{"role": str(el.get("role") or ""), "name": str(el.get("name") or "")} for el in enriched],
@@ -410,7 +533,7 @@ class StudioService:
             scan_id=scan_id,
             title=title,
             container_ref=container_ref,
-            raw_dom=raw_dom,
+            raw_dom=merged_dom,
             snapshot_text="",  # populated by compute_tree
             tree=[],           # populated by compute_tree
             raw_elements=enriched,
@@ -419,6 +542,7 @@ class StudioService:
             screenshot_origin={"x": 0, "y": 0},
             capture_mode=capture_mode,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            tab_screenshots=tab_screenshots,
         )
         StudioService._drafts[scan_id] = bundle
         self._scan_cache[scan_id] = bundle
@@ -441,7 +565,7 @@ class StudioService:
         scoped = active_window_scan(raw_dom)
         enriched = repo_snapshot.enrich_java_elements(java_nodes_to_repo_elements(scoped))
 
-        payload = build_action_payload(scoped)
+        payload = build_action_payload(scoped, all_tabs=True)
 
         # Full overlay uses the FULL raw DOM filtered to active form window +
         # toolbar / menu bar only (exclude non-active ExtendedFrame subtrees).
@@ -470,11 +594,24 @@ class StudioService:
             with open(target_dir / "java_scan_dump.json", "w", encoding="utf-8") as f:
                 json.dump(bundle.raw_dom, f, indent=2, ensure_ascii=False)
             
-            # 2. screenshot.png
+            # 2. screenshot.png (main/first screenshot)
             if bundle.screenshot_path and Path(bundle.screenshot_path).exists():
                 shutil.copy2(bundle.screenshot_path, target_dir / "screenshot.png")
             
-            # 3. ai_snapshot.txt
+            # 3. Per-tab screenshots (when multi-tab scan produced multiple)
+            # WHY: Multi-tab DFS scans capture a screenshot for each leaf tab
+            # state. These must be saved alongside the main screenshot so the
+            # aisnapshot directory contains the complete scan output.
+            if bundle.tab_screenshots:
+                tab_dir = target_dir / "tab_screenshots"
+                for tab_path, shot_path_str in bundle.tab_screenshots.items():
+                    shot_path = Path(shot_path_str)
+                    if shot_path.exists():
+                        tab_dir.mkdir(parents=True, exist_ok=True)
+                        safe_name = tab_path.replace(" -> ", "_").replace("/", "_").replace("\\", "_")
+                        shutil.copy2(shot_path, tab_dir / f"{safe_name}.png")
+            
+            # 4. ai_snapshot.txt
             with open(target_dir / "ai_snapshot.txt", "w", encoding="utf-8") as f:
                 f.write(bundle.snapshot_text)
         except Exception as e:
