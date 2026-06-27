@@ -1,30 +1,65 @@
 Form: EMR Global Sales Order Entry Form (RMT_RMD_OU) - 8100499, EMERSON PROCESS MANAGEMENT SA DE CV
-  [e132] Tabs: [*Order Information*] | Line Items
-    [e126] Tabs: [*Main*] | Shipping | Financials | Export | Others | Acknowledgement | Proforma
-      [e79] Sold To (read-only) = EMERSON PROCESS MANAGEMENT SA DE CV , [e81] 150000382 (read-only) , [e83] Type (read-only) = Internal_RMT
-      [e123] Alternate Name (read-only) , [e84] Operating Unit (read-only) = RMT_RMD_OU
-      [e82] Contact (read-only) , [e86] PO # (read-only) = 176281 , [e80] SO # (read-only) = 8100499
-      [e113] PO Date (read-only) = 14-APR-2026 , [e114] PO Received (read-only) = 14-APR-2026 , [e85] Agreement (read-only)
-      [e105] Ship To (read-only) = 107220089 , [e95] Bill To (read-only) = 45957787 , [e87] Price List (read-only) = RMT CORPORATE OCT 2024
-      [e89] EMERSON PROCESS MANAGEMENT SA DE CV (read-only) , [e96] EMERSON PROCESS MANAGEMENT SA DE CV (read-only) , [e100] Currency (read-only) = USD
-      [e90] Ship To Address1 (read-only) = IR/ISO C/O WELLDEX LOGISTICS INC , [e99] Bill To Address1 (read-only) = RMT , [e109] Subtotal (read-only) = 1,438.74
-      [e91] Ship To Address2 (read-only) = CALLE 10 # 145 1 ER PISO ALA ORIENTE , [e101] Bill To Address2 (read-only) = CALLE 10 # 145 1 ER PISO ALA ORIENTE , [e110] Tax (read-only) = 0.00
-      [e92] Ship To Address3 (read-only) = SAN PEDRO DE LOS PINOS , [e102] Bill To Address3 (read-only) = SAN PEDROS DE LOS PINOS , [e111] Charges (read-only) = 0.00
-      [e93] Ship To Address5 (read-only) = ALVARO OBREGON, CMX, 01180, MX , [e103] Bill To Address5 (read-only) = ALVARO OBREGON, CMX, 01180, MX , [e112] Total (read-only) = 1,438.74
-      [e94] Alt ST (read-only) , [e104] Alt BT (read-only) , [e124] Lumpsum Discount (read-only)
-      [e106] Contact (read-only) , [e97] Contact (read-only) , [e117] Admin (read-only) = GLIFONEA, RONALDO
-      [e115] Req Delivery (read-only) = 09-APR-2026 , [e107] Req Ship (read-only) = 01-APR-2026 00:00:00 , [e118] Salesperson (read-only) = No Sales Credit
-      [e98] Entered (read-only) = 09-APR-2026 18:56:28 , [e122] Booked By (read-only) = EMR_UC4_RMT , [e108] Status (read-only) = Booked
-      [e119] First Pass Review (read-only) = NO ERRORS , [e120] Ack'd Date (read-only) , [e121] Ack'd (read-only) , [e88] [ ] (read-only) = .
-    Buttons:
-      [e143] Actions (Button, enabled) , [e145] Availability (Button, enabled) , [e147] Product Advisor (Button, enabled)
-    Tools Menu:
-      Find Customer
-      Workflow Status
-      Show Line Details
-      Book Sales Order
-      ATO Summary View
-      Copy Sales Order Prgram
-      Pricing Options
-      Star Model Status
-      Mass Price Adjustment Tool
+  [e132] Order Information (Tab, enabled, selected)
+    Main (Tab, enabled, selected)
+      [e79] Sold To (read-only)
+      [e81] 150000382 (read-only)
+      [e83] Type (read-only)
+      [e123] Alternate Name (read-only)
+      [e84] Operating Unit (read-only)
+      [e82] Contact (read-only)
+      [e86] PO # (read-only)
+      [e80] SO # (read-only)
+      [e113] PO Date (read-only)
+      [e114] PO Received (read-only)
+      [e85] Agreement (read-only)
+      [e105] Ship To (read-only)
+      [e95] Bill To (read-only)
+      [e87] Price List (read-only)
+      [e89] EMERSON PROCESS MANAGEMENT SA DE CV (read-only)
+      [e96] EMERSON PROCESS MANAGEMENT SA DE CV (read-only)
+      [e100] Currency (read-only)
+      [e90] Ship To Address1 (read-only)
+      [e99] Bill To Address1 (read-only)
+      [e109] Subtotal (read-only)
+      [e91] Ship To Address2 (read-only)
+      [e101] Bill To Address2 (read-only)
+      [e110] Tax (read-only)
+      [e92] Ship To Address3 (read-only)
+      [e102] Bill To Address3 (read-only)
+      [e111] Charges (read-only)
+      [e93] Ship To Address5 (read-only)
+      [e103] Bill To Address5 (read-only)
+      [e112] Total (read-only)
+      [e94] Alt ST (read-only)
+      [e104] Alt BT (read-only)
+      [e124] Lumpsum Discount (read-only)
+      [e106] Contact (read-only)
+      [e97] Contact (read-only)
+      [e117] Admin (read-only)
+      [e115] Req Delivery (read-only)
+      [e107] Req Ship (read-only)
+      [e118] Salesperson (read-only)
+      [e98] Entered (read-only)
+      [e108] Status (read-only)
+      [e119] First Pass Review (read-only)
+      [e120] Ack'd Date (read-only)
+      [e121] Ack'd (read-only)
+      [e88] [ ] (read-only)
+    Shipping (Tab, enabled)
+    Financials (Tab, enabled)
+    Export (Tab, enabled)
+    Others (Tab, enabled)
+    Acknowledgement (Tab, enabled)
+    Proforma (Tab, enabled)
+  [e132] Line Items (Tab, enabled)
+  [e143] Actions (Button, enabled) , [e145] Availability (Button, enabled) , [e147] Product Advisor (Button, enabled)
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    Show Line Details
+    Book Sales Order
+    ATO Summary View
+    Copy Sales Order Prgram
+    Pricing Options
+    Star Model Status
+    Mass Price Adjustment Tool

@@ -1,17 +1,22 @@
 Form: EMR Global Find  Orders/Quotes
   [e335] Open Folder... (Button, enabled)
-  [e325] Tabs: Quote/Order Information | Line Information | Advanced | [*Holds Information*] | Scheduling (disabled)
-    [e46] Hold Name (read-only) , [e34] Hold Name (LOV)
+  Quote/Order Information (Tab, enabled)
+  Line Information (Tab, enabled)
+  Advanced (Tab, enabled)
+  Holds Information (Tab, enabled, selected)
+    [e46] Hold Name (read-only)
+    [e34] Hold Name (LOV)
     [e36] Hold Type (read-only)
     [e35] Description (read-only)
-    [e49] Held By (read-only) , [e37] Held By (LOV)
+    [e49] Held By (read-only)
+    [e37] Held By (LOV)
     [e38] Criteria (ComboBox) (read-only) values: ['Bill to Site', 'Creation Date', 'Customer', 'Customer Number', 'Deliver to Site', 'End Customer', 'End Customer Number', 'Item', 'Item Category', 'Order', 'Order Type', 'Payment Type', 'Price List', 'Project Number', 'Sales Agreement Number', 'Sales Channel Code', 'Ship to Site', 'Shipping Method Code', 'Top Model', 'Warehouse']
     [e40] Value (LOV)
     [e43] Criteria (ComboBox) (read-only) values: ['Customer', 'Ship To Site', 'Bill To Site', 'Warehouse', 'Sales Agreement Line Number']
     [e41] Value (read-only)
     [e45] Hold Sources (Button, enabled)
-  Buttons:
-    [e333] Clear (Button, enabled) , [e334] Find (Button, enabled)
+  Scheduling (Tab, disabled)
+  [e333] Clear (Button, enabled) , [e334] Find (Button, enabled)
   Tools Menu:
     Find Customer
     Workflow Status

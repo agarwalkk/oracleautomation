@@ -1,6 +1,7 @@
 Form: EMR Global Sales Order Entry Form (RMT_RMD_OU) - 8100499, EMERSON PROCESS MANAGEMENT SA DE CV
-  [e882] Tabs: Order Information | [*Line Items*]
-    [e876] Tabs: [*Main*] | Pricing | Shipping | Addresses | Export | Returns | Services | BU Specific | Others
+  [e882] Order Information (Tab, enabled)
+  [e882] Line Items (Tab, enabled, selected)
+    Main (Tab, enabled, selected)
       | # | Line RO | Ordered Item RO | Cr Division RO | Model String RO | Qty RO | UOM RO | Unit Selling Price RO | Cust PO Line # RO | Rep Line Number RO | Line Type RO | Admin RO | Related Order RO | Req Delivery RO | Req Ship RO | Original Promise Date RO | Promise Date RO | Schedule Ship Date RO | Transit Time RO | Orig Schedule Ship Date RO | Expected Invoice Date RO | Adjusted Ship Date RO | Pick/Pack Leadtime RO | Reason for Offset RO | Ship Set RO | Quoted Leadtime RO | QS Cause Code RO | Expected Overdue Notification RO | Status RO | External Status RO | Qty Cancelled RO | Qty Shipped RO | Ack'd RO | Ack'd Date RO | PO Received RO | User Item Description RO | PA Reference ID RO | [ ] RO |
       |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
       | **1** | [e502] 1.1 | [e512] R-3051S*69198779 | [e421]  | [e431]  | [e71] 2 | [e81] EA | [e311] 719.37073 | [e281]  | [e441]  | [e171] Line_Internal_IC_RMT | [e181]  | [e321]  | [e331]  | [e91] 09-APR-2026 00:00:00 | [e261]  | [e271] 09-APR-2026 00:00:00 | [e101]  | [e111]  | [e121]  | [e131]  | [e141]  | [e151]  | [e161]  | [e411]  | [e451]  | [e461]  | [e471]  | [e351] Booked | [e361]  | [e191] 0 | [e201]  | [e211]  | [e221]  | [e231]  | [e241]  | [e251]  | [e341] . |
@@ -13,18 +14,28 @@ Form: EMR Global Sales Order Entry Form (RMT_RMD_OU) - 8100499, EMERSON PROCESS 
       | 8 | [e509]  | [e519]  | [e428]  | [e438]  | [e78]  | [e88]  | [e318]  | [e288]  | [e448]  | [e178]  | [e188]  | [e328]  | [e338]  | [e98]  | [e268]  | [e278]  | [e108]  | [e118]  | [e128]  | [e138]  | [e148]  | [e158]  | [e168]  | [e418]  | [e458]  | [e468]  | [e478]  | [e358]  | [e368]  | [e198]  | [e208]  | [e218]  | [e228]  | [e238]  | [e248]  | [e258]  | [e348]  |
       | 9 | [e510]  | [e520]  | [e429]  | [e439]  | [e79]  | [e89]  | [e319]  | [e289]  | [e449]  | [e179]  | [e189]  | [e329]  | [e339]  | [e99]  | [e269]  | [e279]  | [e109]  | [e119]  | [e129]  | [e139]  | [e149]  | [e159]  | [e169]  | [e419]  | [e459]  | [e469]  | [e479]  | [e359]  | [e369]  | [e199]  | [e209]  | [e219]  | [e229]  | [e239]  | [e249]  | [e259]  | [e349]  |
       | 10 | [e511]  | [e521]  | [e430]  | [e440]  | [e80]  | [e90]  | [e320]  | [e290]  | [e450]  | [e180]  | [e190]  | [e330]  | [e340]  | [e100]  | [e270]  | [e280]  | [e110]  | [e120]  | [e130]  | [e140]  | [e150]  | [e160]  | [e170]  | [e420]  | [e460]  | [e470]  | [e480]  | [e360]  | [e370]  | [e200]  | [e210]  | [e220]  | [e230]  | [e240]  | [e250]  | [e260]  | [e350]  |
-      [e522] Line Total (read-only) = 1,438.74 , [e523] Line Qty (read-only) = 2 , [e525] Each Total (read-only) = 719.37073
-      [e524] Description (read-only) = 3051S2TG5A2E11A1JD4E5M5P1Q4Q8QTT1Q15
-      [e526] Model String (read-only) , [e527] Cfg Status (read-only)
-    Buttons:
-      [e894] Actions (Button, enabled) , [e896] Availability (Button, enabled) , [e897] Item/Unit (Button, enabled) , [e898] Product Advisor (Button, enabled)
-    Tools Menu:
-      Find Customer
-      Workflow Status
-      Show Line Details
-      Book Sales Order
-      ATO Summary View
-      Copy Sales Order Prgram
-      Pricing Options
-      Star Model Status
-      Mass Price Adjustment Tool
+    Pricing (Tab, enabled)
+    Shipping (Tab, enabled)
+    Addresses (Tab, enabled)
+    Export (Tab, enabled)
+    Returns (Tab, enabled)
+    Services (Tab, enabled)
+    BU Specific (Tab, enabled)
+    Others (Tab, enabled)
+  [e522] Line Total (read-only)
+  [e523] Line Qty (read-only)
+  [e525] Each Total (read-only)
+  [e524] Description (read-only)
+  [e526] Model String (read-only)
+  [e527] Cfg Status (read-only)
+  [e894] Actions (Button, enabled) , [e896] Availability (Button, enabled) , [e897] Item/Unit (Button, enabled) , [e898] Product Advisor (Button, enabled)
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    Show Line Details
+    Book Sales Order
+    ATO Summary View
+    Copy Sales Order Prgram
+    Pricing Options
+    Star Model Status
+    Mass Price Adjustment Tool

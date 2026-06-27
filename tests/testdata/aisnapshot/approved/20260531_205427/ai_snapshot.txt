@@ -1,6 +1,8 @@
 Form: EMR Global Sales Order Entry Form (RMT_RMD_OU) - 8100499, EMERSON PROCESS MANAGEMENT SA DE CV
-  [e882] Tabs: Order Information | [*Line Items*]
-    [e876] Tabs: Main | [*Pricing*] | Shipping | Addresses | Export | Returns | Services | BU Specific | Others
+  [e882] Order Information (Tab, enabled)
+  [e882] Line Items (Tab, enabled, selected)
+    Main (Tab, enabled)
+    Pricing (Tab, enabled, selected)
       | # | Line RO | Ordered Item RO | Qty RO | Pricing UOM RO | Price Rollup RO | Pricing Context RO | Unit Selling Price RO | Price List RO | Agreement RO | Pricing Date RO | List Price RO | Extended Price RO | Contract Lines Sum RO | Payment Terms RO | Tax Code RO | Override Tax Code RO | Tax Handling RO | Tax Exempt Reason RO | Tax Exempt Number RO | Tax Amount RO | Calculate Price Flag Descr RO | Line Charges RO | INTERCO TP1 RO | TP1 CURRENCY RO | INTERCO TP3 RO | TP3 CURRENCY RO | SUB TP1 RO | SUB TP1 CURRENCY RO | SUB TLP1 RO | Lumpsum Discount RO | [ ] RO |
       |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
       | **1** | [e395] 1.1 | [e405] R-3051S*69198779 | [e324] 2 | [e254] EA | [e364]  | [e334]  | [e114] 719.37073 | [e104] RMT CORPORATE OCT 2024 | [e244]  | [e314] 14-APR-2026 14:41:36 | [e124] 719.37 | [e84] 1,438.74 | [e94]  | [e234] NET60 | [e64] USVERTEX | [e74]  | [e274] Standard | [e284]  | [e294]  | [e304] 0.00 | [e264] Freeze Price | [e134] 0.00 | [e144]  | [e154]  | [e164]  | [e174]  | [e184]  | [e194]  | [e204]  | [e224]  | [e344]  |
@@ -13,18 +15,27 @@ Form: EMR Global Sales Order Entry Form (RMT_RMD_OU) - 8100499, EMERSON PROCESS 
       | 8 | [e402]  | [e412]  | [e331]  | [e261]  | [e371]  | [e341]  | [e121]  | [e111]  | [e251]  | [e321]  | [e131]  | [e91]  | [e101]  | [e241]  | [e71]  | [e81]  | [e281]  | [e291]  | [e301]  | [e311]  | [e271]  | [e141]  | [e151]  | [e161]  | [e171]  | [e181]  | [e191]  | [e201]  | [e211]  | [e231]  | [e351]  |
       | 9 | [e403]  | [e413]  | [e332]  | [e262]  | [e372]  | [e342]  | [e122]  | [e112]  | [e252]  | [e322]  | [e132]  | [e92]  | [e102]  | [e242]  | [e72]  | [e82]  | [e282]  | [e292]  | [e302]  | [e312]  | [e272]  | [e142]  | [e152]  | [e162]  | [e172]  | [e182]  | [e192]  | [e202]  | [e212]  | [e232]  | [e352]  |
       | 10 | [e404]  | [e414]  | [e333]  | [e263]  | [e373]  | [e343]  | [e123]  | [e113]  | [e253]  | [e323]  | [e133]  | [e93]  | [e103]  | [e243]  | [e73]  | [e83]  | [e283]  | [e293]  | [e303]  | [e313]  | [e273]  | [e143]  | [e153]  | [e163]  | [e173]  | [e183]  | [e193]  | [e203]  | [e213]  | [e233]  | [e353]  |
-      [e415] Line Total (read-only) = 1,438.74 , [e416] Line Qty (read-only) = 2 , [e418] Each Total (read-only) = 719.37073
-      [e417] Description (read-only) = 3051S2TG5A2E11A1JD4E5M5P1Q4Q8QTT1Q15
-      [e419] Model String (read-only) , [e420] Cfg Status (read-only)
-    Buttons:
-      [e894] Actions (Button, enabled) , [e896] Availability (Button, enabled) , [e897] Item/Unit (Button, enabled) , [e898] Product Advisor (Button, enabled)
-    Tools Menu:
-      Find Customer
-      Workflow Status
-      Show Line Details
-      Book Sales Order
-      ATO Summary View
-      Copy Sales Order Prgram
-      Pricing Options
-      Star Model Status
-      Mass Price Adjustment Tool
+    Shipping (Tab, enabled)
+    Addresses (Tab, enabled)
+    Export (Tab, enabled)
+    Returns (Tab, enabled)
+    Services (Tab, enabled)
+    BU Specific (Tab, enabled)
+    Others (Tab, enabled)
+  [e415] Line Total (read-only)
+  [e416] Line Qty (read-only)
+  [e418] Each Total (read-only)
+  [e417] Description (read-only)
+  [e419] Model String (read-only)
+  [e420] Cfg Status (read-only)
+  [e894] Actions (Button, enabled) , [e896] Availability (Button, enabled) , [e897] Item/Unit (Button, enabled) , [e898] Product Advisor (Button, enabled)
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    Show Line Details
+    Book Sales Order
+    ATO Summary View
+    Copy Sales Order Prgram
+    Pricing Options
+    Star Model Status
+    Mass Price Adjustment Tool

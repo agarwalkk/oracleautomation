@@ -1,0 +1,96 @@
+{
+  "status": "ok",
+  "command": "scan",
+  "agent": {
+    "name": "ebs-dom-agent",
+    "version": "0.1.0"
+  },
+  "scan": {
+    "timestamp": "2026-06-27T10:11:03.599Z",
+    "windowCount": 6,
+    "visibleWindowCount": 1,
+    "raw": false
+  },
+  "windows": [
+    {
+      "id": 1,
+      "path": "JFrame[0]",
+      "parentPath": null,
+      "depth": 0,
+      "index": 0,
+      "siblingCount": 6,
+      "type": "javax.swing.JFrame",
+      "semanticType": "Window",
+      "className": "javax.swing.JFrame",
+      "simpleClassName": "JFrame",
+      "packageName": "javax.swing",
+      "name": "frame0",
+      "title": "Oracle Applications - BETSYR0: cloned from betsys0 on 18-AUG-25",
+      "text": null,
+      "value": null,
+      "accessibleName": "Oracle Applications - BETSYR0: cloned from betsys0 on 18-AUG-25",
+      "accessibleDescription": null,
+      "accessibleRole": "frame",
+      "tooltip": null,
+      "displayName": "Oracle Applications - BETSYR0: cloned from betsys0 on 18-AUG-25",
+      "confidence": 0.85,
+      "valueOptions": [],
+      "bounds": {
+        "x": -8,
+        "y": -8,
+        "width": 1936,
+        "height": 1048
+      },
+      "screenBounds": null,
+      "visible": true,
+      "showing": true,
+      "enabled": true,
+      "focusable": true,
+      "focused": false,
+      "editable": false,
+      "selected": false,
+      "cursorType": 0,
+      "cursorName": "Default Cursor",
+      "attributes": {
+        "getBackground": "javax.swing.plaf.ColorUIResource[r=238,g=238,b=238]",
+        "getForeground": "java.awt.Color[r=0,g=0,b=0]",
+        "treeRowCount": "256",
+        "treeRows": "8\t0\t0\tFile ALT F || 8\t0\t0\tEdit ALT E || 8\t0\t0\tView ALT V || 8\t0\t0\tFolder ALT l || 8\t0\t0\tTools ALT T || 8\t0\t0\tWindow ALT W || 8\t0\t0\tHelp ALT H || 8\t0\t0\tRecord: 1/1 || 8\t0\t0\t<OSC> || 9\t0\t0\tPrice Summary || 9\t0\t0\tAcceptance || 9\t0\t0\tOptions || 9\t0\t0\tTax Details || 9\t0\t0\tReturn Lot/Serial Numbers || 9\t0\t0\tSplit Line || 9\t0\t0\tUser-Defined Queries || 9\t0\t0\tNew Set || 9\t0\t0\tCancel Line(s) || 9\t0\t0\tChange Prompt || 9\t0\t0\tSave Folder || 9\t0\t0\tFolder Query || 9\t0\t0\tAutosize All || 9\t0\t0\tCalendar || 9\t0\t0\tCopy || 9\t0\t0\tSort Data || 9\t0\t0\tProcess Messages || 9\t0\t0\tNotification Window || 9\t0\t0\tSales Credits || 9\t0\t0\tRelease || 9\t0\t0\tFind Contact || 9\t0\t0\tChange Reason || 9\t0\t0\tOrder Lines Sorting Criteria || 9\t0\t0\tObject Properties || 9\t0\t0\tRelated Items || 9\t0\t0\tEnter Reason for..... || 9\t0\t0\tReason History || 9\t0\t0\tReservation Set || 9\t0\t0\tNote || 9\t0\t0\tOrder Usage || 9\t0\t0\tFind Customer Information || 9\t0\t0\tLaunch || 9\t0\t0\tRename Label || 9\t0\t0\tObject Properties || 9\t0\t0\tFolder Tools || 9\t0\t0\tProgress || 9\t0\t0\tAvailability || 9\t0\t0\tGo To Line || 9\t0\t0\tProgress || 9\t0\t0\tEMR Global Find  Orders/Quotes || 9\t0\t0\tOrder Organizer || 9\t0\t0\tEMR Global Sales Order Entry Form || 9\t0\t0\tFind <objects> || 9\t0\t0\tView Schedule Results || 9\t0\t0\tAdditional Order Information || 9\t0\t0\tAdditional Line Information || 9\t0\t0\tMulti Line ATP Results || 9\t0\t0\tApply Holds || 9\t0\t0\tRelease Sources || 9\t0\t0\tRelease Holds || 9\t0\t0\tCreate Purge Set || 9\t0\t0\tScheduling Organizer || 9\t0\t0\tModel Star Item Quantity || 9\t0\t0\tCommon URD Information || 9\t0\t0\tNavigator - EMR MFG Master Scheduler RMT || 9\t0\t0\tOracle Applications || 9\t0\t0\tNew mnemonic N || 9\t0\t0\tOpen mnemonic O || 9\t0\t0\tSave mnemonic S || 9\t0\t0\tSave and Proceed mnemonic v || 9\t0\t0\tNext Step mnemonic t || 9\t0\t0\tExport mnemonic E || 9\t0\t0\tPlace on Navigator mnemonic g || 9\t0\t0\tLog on as a Different User... mnemonic L || 9\t0\t0\tSwitch Responsibility... mnemonic w || 9\t0\t0\tPrint... mnemonic P || 9\t0\t0\tClose Form mnemonic C || 9\t0\t0\tExit Oracle Applications mnemonic x || 9\t0\t0\tUndo Typing mnemonic U || 9\t0\t0\tCut mnemonic t || 9\t0\t0\tCopy mnemonic C || 9\t0\t0\tPaste mnemonic P || 9\t0\t0\tDuplicate mnemonic l || 9\t0\t0\tClear mnemonic r || 9\t0\t0\tDelete mnemonic D || 9\t0\t0\tSelect All mnemonic S || 9\t0\t0\tDeselect All mnemonic A || 9\t0\t0\tEdit Field... mnemonic E || 9\t0\t0\tPreferences mnemonic f || 9\t0\t0\tShow Navigator mnemonic N || 9\t0\t0\tZoom mnemonic Z || 9\t0\t0\tFind... mnemonic F || 9\t0\t0\tFind All mnemonic i || 9\t0\t0\tQuery By Example mnemonic Q || 9\t0\t0\tRecord mnemonic d || 9\t0\t0\tTranslations... mnemonic T || 9\t0\t0\tAttachments... mnemonic A || 9\t0\t0\tSummary/Detail mnemonic S || 9\t0\t0\tRequests mnemonic R || 9\t0\t0\tNew... mnemonic N || 9\t0\t0\tOpen... mnemonic O || 9\t0\t0\tSave mnemonic S || 9\t0\t0\tSave As... mnemonic A || 9\t0\t0\tDelete... mnemonic D || 9\t0\t0\tShow Field... mnemonic F || 9\t0\t0\tHide Field mnemonic H || 9\t0\t0\tMove Right mnemonic R || 9\t0\t0\tMove Left mnemonic L || 9\t0\t0\tMove Up mnemonic U || 9\t0\t0\tMove Down mnemonic M || 9\t0\t0\tWiden Field mnemonic W || 9\t0\t0\tShrink Field mnemonic k || 9\t0\t0\tChange Prompt... mnemonic C || 9\t0\t0\tAutosize All... mnemonic z || 9\t0\t0\tSort Data... || 9\t0\t0\tView Query... mnemonic V || 9\t0\t0\tReset Query mnemonic Q || 9\t0\t0\tFolder Tools mnemonic T || 9\t0\t0\tFind Customer mnemonic C || 9\t0\t0\tWorkflow Status mnemonic W || 9\t0\t0\tShow Line Details mnemonic L || 9\t0\t0\tBook Sales Order || 9\t0\t0\tATO Summary View || 9\t0\t0\tCopy Sales Order Prgram || 9\t0\t0\tPricing Options || 9\t0\t0\tStar Model Status || 9\t0\t0\tMass Price Adjustment Tool || 9\t0\t0\tCascade mnemonic C || 9\t0\t0\tTile Horizontally mnemonic H || 9\t0\t0\tTile Vertically mnemonic V || 9\t0\t0\tWindow Help mnemonic W || 9\t0\t0\tOracle Applications Library mnemonic L || 9\t0\t0\tKeyboard Help... mnemonic K || 9\t0\t0\tDiagnostics mnemonic D || 9\t0\t0\tRecord History mnemonic R || 9\t0\t0\tAbout Oracle Applications... mnemonic O || 10\t0\t0\tRecord Above mnemonic R || 10\t0\t0\tField Above mnemonic F || 10\t0\t0\tRecord mnemonic R || 10\t0\t0\tField mnemonic F || 10\t0\t0\tBlock mnemonic B || 10\t0\t0\tForm mnemonic m || 10\t0\t0\tChange Password... mnemonic C || 10\t0\t0\tProfiles mnemonic P || 10\t0\t0\tEnter mnemonic E || 10\t0\t0\tRun mnemonic R || 10\t0\t0\tCancel mnemonic C || 10\t0\t0\tShow Last Criteria mnemonic S || 10\t0\t0\tCount Matching Records mnemonic M || 10\t0\t0\tFirst mnemonic F || 10\t0\t0\tLast mnemonic L || 10\t0\t0\tDisplay Database Error... mnemonic D || 10\t0\t0\tExamine... mnemonic E || 10\t0\t0\tLogging || 10\t0\t0\tTest Web Agent... mnemonic W || 10\t0\t0\tTrace mnemonic T || 10\t0\t0\tDebug mnemonic b || 10\t0\t0\tProperties mnemonic P || 10\t0\t0\tCustom Code mnemonic C || 11\t0\t0\tPreferences... || 11\t0\t0\tView... || 11\t0\t0\tNo Trace mnemonic N || 11\t0\t0\tRegular Trace mnemonic R || 11\t0\t0\tTrace with Binds mnemonic B || 11\t0\t0\tTrace with Waits mnemonic W || 11\t0\t0\tTrace with Binds and Waits mnemonic T || 11\t0\t0\tPL/SQL Profiling || 11\t0\t0\tItem mnemonic I || 11\t0\t0\tFolder mnemonic F || 11\t0\t0\tNormal mnemonic N || 11\t0\t0\tOff mnemonic O || 11\t0\t0\tCore Code Only mnemonic C || 11\t0\t0\tShow Custom Events mnemonic E || 11\t0\t0\tPersonalize mnemonic z || 15\t1\t0\tQuick Copy || 15\t0\t0\tCopy Header || 15\t0\t0\tCopy Lines || 15\t0\t0\tPricing Options || 15\t1\t0\tOrdered Item || 15\t0\t0\tSubstitute Item || 15\t1\t0\tQuote/Order Information || 15\t0\t0\tLine Information || 15\t0\t0\tAdvanced || 15\t0\t0\tHolds Information || 15\t0\t0\tScheduling || 15\t0\t0\tRetrobill Requests || 15\t1\t0\tSummary || 15\t0\t0\tLines || 15\t1\t0\tOrders || 15\t1\t0\tMain || 15\t0\t0\tPricing || 15\t0\t0\tShipping || 15\t0\t0\tAddresses || 15\t0\t0\tExport || 15\t0\t0\tReturns || 15\t0\t0\tServices || 15\t0\t0\tBU Specific || 15\t0\t0\tOthers || 15\t1\t0\tMain || 15\t0\t0\tShipping || 15\t0\t0\tFinancials || 15\t0\t0\tExport || 15\t0\t0\tOthers || 15\t0\t0\tAcknowledgement || 15\t0\t0\tProforma || 15\t1\t0\tOrder Information || 15\t0\t0\tLine Items || 15\t1\t0\tHolds || 15\t0\t0\tDeliveries || 15\t0\t0\tInvoices / Credit Memos || 15\t0\t0\tQuantity History || 15\t0\t0\tRetrobilling || 15\t1\t0\tHolds || 15\t0\t0\tReturns || 15\t0\t0\tDeliveries || 15\t0\t0\tInvoices / Credit Memos || 15\t0\t0\tInternal Requisition || 15\t0\t0\tDrop Ship || 15\t0\t0\tQuantity History || 15\t0\t0\tRetrobilling || 15\t1\t0\tCriteria || 15\t0\t0\tHold Name || 15\t1\t0\tFunctions || 15\t0\t0\tDocuments || 15\t0\t0\tProcesses || 17\t0\t0\tQuote/Order Information tab page Order Number || 17\t0\t0\tQuote Number || 17\t0\t0\tOrder CategoryList of Values || 17\t0\t0\tOrder TypeList of Values || 17\t0\t0\tCreated ByList of Values || 17\t0\t0\tCustomer POList of Values || 17\t0\t0\tStatusList of Values || 17\t0\t0\tCustomerList of Values || 17\t0\t0\tShip To CustList of Values || 17\t0\t0\tInvoice To CustList of Values || 17\t0\t0\tSalespersonList of Values || 17\t0\t0\tRequisition NumberList of Values || 17\t0\t0\tOrder SourceList of Values || 17\t0\t0\tOrder Source Reference || 17\t0\t0\tEntered DateList of Values || 17\t0\t0\tToList of Values || 17\t0\t0\tInvoice NumberList of Values || 17\t0\t0\t[ ] || 17\t0\t0\tAgreementList of Values || 17\t0\t0\tPrice ListList of Values || 17\t0\t0\tInland Carrier/Ship MethodList of Values || 17\t0\t0\tWarehouseList of Values || 17\t0\t0\tOn Hold || 17\t0\t0\tEnd UserList of Values || 17\t0\t0\tPO ReceivedList of Values || 17\t0\t0\tOrder AdminList of Values || 17\t0\t0\tOpportunity No || 17\t0\t0\tRep Order # || 17\t0\t0\tKOBList of Values || 17\t0\t0\tOrder TierList of Values || 17\t0\t0\tTech ContactList of Values || 17\t0\t0\tUltimate DestList of Values"
+      },
+      "reflection": {
+        "getName": "frame0",
+        "getTitle": "Oracle Applications - BETSYR0: cloned from betsys0 on 18-AUG-25",
+        "getBackground": "javax.swing.plaf.ColorUIResource[r=238,g=238,b=238]",
+        "getForeground": "java.awt.Color[r=0,g=0,b=0]",
+        "isVisible": "true",
+        "isShowing": "true",
+        "isEnabled": "true",
+        "isFocusable": "true",
+        "isFocusOwner": "false",
+        "getState": "0"
+      },
+      "locators": [
+        {
+          "strategy": "path",
+          "value": "JFrame[0]",
+          "confidence": 0.5
+        },
+        {
+          "strategy": "accessibleName",
+          "value": "Oracle Applications - BETSYR0: cloned from betsys0 on 18-AUG-25",
+          "confidence": 0.9
+        },
+        {
+          "strategy": "name",
+          "value": "frame0",
+          "confidence": 0.8
+        },
+        {
+          "strategy": "title",
+          "value": "Oracle Applications - BETSYR0: cloned from betsys0 on 18-AUG-25",
+          "confidence": 0.75
+        }
+      ]
+    }
+  ]
+}

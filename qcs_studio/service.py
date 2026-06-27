@@ -287,6 +287,53 @@ class StudioService:
     def list_windows(self) -> list[dict]:
         windows: list[dict] = []
         for proc in list_java_processes():
+            title = ""
+            class_name = ""
+            if hasattr(ctypes, "windll"):
+                try:
+                    user32 = ctypes.windll.user32
+                    found_windows = []
+                    EnumWindowsProc = ctypes.WINFUNCTYPE(
+                        ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p
+                    )
+
+                    def _enum(hwnd: int, _lparam: int) -> bool:
+                        if not user32.IsWindowVisible(ctypes.c_void_p(hwnd)):
+                            return True
+                        if user32.GetWindow(ctypes.c_void_p(hwnd), 4): # GW_OWNER
+                            return True
+                        proc_id = ctypes.c_ulong(0)
+                        user32.GetWindowThreadProcessId(
+                            ctypes.c_void_p(hwnd), ctypes.byref(proc_id)
+                        )
+                        if int(proc_id.value) == proc.pid:
+                            t_len = user32.GetWindowTextLengthW(ctypes.c_void_p(hwnd))
+                            t_val = ""
+                            if t_len > 0:
+                                buf = ctypes.create_unicode_buffer(t_len + 1)
+                                user32.GetWindowTextW(
+                                    ctypes.c_void_p(hwnd), buf, t_len + 1
+                                )
+                                t_val = buf.value
+                            
+                            c_buf = ctypes.create_unicode_buffer(256)
+                            user32.GetClassNameW(ctypes.c_void_p(hwnd), c_buf, 256)
+                            c_val = c_buf.value
+                            found_windows.append((t_val, c_val))
+                        return True
+
+                    callback = EnumWindowsProc(_enum)
+                    user32.EnumWindows(callback, 0)
+
+                    if found_windows:
+                        with_title = [w for w in found_windows if w[0]]
+                        if with_title:
+                            title, class_name = with_title[0]
+                        else:
+                            title, class_name = found_windows[0]
+                except Exception:
+                    pass
+
             windows.append(
                 {
                     "source": "java_forms",
@@ -294,6 +341,8 @@ class StudioService:
                     "label": f"[{proc.pid}] {proc.main}",
                     "main": proc.main,
                     "jvm_args": proc.jvm_args,
+                    "title": title,
+                    "type": class_name,
                 }
             )
         return windows
@@ -406,6 +455,31 @@ class StudioService:
         bundle.tree = list(payload.get("tree") or [])
         bundle.raw_elements = enriched
         bundle.full_elements = full_elements
+
+        # Auto-dump the scan details (raw DOM, screenshot, and snapshot text)
+        # into tests/testdata/aisnapshot/new/<timestamp>/
+        try:
+            import json
+            import shutil
+            import sys
+            ts_folder = datetime.now().strftime("%Y%m%d_%H%M%S")
+            target_dir = Path("tests/testdata/aisnapshot/new") / ts_folder
+            target_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 1. java_scan_dump.json
+            with open(target_dir / "java_scan_dump.json", "w", encoding="utf-8") as f:
+                json.dump(bundle.raw_dom, f, indent=2, ensure_ascii=False)
+            
+            # 2. screenshot.png
+            if bundle.screenshot_path and Path(bundle.screenshot_path).exists():
+                shutil.copy2(bundle.screenshot_path, target_dir / "screenshot.png")
+            
+            # 3. ai_snapshot.txt
+            with open(target_dir / "ai_snapshot.txt", "w", encoding="utf-8") as f:
+                f.write(bundle.snapshot_text)
+        except Exception as e:
+            import sys
+            print(f"Error auto-dumping scan files: {e}", file=sys.stderr)
 
         # Persist the updated bundle back into the shared draft cache.
         StudioService._drafts[scan_id] = bundle

@@ -51,6 +51,8 @@ type ScanTarget = {
   source: string;
   pid: number;
   label: string;
+  title?: string;
+  type?: string;
 };
 
 type ScanResult = {
@@ -389,11 +391,18 @@ export function App() {
         <div className="scan-controls">
           <select value={selectedPid} onChange={(e) => setSelectedPid(e.target.value)}>
             <option value="">Select Oracle Java window</option>
-            {targets.map((target) => (
-              <option key={target.pid} value={target.pid}>
-                {target.label}
-              </option>
-            ))}
+            {targets.map((target) => {
+              const displayLabel = target.title && target.type
+                ? `[${target.pid}] ${target.title} (${target.type})`
+                : target.title
+                ? `[${target.pid}] ${target.title}`
+                : target.label;
+              return (
+                <option key={target.pid} value={target.pid}>
+                  {displayLabel}
+                </option>
+              );
+            })}
           </select>
           <button onClick={runScan} disabled={busy || !selectedPid}>
             {busy ? "Scanning..." : "Scan"}

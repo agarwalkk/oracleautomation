@@ -596,7 +596,45 @@ def java_elements_to_action_snapshot(
     return result
 
 
-def build_action_context(scan: dict) -> tuple[list[dict[str, Any]], dict[str, dict]]:
+def _populate_bounds(nodes: list[dict]) -> dict | None:
+    """Post-process the tree to compute bounds for any node with zero bounds by enclosing its children."""
+    overall_x1 = float('inf')
+    overall_y1 = float('inf')
+    overall_x2 = float('-inf')
+    overall_y2 = float('-inf')
+    
+    for node in nodes:
+        children = node.get("children") or []
+        child_bounds = _populate_bounds(children) if children else None
+        
+        b = node.get("bounds") or {}
+        x = b.get("x", 0)
+        y = b.get("y", 0)
+        w = b.get("width", 0)
+        h = b.get("height", 0)
+        
+        if x == 0 and y == 0 and w == 0 and h == 0:
+            if child_bounds:
+                node["bounds"] = child_bounds
+                x, y, w, h = child_bounds["x"], child_bounds["y"], child_bounds["width"], child_bounds["height"]
+        
+        if w > 0 and h > 0:
+            overall_x1 = min(overall_x1, x)
+            overall_y1 = min(overall_y1, y)
+            overall_x2 = max(overall_x2, x + w)
+            overall_y2 = max(overall_y2, y + h)
+            
+    if overall_x1 != float('inf'):
+        return {
+            "x": overall_x1,
+            "y": overall_y1,
+            "width": overall_x2 - overall_x1,
+            "height": overall_y2 - overall_y1
+        }
+    return None
+
+
+def build_action_tree(scan: dict) -> tuple[list[dict[str, Any]], dict[str, dict]]:
     """Return ``(action_tree, {element_id: repo_element})`` for a scan.
 
     The tree is the PRIMARY output. It is a hierarchical list of nodes
@@ -610,9 +648,6 @@ def build_action_context(scan: dict) -> tuple[list[dict[str, Any]], dict[str, di
             [e36] Order Number , [e39] Order Type (LOV) , ...
           Buttons:
             [e226] Clear (Button, enabled) , ...
-
-    The AI snapshot text is derived from the tree via
-    :func:`render_snapshot_text`.
 
     Only actionable elements from the selected tab are included.
     Background form modules are excluded via :func:`active_window_scan`.
@@ -824,7 +859,22 @@ def build_action_context(scan: dict) -> tuple[list[dict[str, Any]], dict[str, di
         for el in actionable
         if el.get("elementid")
     }
+    _populate_bounds(tree)
     return tree, id_map
+
+
+def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
+    """Return ``(snapshot_text, {element_id: repo_element})`` for a scan.
+
+    The AI snapshot text is derived from the tree via
+    :func:`render_snapshot_text`.
+    """
+    tree, id_map = build_action_tree(scan)
+    if not id_map:
+        return "(no actionable elements found)", id_map
+    form_title = active_form_title(active_window_scan(scan))
+    snapshot_text = render_snapshot_text(tree, form_title)
+    return snapshot_text, id_map
 
 
 def build_action_payload(
@@ -832,7 +882,7 @@ def build_action_payload(
 ) -> dict[str, Any]:
     """Return AI text + UI tree from one canonical snapshot source.
 
-    WHY: The tree is the PRIMARY output from ``build_action_context``.
+    WHY: The tree is the PRIMARY output from ``build_action_tree``.
     Text is DERIVED from the tree via ``render_snapshot_text``, ensuring
     the AI snapshot and the Studio UI always agree. Previously text was
     built independently and then parsed back into a tree, which could drift.
@@ -840,7 +890,13 @@ def build_action_payload(
     Since screenshots are no longer cropped, element coordinates are raw
     (unadjusted) and align directly with the fullscreen screenshot.
     """
-    tree, id_map = build_action_context(scan)
+    tree, id_map = build_action_tree(scan)
+    if not id_map:
+        return {
+            "text": "(no actionable elements found)",
+            "tree": tree,
+            "id_map": id_map,
+        }
     # Extract form title from the scoped scan, not from the tree root.
     # The tree is a flat list of top-level children (no Form wrapper),
     # so active_form_title() is the canonical source for the title.
@@ -1249,15 +1305,28 @@ def _row_field_names(
     return frozenset(names)
 
 
+def _row_sigs_match(sig1: frozenset[str], sig2: frozenset[str]) -> bool:
+    """Return True if two row signatures are identical or highly similar (Jaccard similarity >= 0.7)."""
+    if sig1 == sig2:
+        return True
+    if not sig1 or not sig2:
+        return False
+    intersection = sig1 & sig2
+    if len(intersection) >= 3:
+        union = sig1 | sig2
+        if len(intersection) / len(union) >= 0.7:
+            return True
+    return False
+
+
 def _detect_table(
     rows: list[list[dict]], tab_page_prefix: str | None
 ) -> tuple[list[list[dict]], list[list[dict]], list[list[dict]]]:
     """Split rows into (table_rows, pre_rows, post_rows).
 
-    A table is detected when ≥2 consecutive rows share the same
-    normalized field names.  The active record row may have extra
-    fields (checkboxes only visible on focus) — these superset rows
-    are included in the table run.
+    A table is detected when ≥2 consecutive rows share the same or highly similar
+    normalized field names. The active record row may have extra fields
+    (checkboxes only visible on focus) — these superset rows are included in the table run.
     Returns ([], all_rows, []) when no table.
     """
     if len(rows) < 2:
@@ -1266,12 +1335,12 @@ def _detect_table(
     # Compute signatures
     sigs = [_row_field_names(r, tab_page_prefix) for r in rows]
 
-    # Find the longest run of identical signatures
+    # Find the longest run of identical/similar signatures
     best_start = best_end = 0
     i = 0
     while i < len(sigs):
         j = i + 1
-        while j < len(sigs) and sigs[j] == sigs[i]:
+        while j < len(sigs) and _row_sigs_match(sigs[j], sigs[i]):
             j += 1
         run_len = j - i
         if run_len >= 2 and run_len > (best_end - best_start):
@@ -1281,13 +1350,15 @@ def _detect_table(
     if best_end - best_start < 2:
         return [], rows, []
 
-    # Extend the run to include adjacent superset rows (active record may
+    # Extend the run to include adjacent superset/similar rows (active record may
     # have extra checkboxes or buttons that are only visible on focus).
     base_sig = sigs[best_start]
-    while best_start > 0 and sigs[best_start - 1] >= base_sig:
+    while best_start > 0 and (sigs[best_start - 1] >= base_sig or _row_sigs_match(sigs[best_start - 1], base_sig)):
         best_start -= 1
-    while best_end < len(sigs) and sigs[best_end] >= base_sig:
+    while best_end < len(sigs) and (sigs[best_end] >= base_sig or _row_sigs_match(sigs[best_end], base_sig)):
         best_end += 1
+
+    return rows[best_start:best_end], rows[:best_start], rows[best_end:]
 
     return rows[best_start:best_end], rows[:best_start], rows[best_end:]
 
@@ -1635,6 +1706,7 @@ def _build_action_tree(
 
     # Build a combined map: tab title → element_id from ALL TabBar nodes
     all_tab_title_to_eid: dict[str, str] = {}
+    all_tab_title_to_bounds: dict[str, dict] = {}
     if tab_bar_nodes:
         for n in tab_bar_nodes:
             for child in n.get("children") or []:
@@ -1643,6 +1715,23 @@ def _build_action_tree(
                 child_id = child.get("id")
                 if (child_sc == "TabBarItem" or child.get("semanticType") == "Tab") and child_name and child_id is not None:
                     all_tab_title_to_eid[child_name] = f"e{child_id}"
+                    
+                    screen = child.get("screenBounds") or {}
+                    b = child.get("bounds") or {}
+                    x = _screen_x(screen)
+                    y = _screen_y(screen)
+                    width = _int(screen.get("width"), b.get("width", 0))
+                    height = _int(screen.get("height"), b.get("height", 0))
+                    if x < 0 or y < 0:
+                        x = _int(b.get("x"), 0)
+                        y = _int(b.get("y"), 0)
+                    
+                    all_tab_title_to_bounds[child_name] = {
+                        "x": x,
+                        "y": y,
+                        "width": width,
+                        "height": height,
+                    }
 
     # ── Build inner tab nodes first (they will be nested under the selected outer tab) ──
     inner_tab_nodes: list[dict[str, Any]] = []
@@ -1665,7 +1754,7 @@ def _build_action_tree(
             "role": "Tab",
             "states": state_str,
             "included": True,
-            "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
+            "bounds": all_tab_title_to_bounds.get(t, {"x": 0, "y": 0, "width": 0, "height": 0}),
             "children": [],
         }
 
@@ -1676,18 +1765,7 @@ def _build_action_tree(
 
             for row in pre_rows:
                 row_children = [_field_node(el, tab_page_prefix) for el in row]
-                if len(row_children) == 1:
-                    tab_node["children"].append(row_children[0])
-                else:
-                    tab_node["children"].append({
-                        "element_ref": _synth_ref(),
-                        "label": "",
-                        "role": "FieldRow",
-                        "states": "",
-                        "included": True,
-                        "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
-                        "children": row_children,
-                    })
+                tab_node["children"].extend(row_children)
 
             if table_rows:
                 selected_y = _detect_record_indicator_y(
@@ -1700,18 +1778,7 @@ def _build_action_tree(
 
             for row in post_rows:
                 row_children = [_field_node(el, tab_page_prefix) for el in row]
-                if len(row_children) == 1:
-                    tab_node["children"].append(row_children[0])
-                else:
-                    tab_node["children"].append({
-                        "element_ref": _synth_ref(),
-                        "label": "",
-                        "role": "FieldRow",
-                        "states": "",
-                        "included": True,
-                        "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
-                        "children": row_children,
-                    })
+                tab_node["children"].extend(row_children)
 
         inner_tab_nodes.append(tab_node)
 
@@ -1739,7 +1806,7 @@ def _build_action_tree(
                 "role": "Tab",
                 "states": state_str,
                 "included": True,
-                "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
+                "bounds": all_tab_title_to_bounds.get(t, {"x": 0, "y": 0, "width": 0, "height": 0}),
                 "children": [],
             }
 
@@ -1755,36 +1822,15 @@ def _build_action_tree(
 
     # ── Form-level fields ──────────────────────────────────────────────
 
-    # ── Form-level fields ──────────────────────────────────────────────
     if form_field_elements:
         form_rows = _group_by_rows(form_field_elements)
         for row in form_rows:
             row_children = [_field_node(el, tab_page_prefix) for el in row]
-            if len(row_children) == 1:
-                tree_children.append(row_children[0])
-            else:
-                tree_children.append({
-                    "element_ref": _synth_ref(),
-                    "label": "",
-                    "role": "FieldRow",
-                    "states": "",
-                    "included": True,
-                    "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
-                    "children": row_children,
-                })
-
+            tree_children.extend(row_children)
     # ── Footer buttons ─────────────────────────────────────────────────
     if footer_buttons:
-        btn_group = {
-            "element_ref": _synth_ref(),
-            "label": "Buttons",
-            "role": "Group",
-            "states": "",
-            "included": True,
-            "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
-            "children": [_field_node(el, tab_page_prefix) for el in footer_buttons],
-        }
-        tree_children.append(btn_group)
+        for el in footer_buttons:
+            tree_children.append(_field_node(el, tab_page_prefix))
 
     # ── Tree panels after tabs ─────────────────────────────────────────
     if not tree_before_tabs:
@@ -2022,15 +2068,7 @@ def _build_dialog_tree(
                 "bounds": _bounds_for(el),
                 "children": [],
             })
-        form_children.append({
-            "element_ref": _sref(),
-            "label": "Buttons",
-            "role": "Group",
-            "states": "",
-            "included": True,
-            "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
-            "children": btn_children,
-        })
+        form_children.extend(btn_children)
 
     return [
         {
@@ -2171,15 +2209,7 @@ def _build_popup_tree(
                 "bounds": _bounds_for(el),
                 "children": [],
             })
-        form_children.append({
-            "element_ref": _sref(),
-            "label": "Buttons",
-            "role": "Group",
-            "states": "",
-            "included": True,
-            "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
-            "children": btn_children,
-        })
+        form_children.extend(btn_children)
 
     return [
         {
