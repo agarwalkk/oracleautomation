@@ -1,127 +1,162 @@
 #!/usr/bin/env python3
-"""Parses and prints the diagnostic reflection probe results from a scan dump."""
-import argparse
+"""Read the ReflectionProbe output from a live scan or scan dump and surface
+tab/canvas/block ownership candidates.
+
+Usage:
+    python scripts/probe_report.py [<java_scan_dump.json>]
+
+For each probed field it prints: the field's label, then — for the field, each
+ancestor canvas, and any nested Forms handler — every method/field whose VALUE
+looks like it could identify the owning tab page / canvas / block. The goal is to
+find ONE member that returns a stable per-tab identifier (e.g. "HOLDS", a canvas
+name, or a tab-page object whose name differs per tab). If found, that member
+becomes the agent's extracted `formsTabPage` signal and the Python box-dedication
+heuristic can be retired.
+"""
 import json
 import sys
-from typing import Any, Dict, List
+
+# Members whose value is worth showing prominently (strong ownership hints).
+STRONG = ("canvas", "tabpage", "tab_page", "page", "block", "sheet", "module")
+# Noise to de-emphasise (present on everything, rarely the discriminator).
+WEAK = ("name", "label", "title", "parent", "container")
 
 
-def find_probed_nodes(node: Dict[str, Any]) -> List[Dict[str, Any]]:
-    nodes = []
+def _hits(blob: str, keys) -> bool:
+    low = blob.lower()
+    return any(k in low for k in keys)
+
+
+FULL = False  # set by --full: also print the complete method/field inventory
+
+
+def _print_obj(obj: dict, indent: str, tag: str = "") -> None:
+    cls = obj.get("class", "?")
+    print(f"{indent}{tag}{cls}")
+    for key in ("methodValues", "fieldValues"):
+        raw = str(obj.get(key) or "")
+        if not raw:
+            continue
+        for item in raw.split(" | "):
+            if not item.strip():
+                continue
+            mark = "  ★" if _hits(item, STRONG) else ("   " if _hits(item, WEAK) else "  •")
+            print(f"{indent}  {mark} {item}")
+    if FULL:
+        # The complete inventory (names + types, no values) — mine this for
+        # possible actions / richer metadata (required, queryable, LOV, nav).
+        for key, lbl in (("methods", "all methods"), ("fields", "all fields")):
+            raw = str(obj.get(key) or "")
+            if raw:
+                print(f"{indent}    [{lbl}] {raw}")
+    for nest in obj.get("nested") or []:
+        _print_obj(nest.get("obj") or {}, indent + "    ", tag=f"via {nest.get('via')} -> ")
+
+
+def _walk(node, out):
     attrs = node.get("attributes") or {}
-    if "_probe" in attrs or "_probeError" in attrs:
-        nodes.append(node)
-    for child in node.get("children") or []:
-        nodes.extend(find_probed_nodes(child))
-    return nodes
+    if "_probe" in attrs:
+        out.append(node)
+    if "_probeError" in attrs:
+        out.append(node)
+    for c in node.get("children") or []:
+        _walk(c, out)
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Report reflection probe data from a scan dump.")
-    ap.add_argument("dump_file", help="Path to the JSON scan dump")
-    ap.add_argument("--out", default=None, help="Output file path (default: stdout)")
-    args = ap.parse_args()
+    global FULL
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    import argparse
+    ap = argparse.ArgumentParser(
+        description="Report reflection probe data from a live scan or scan dump."
+    )
+    ap.add_argument(
+        "dump_file",
+        nargs="?",
+        default=None,
+        help="Path to the JSON scan dump. If omitted, performs a live scan.",
+    )
+    ap.add_argument(
+        "--full",
+        action="store_true",
+        help="Print the complete method/field name inventory.",
+    )
+    ap.add_argument(
+        "--pid",
+        type=int,
+        default=None,
+        help="Forms JVM pid (optional, for live scan)",
+    )
+    ap.add_argument(
+        "--contains",
+        default=None,
+        help="process-name substring to match (optional, for live scan)",
+    )
+    parsed_args = ap.parse_args()
 
-    try:
-        with open(args.dump_file, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except Exception as e:
-        print(f"Failed to read {args.dump_file}: {e}", file=sys.stderr)
-        return 1
+    FULL = parsed_args.full
 
-    windows = data.get("windows") or []
-    probed = []
-    for w in windows:
-        probed.extend(find_probed_nodes(w))
-
-    # Determine output stream/file
-    out_fh = sys.stdout
-    if args.out:
+    if parsed_args.dump_file:
         try:
-            out_fh = open(args.out, "w", encoding="utf-8")
+            with open(parsed_args.dump_file, "r", encoding="utf-8") as fh:
+                d = json.load(fh)
         except Exception as e:
-            print(f"Failed to open output file {args.out}: {e}", file=sys.stderr)
+            print(f"Failed to read {parsed_args.dump_file}: {e}", file=sys.stderr)
+            return 1
+    else:
+        try:
+            from qcs_java_agent.driver import JavaAgentDriver
+        except Exception as e:
+            print("Could not import qcs_java_agent — run this from the repo root.",
+                  file=sys.stderr)
+            print("  ", e, file=sys.stderr)
+            return 2
+
+        try:
+            driver = JavaAgentDriver.attach(pid=parsed_args.pid, contains=parsed_args.contains)
+        except Exception as e:
+            print("Attach failed. Is the Oracle Forms applet running?", file=sys.stderr)
+            print("  Try --pid <pid> or --contains <name>.  Detail:", e, file=sys.stderr)
             return 1
 
-    def write_line(*args_print, **kwargs):
-        kwargs["file"] = out_fh
-        print(*args_print, **kwargs)
+        print(f"Attached to pid {driver.pid}. Running live scan with probe=True (setting PROBE_ENABLED as true in DomScanner)...")
+        try:
+            d = driver.scan(probe=True)
+        except Exception as e:
+            print("Scan failed. Detail:", e, file=sys.stderr)
+            return 1
 
-    try:
-        write_line(f"Found {len(probed)} probed node(s) in {args.dump_file}\n")
+    probed = []
+    for w in d.get("windows") or []:
+        _walk(w, probed)
+    if not probed:
+        print("No _probe attributes found. Did you rebuild the agent with the "
+              "ReflectionProbe wiring and focus a field before scanning?")
+        return 1
 
-        for idx, node in enumerate(probed, 1):
-            write_line("=" * 80)
-            write_line(f"PROBED FIELD #{idx}")
-            write_line(f"  ID: {node.get('id')}")
-            write_line(f"  Path: {node.get('path')}")
-            write_line(f"  Display Name: {node.get('displayName')}")
-            write_line(f"  Semantic Type: {node.get('semanticType')}")
-            write_line(f"  Class: {node.get('type')}")
-            write_line("-" * 80)
+    print(f"Found {len(probed)} probed field(s). ★ = strong ownership candidate.\n")
+    for node in probed:
+        label = (node.get("canonicalLabel") or node.get("accessibleName")
+                 or node.get("name") or f"e{node.get('id')}")
+        focused = " (FOCUSED)" if node.get("focused") else ""
+        print("=" * 78)
+        print(f"FIELD: {label}{focused}   ownerTab={node.get('ownerTab')!r}")
+        attrs = node.get("attributes") or {}
+        if "_probeError" in attrs:
+            print("  PROBE ERROR:", attrs["_probeError"])
+            continue
+        report = json.loads(attrs["_probe"])
+        _print_obj(report.get("target") or {}, "  ", tag="TARGET  ")
+        print("  --- ancestor canvases ---")
+        for anc in report.get("ancestors") or []:
+            _print_obj(anc, "  ", tag="ANCESTOR ")
+        print()
 
-            attrs = node.get("attributes") or {}
-            if "_probeError" in attrs:
-                write_line(f"  [ERROR] {attrs['_probeError']}")
-                continue
-
-            probe_str = attrs.get("_probe")
-            if not probe_str:
-                write_line("  [Empty _probe attribute]")
-                continue
-
-            try:
-                probe = json.loads(probe_str)
-            except Exception as e:
-                write_line(f"  [ERROR] Failed to parse _probe JSON: {e}")
-                write_line(f"  Raw: {probe_str[:200]}...")
-                continue
-
-            # Print target probe details
-            target = probe.get("target") or {}
-            write_line("  TARGET DETAILS:")
-            write_line(f"    Class: {target.get('class')}")
-            write_line(f"    Method Values: {target.get('methodValues')}")
-            write_line(f"    Field Values: {target.get('fieldValues')}")
-            nested = target.get("nested") or []
-            if nested:
-                write_line("    Nested:")
-                for n in nested:
-                    via = n.get("via")
-                    obj = n.get("obj") or {}
-                    write_line(f"      via {via}:")
-                    write_line(f"        Class: {obj.get('class')}")
-                    write_line(f"        Method Values: {obj.get('methodValues')}")
-                    write_line(f"        Field Values: {obj.get('fieldValues')}")
-
-            write_line("-" * 80)
-
-            # Print ancestor chain
-            ancestors = probe.get("ancestors") or []
-            write_line(f"  ANCESTOR CHAIN ({len(ancestors)} levels):")
-            for a_idx, anc in enumerate(ancestors):
-                write_line(f"    [{a_idx}] Class: {anc.get('class')}")
-                m_vals = anc.get("methodValues")
-                f_vals = anc.get("fieldValues")
-                if m_vals:
-                    write_line(f"        Method Values: {m_vals}")
-                if f_vals:
-                    write_line(f"        Field Values: {f_vals}")
-                nested = anc.get("nested") or []
-                if nested:
-                    write_line("        Nested:")
-                    for n in nested:
-                        via = n.get("via")
-                        obj = n.get("obj") or {}
-                        write_line(f"          via {via}:")
-                        write_line(f"            Class: {obj.get('class')}")
-                        write_line(f"            Method Values: {obj.get('methodValues')}")
-                        write_line(f"            Field Values: {obj.get('fieldValues')}")
-            write_line("=" * 80 + "\n")
-    finally:
-        if args.out:
-            out_fh.close()
-
+    print("\nWhat to look for: a ★ line (or any line) whose VALUE differs per tab "
+          "and is stable across that tab's fields — e.g. a getCanvas()/getTabPage() "
+          "returning the page name, or a handler object whose name is 'HOLDS' etc. "
+          "Send me this output and I'll wire it into extraction.")
     return 0
 
 
