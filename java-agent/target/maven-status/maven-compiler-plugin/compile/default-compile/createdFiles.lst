@@ -24,6 +24,7 @@ com\pyebsdom\agent\AwtContext.class
 com\pyebsdom\agent\JsonUtil.class
 com\pyebsdom\testapp\SampleSwingApp$3.class
 com\pyebsdom\agent\ActionExecutor.class
+com\pyebsdom\agent\EbsDomBootstrapAgent$1.class
 com\pyebsdom\agent\AgentCommand.class
 com\pyebsdom\agent\ReflectionProbe.class
 com\pyebsdom\agent\AttachAgentByPid.class
@@ -31,6 +32,7 @@ com\pyebsdom\agent\Bounds.class
 com\pyebsdom\agent\TreeItemExpander$1.class
 com\pyebsdom\testapp\SampleSwingApp$1.class
 com\pyebsdom\agent\PngWriter.class
+com\pyebsdom\agent\EbsDomBootstrapAgent$FreshAgentLoader.class
 com\pyebsdom\agent\EbsDomBootstrapAgent.class
 com\pyebsdom\agent\IdentityResolver$Candidate.class
 com\pyebsdom\agent\ReflectionExtractor.class

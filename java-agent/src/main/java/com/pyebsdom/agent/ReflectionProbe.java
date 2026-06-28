@@ -94,7 +94,8 @@ public final class ReflectionProbe {
                     handler = f.get(comp);
                     if (handler != null)
                         break;
-                } catch (Throwable ignored) {}
+                } catch (Throwable ignored) {
+                }
             }
             if (handler == null)
                 return "{}";
@@ -105,7 +106,8 @@ public final class ReflectionProbe {
                 Method m = handler.getClass().getMethod("getDispatcher");
                 m.setAccessible(true);
                 dispatcher = m.invoke(handler);
-            } catch (Throwable ignored) {}
+            } catch (Throwable ignored) {
+            }
             if (dispatcher == null) {
                 for (Class<?> c = handler.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
                     try {
@@ -114,7 +116,8 @@ public final class ReflectionProbe {
                         dispatcher = f.get(handler);
                         if (dispatcher != null)
                             break;
-                    } catch (Throwable ignored) {}
+                    } catch (Throwable ignored) {
+                    }
                 }
             }
 
@@ -123,7 +126,8 @@ public final class ReflectionProbe {
                 Method m = handler.getClass().getMethod("getApplet");
                 m.setAccessible(true);
                 applet = m.invoke(handler);
-            } catch (Throwable ignored) {}
+            } catch (Throwable ignored) {
+            }
             if (applet == null) {
                 for (Class<?> c = handler.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
                     try {
@@ -132,17 +136,30 @@ public final class ReflectionProbe {
                         applet = f.get(handler);
                         if (applet != null)
                             break;
-                    } catch (Throwable ignored) {}
+                    } catch (Throwable ignored) {
+                    }
                 }
+            }
+
+            // Targeted canvas chain — SAFE (no Connection/network getters):
+            // dispatcher → getRootWindow → mContent (FormCanvas).
+            Object rootWindow = pInvoke(dispatcher, "getRootWindow");
+            Object formCanvas = null;
+            if (rootWindow != null) {
+                formCanvas = pInvoke(rootWindow, "getContent");
+                if (formCanvas == null)
+                    formCanvas = pField(rootWindow, "mContent");
             }
 
             StringBuilder sb = new StringBuilder();
             sb.append("{");
             sb.append("\"dispatcher\":").append(dispatcher != null ? inspect(dispatcher, 1) : "null");
+            sb.append(",\"formCanvas\":").append(formCanvas != null ? inspect(formCanvas, 2) : "null");
             sb.append(",\"applet\":").append(applet != null ? inspect(applet, 1) : "null");
             sb.append("}");
             return sb.toString();
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
         return "{}";
     }
 
@@ -294,5 +311,29 @@ public final class ReflectionProbe {
         } catch (Throwable t) {
             return v.getClass().getName();
         }
+    }
+
+    private static Object pInvoke(Object o, String m) {
+        try {
+            java.lang.reflect.Method me = o.getClass().getMethod(m);
+            me.setAccessible(true);
+            return me.invoke(o);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static Object pField(Object o, String name) {
+        for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f.get(o);
+            } catch (NoSuchFieldException ignored) {
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+        return null;
     }
 }

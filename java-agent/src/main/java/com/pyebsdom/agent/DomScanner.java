@@ -194,6 +194,10 @@ public final class DomScanner {
         // see the whole scan (e.g. a label duplicated across two open frames).
         IdentityResolver.resolve(windowNodes);
 
+        // Focus-proof current item from the Forms engine (survives window
+        // deactivation).
+        markCurrentFormsItem(windows, windowNodes);
+
         int visible = 0;
         for (Window w : windows)
             if (safeIsVisible(w))
@@ -1388,5 +1392,44 @@ public final class DomScanner {
             sb.append("]}");
             return sb.toString();
         }
+    }
+
+    private static void markCurrentFormsItem(Window[] windows, List<DomNode> roots) {
+        Component item = firstFormsItem(windows);
+        String curId = item == null ? null : FormsHandler.currentItemHandlerId(item);
+        if (curId == null)
+            return;
+        for (DomNode r : roots)
+            markByHandlerId(r, curId);
+    }
+
+    private static Component firstFormsItem(Component c) {
+        if (c != null && FormsHandler.handlerId(c) != null)
+            return c;
+        if (c instanceof Container)
+            for (Component k : ((Container) c).getComponents()) {
+                Component r = firstFormsItem(k);
+                if (r != null)
+                    return r;
+            }
+        return null;
+    }
+
+    private static Component firstFormsItem(Window[] windows) {
+        for (Window w : windows) {
+            Component r = firstFormsItem(w);
+            if (r != null)
+                return r;
+        }
+        return null;
+    }
+
+    private static void markByHandlerId(DomNode n, String curId) {
+        if (curId.equals(n.handlerId)) {
+            n.current = true;
+            n.focused = true;
+        }
+        for (DomNode child : n.children)
+            markByHandlerId(child, curId);
     }
 }

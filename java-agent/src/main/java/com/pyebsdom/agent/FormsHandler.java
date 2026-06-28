@@ -117,4 +117,29 @@ public final class FormsHandler {
         }
         return null;
     }
+
+    /**
+     * Forms-engine current item id (focus-proof; works with the OS window
+     * inactive).
+     */
+    public static String currentItemHandlerId(Component anyFormsItem) {
+        if (anyFormsItem == null)
+            return null;
+        Object h = readFieldDeep(anyFormsItem, "mHandler"); // your existing helper
+        Object rf = h == null ? null : call0(h, "getDispatcher");
+        Object it = rf == null ? null : call0(rf, "getFocusOwner");
+        Object id = it == null ? null : call0(it, "getHandlerId");
+        return id == null ? null : String.valueOf(id);
+    }
+
+    private static Object call0(Object o, String m) {
+        try {
+            java.lang.reflect.Method me = o.getClass().getMethod(m);
+            me.setAccessible(true);
+            return me.invoke(o);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
 }

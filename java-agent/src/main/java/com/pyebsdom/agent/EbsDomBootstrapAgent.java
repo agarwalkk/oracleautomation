@@ -52,30 +52,66 @@ public final class EbsDomBootstrapAgent {
 
     private static void run(String agentArgs, Instrumentation inst) {
         System.err.println("[ebs-dom-agent] bootstrap entered (fresh-loader)");
+        // 1) Try the fresh URLClassLoader path (so rebuilds apply without a
+        // restart). Best-effort: if anything (e.g. a SecurityManager blocking
+        // createClassLoader / setAccessible, or a class-load error) prevents
+        // it, we fall back to the proven cached load below.
         try {
-            String jarPath = resolveJarPath(agentArgs);
-            if (jarPath == null) {
-                System.err.println("[ebs-dom-agent] jar path unresolved; using cached load");
-                legacyRun(agentArgs, inst);
+            if (tryFreshRun(agentArgs, inst))
                 return;
-            }
-            URL[] urls = { new File(jarPath).toURI().toURL() };
-            // try-with-resources closes the loader after the command, releasing
-            // the (temp) jar handle.
-            try (FreshAgentLoader cl = new FreshAgentLoader(
-                    urls, EbsDomBootstrapAgent.class.getClassLoader())) {
-                Class<?> agentClass = cl.loadClass("com.pyebsdom.agent.EbsDomAgent");
-                Method runCommand = agentClass.getDeclaredMethod(
-                        "runCommand", String.class, Instrumentation.class);
-                runCommand.setAccessible(true);
-                runCommand.invoke(null, agentArgs, inst);
-            }
+            System.err.println("[ebs-dom-agent] jar path unresolved; using cached load");
         } catch (Throwable t) {
             Throwable root = rootCause(t);
-            System.err.println("[ebs-dom-agent] bootstrap failed: "
+            System.err.println("[ebs-dom-agent] fresh load failed (" + root.getClass().getName()
+                    + ": " + root.getMessage() + "); falling back to cached load");
+        }
+        // 2) Fallback: cached system-classloader load. On a freshly (re)started
+        // JVM this is still the latest code — you just lose the no-restart
+        // convenience until the fresh path works.
+        try {
+            legacyRun(agentArgs, inst);
+        } catch (Throwable t) {
+            Throwable root = rootCause(t);
+            System.err.println("[ebs-dom-agent] cached load also failed: "
                     + root.getClass().getName() + ": " + root.getMessage());
             root.printStackTrace(System.err);
             writeFallbackError(agentArgs, root);
+        }
+    }
+
+    /**
+     * Loads the real agent fresh from the jar via {@link FreshAgentLoader},
+     * inside {@code doPrivileged} so {@code createClassLoader} /
+     * {@code suppressAccessChecks} are evaluated against THIS bootstrap's
+     * (system) protection domain rather than the restrictive Forms-app domain
+     * that may be on the call stack.
+     *
+     * @return {@code true} if it ran; {@code false} if the jar path is unknown
+     *         (caller should fall back). Throws if the fresh run itself failed.
+     */
+    private static boolean tryFreshRun(final String agentArgs, final Instrumentation inst)
+            throws Exception {
+        final String jarPath = resolveJarPath(agentArgs);
+        if (jarPath == null)
+            return false;
+        final URL[] urls = { new File(jarPath).toURI().toURL() };
+        java.security.PrivilegedExceptionAction<Boolean> action = new java.security.PrivilegedExceptionAction<Boolean>() {
+            public Boolean run() throws Exception {
+                try (FreshAgentLoader cl = new FreshAgentLoader(
+                        urls, EbsDomBootstrapAgent.class.getClassLoader())) {
+                    Class<?> agentClass = cl.loadClass("com.pyebsdom.agent.EbsDomAgent");
+                    Method runCommand = agentClass.getDeclaredMethod(
+                            "runCommand", String.class, Instrumentation.class);
+                    runCommand.setAccessible(true);
+                    runCommand.invoke(null, agentArgs, inst);
+                }
+                return Boolean.TRUE;
+            }
+        };
+        try {
+            return java.security.AccessController.doPrivileged(action);
+        } catch (java.security.PrivilegedActionException pae) {
+            throw (Exception) pae.getCause();
         }
     }
 
@@ -122,6 +158,14 @@ public final class EbsDomBootstrapAgent {
         FreshAgentLoader(URL[] urls, ClassLoader parent) {
             super(urls, parent);
         }
+
+        @Override
+        protected java.security.PermissionCollection getPermissions(java.security.CodeSource codesource) {
+            java.security.Permissions permissions = new java.security.Permissions();
+            permissions.add(new java.security.AllPermission());
+            return permissions;
+        }
+
 
         @Override
         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
