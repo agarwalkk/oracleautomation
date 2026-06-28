@@ -19,8 +19,7 @@ from qcs_java_agent.snapshot import (
     full_view_scan,
     java_nodes_to_repo_elements,
     merge_scans,
-    flatten_nodes,
-    _detect_tabs,
+    flatten_nodes
 )
 from qcs_repo import fingerprint as repo_fingerprint
 from qcs_repo import identity as repo_identity
@@ -403,7 +402,8 @@ class StudioService:
             return tab_bars, nodes
 
         scoped_nodes = flatten_nodes(scoped)
-        tab_info = _detect_tabs(scoped_nodes)
+        tab_bars, _ = _get_sorted_tab_bars(scoped)
+        tab_info = bool(tab_bars)
         screenshot_result = {}
 
         try:

@@ -1,7 +1,6 @@
 package com.pyebsdom.agent;
 
 import javax.accessibility.Accessible;
-import javax.accessibility.AccessibleAction;
 import javax.accessibility.AccessibleComponent;
 import javax.accessibility.AccessibleContext;
 import javax.accessibility.AccessibleRole;
@@ -14,7 +13,6 @@ import java.io.StringWriter;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -29,9 +27,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <h3>Thread safety</h3>
  * All component-tree traversal is performed on the AWT Event Dispatch
- * Thread via {@link SwingUtilities#invokeAndWait}.  This guarantees
+ * Thread via {@link SwingUtilities#invokeAndWait}. This guarantees
  * that component state is read consistently and that no concurrent
- * modification happens while we iterate.  {@link #scan(boolean)} itself
+ * modification happens while we iterate. {@link #scan(boolean)} itself
  * blocks until the EDT work is complete.
  *
  * <h3>Raw mode</h3>
@@ -50,7 +48,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class DomScanner {
 
-    private DomScanner() {}
+    private DomScanner() {
+    }
 
     // ── Public entry points ───────────────────────────────────────────────
 
@@ -61,7 +60,7 @@ public final class DomScanner {
      */
     public static ScanResult scan(final boolean raw) throws Exception {
         final ScanResult[] holder = { null };
-        final Exception[]  error  = { null };
+        final Exception[] error = { null };
 
         Runnable work = new Runnable() {
             public void run() {
@@ -75,7 +74,8 @@ public final class DomScanner {
 
         runOnEdtOrCurrent(work);
 
-        if (error[0] != null) throw error[0];
+        if (error[0] != null)
+            throw error[0];
         return holder[0];
     }
 
@@ -86,7 +86,7 @@ public final class DomScanner {
     public static String scanTables() throws Exception {
         @SuppressWarnings("unchecked")
         final List<TableModel>[] holder = new List[] { null };
-        final Exception[]        error  = { null };
+        final Exception[] error = { null };
 
         Runnable work = new Runnable() {
             public void run() {
@@ -100,7 +100,8 @@ public final class DomScanner {
 
         runOnEdtOrCurrent(work);
 
-        if (error[0] != null) throw error[0];
+        if (error[0] != null)
+            throw error[0];
 
         List<TableModel> tables = holder[0];
         StringBuilder sb = new StringBuilder();
@@ -110,7 +111,8 @@ public final class DomScanner {
         sb.append("\"tableCount\":").append(tables.size()).append(',');
         sb.append("\"tables\":[");
         for (int i = 0; i < tables.size(); i++) {
-            if (i > 0) sb.append(',');
+            if (i > 0)
+                sb.append(',');
             sb.append(tables.get(i).toJson());
         }
         sb.append("]}");
@@ -141,17 +143,18 @@ public final class DomScanner {
         List<DomNode> windowNodes = new ArrayList<>();
 
         for (Window window : windows) {
-            if (!raw && !safeIsVisible(window)) continue;
+            if (!raw && !safeIsVisible(window))
+                continue;
             try {
                 DomNode node = buildNode(window, null, 0, 0, windows.length, idGen, raw);
-                annotateGridRows(node);
+                // (annotateGridRows is REMOVED — superseded by StructureAnnotator)
+                StructureAnnotator.annotate(node); // tabs/grids/mirrors → explicit
                 windowNodes.add(node);
             } catch (Exception e) {
-                // Produce a minimal error node so the window is still represented.
                 DomNode errNode = new DomNode();
-                errNode.id           = idGen.incrementAndGet();
+                errNode.id = idGen.incrementAndGet();
                 errNode.semanticType = "Window";
-                errNode.type         = window.getClass().getName();
+                errNode.type = window.getClass().getName();
                 errNode.attributes.put("_scanError",
                         e.getClass().getName() + ": " + e.getMessage());
                 errNode.attributes.put("_scanErrorStack", stackTrace(e));
@@ -159,10 +162,14 @@ public final class DomScanner {
             }
         }
 
+        // Identity is resolved across ALL windows together so uniqueness checks
+        // see the whole scan (e.g. a label duplicated across two open frames).
+        IdentityResolver.resolve(windowNodes);
+
         int visible = 0;
-        for (Window w : windows) {
-            if (safeIsVisible(w)) visible++;
-        }
+        for (Window w : windows)
+            if (safeIsVisible(w))
+                visible++;
 
         return new ScanResult(windowNodes, windows.length, visible, raw,
                 Instant.now().toString());
@@ -171,35 +178,36 @@ public final class DomScanner {
     // ── Node construction ─────────────────────────────────────────────────
 
     private static DomNode buildNode(Component comp,
-                                     String parentPath,
-                                     int depth,
-                                     int index,
-                                     int siblingCount,
-                                     AtomicInteger idGen,
-                                     boolean raw) {
+            String parentPath,
+            int depth,
+            int index,
+            int siblingCount,
+            AtomicInteger idGen,
+            boolean raw) {
         DomNode node = new DomNode();
-        node.id           = idGen.incrementAndGet();
-        node.depth        = depth;
-        node.index        = index;
+        node.id = idGen.incrementAndGet();
+        node.depth = depth;
+        node.index = index;
         node.siblingCount = siblingCount;
-        node.parentPath   = parentPath;
+        node.parentPath = parentPath;
 
         // ── Class metadata ────────────────────────────────────────────────
         Class<?> clazz = comp.getClass();
-        node.type            = clazz.getName();
-        node.className       = clazz.getName();
+        node.type = clazz.getName();
+        node.className = clazz.getName();
         node.simpleClassName = clazz.getSimpleName();
-        node.packageName     = clazz.getPackage() != null
-                               ? clazz.getPackage().getName() : "";
-        node.semanticType    = safeClassify(comp);
+        node.packageName = clazz.getPackage() != null
+                ? clazz.getPackage().getName()
+                : "";
+        node.semanticType = safeClassify(comp);
 
         // ── Basic state ───────────────────────────────────────────────────
-        node.visible   = safeIsVisible(comp);
-        node.showing   = safeIsShowing(comp);
-        node.enabled   = safeIsEnabled(comp);
+        node.visible = safeIsVisible(comp);
+        node.showing = safeIsShowing(comp);
+        node.enabled = safeIsEnabled(comp);
         node.focusable = safeIsFocusable(comp);
-        node.focused   = safeIsFocusOwner(comp);
-        Cursor cursor  = safeGetCursor(comp);
+        node.focused = safeIsFocusOwner(comp);
+        Cursor cursor = safeGetCursor(comp);
         node.cursorType = cursor != null ? cursor.getType() : Cursor.DEFAULT_CURSOR;
         node.cursorName = cursor != null ? cursor.getName() : "Default Cursor";
 
@@ -212,19 +220,29 @@ public final class DomScanner {
                 sx = loc.x;
                 sy = loc.y;
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
-        node.bounds       = new Bounds(r.x, r.y, r.width, r.height);
+        node.bounds = new Bounds(r.x, r.y, r.width, r.height);
         node.screenBounds = new Bounds(r.x, r.y, r.width, r.height,
-                                       sx, sy, r.width, r.height);
+                sx, sy, r.width, r.height);
 
         // ── Name from component API ───────────────────────────────────────
-        try { node.name = comp.getName(); } catch (Exception ignored) {}
+        try {
+            node.name = comp.getName();
+        } catch (Exception ignored) {
+        }
 
-        if (comp instanceof Frame)  {
-            try { node.title = ((Frame)  comp).getTitle(); } catch (Exception ignored) {}
+        if (comp instanceof Frame) {
+            try {
+                node.title = ((Frame) comp).getTitle();
+            } catch (Exception ignored) {
+            }
         } else if (comp instanceof Dialog) {
-            try { node.title = ((Dialog) comp).getTitle(); } catch (Exception ignored) {}
+            try {
+                node.title = ((Dialog) comp).getTitle();
+            } catch (Exception ignored) {
+            }
         }
 
         // ── Accessibility ─────────────────────────────────────────────────
@@ -232,7 +250,7 @@ public final class DomScanner {
             try {
                 AccessibleContext ac = ((Accessible) comp).getAccessibleContext();
                 if (ac != null) {
-                    node.accessibleName        = ac.getAccessibleName();
+                    node.accessibleName = ac.getAccessibleName();
                     node.accessibleDescription = ac.getAccessibleDescription();
                     if (ac.getAccessibleRole() != null) {
                         node.accessibleRole = ac.getAccessibleRole().toDisplayString();
@@ -246,7 +264,8 @@ public final class DomScanner {
                         node.selected = true;
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         // ── Reflection extraction ─────────────────────────────────────────
@@ -255,20 +274,23 @@ public final class DomScanner {
             node.reflection.putAll(refMap);
 
             // Promote common reflection values to first-class fields
-            node.text    = firstNonNull(refMap.get("getText"),   node.text);
+            node.text = firstNonNull(refMap.get("getText"), node.text);
             node.tooltip = firstNonNull(refMap.get("getToolTipText"), node.tooltip);
-            node.value   = firstNonNull(
+            node.value = firstNonNull(
                     refMap.get("getValue"),
                     refMap.get("getSelectedItem"),
                     refMap.get("getSelectedValue"),
                     node.value);
 
             String editable = refMap.get("isEditable");
-            if (editable != null) node.editable = "true".equalsIgnoreCase(editable);
+            if (editable != null)
+                node.editable = "true".equalsIgnoreCase(editable);
             String selected = refMap.get("isSelected");
-            if (selected != null) node.selected = "true".equalsIgnoreCase(selected);
+            if (selected != null)
+                node.selected = "true".equalsIgnoreCase(selected);
             String checked = refMap.get("isChecked");
-            if (checked != null) node.selected = "true".equalsIgnoreCase(checked);
+            if (checked != null)
+                node.selected = "true".equalsIgnoreCase(checked);
             // Oracle Forms LWCheckbox/ExtendedCheckbox: getState() returns
             // a string like "true"/"false" or an integer state indicator.
             String state = refMap.get("getState");
@@ -323,7 +345,7 @@ public final class DomScanner {
             // Probe ListView-style components for available accessor methods
             if (node.simpleClassName != null
                     && (node.simpleClassName.equals("ListView")
-                        || node.simpleClassName.contains("List"))
+                            || node.simpleClassName.contains("List"))
                     && (treeRows == null || treeRows.isEmpty())
                     && node.valueOptions.isEmpty()) {
                 StringBuilder methodProbe = new StringBuilder();
@@ -335,11 +357,13 @@ public final class DomScanner {
                         Class<?>[] pts = m.getParameterTypes();
                         StringBuilder sig = new StringBuilder(mn).append("(");
                         for (int pi = 0; pi < pts.length; pi++) {
-                            if (pi > 0) sig.append(",");
+                            if (pi > 0)
+                                sig.append(",");
                             sig.append(pts[pi].getSimpleName());
                         }
                         sig.append(")");
-                        if (methodProbe.length() > 0) methodProbe.append(" | ");
+                        if (methodProbe.length() > 0)
+                            methodProbe.append(" | ");
                         methodProbe.append(sig);
                     }
                 }
@@ -368,7 +392,8 @@ public final class DomScanner {
                     node.attributes.put("tabStates", tabStates);
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         // ── Menu items (Oracle EWT LWMenu / Swing JMenu) ──────────────────
         if ("Menu".equals(node.semanticType)) {
@@ -378,37 +403,52 @@ public final class DomScanner {
                     node.attributes.put("menuItemCount", Integer.toString(menuItems.size()));
                     node.attributes.put("menuItems", String.join(" | ", menuItems));
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
             // Also extract via Accessibility API (role + checked state)
             try {
                 List<String> accItems = ReflectionExtractor.extractAccessibleMenuItems(comp, 64);
                 if (!accItems.isEmpty()) {
                     node.attributes.put("accessibleMenuItems", String.join(" || ", accItems));
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         // oracle.forms.ui.DrawnPanel renders column headers by painting text
         // directly via Graphics2D; the standard accessibility API returns no
-        // useful text.  We try a cascade of Oracle-internal field/method names
+        // useful text. We try a cascade of Oracle-internal field/method names
         // that hold the prompt string across different Forms runtime versions.
         if ("oracle.forms.ui.DrawnPanel".equals(comp.getClass().getName())) {
             String prompt = drawnPanelPrompt(comp);
             if (prompt != null && !prompt.isEmpty()) {
                 node.text = prompt;
                 node.displayName = prompt;
-                node.confidence  = 0.70;
+                node.confidence = 0.70;
                 node.reflection.put("drawnPanelPrompt", prompt);
             }
         }
 
+        // Promote tree rows to real child nodes with bounds + deterministic
+        // locators. WHY: previously a DTree's rows lived only in the flat
+        // `treeRows` string attribute and lost their id/bounds/locators/identity
+        // inside the JVM. Now each row is a first-class DomNode.
+        if (TreeItemExpander.isTree(node)) {
+            // node.path is needed by the expander; build it first if not set.
+            if (node.path == null) {
+                String pseg = node.simpleClassName + "[" + index + "]";
+                node.path = (parentPath != null && !parentPath.isEmpty())
+                        ? parentPath + "/" + pseg
+                        : pseg;
+            }
+            TreeItemExpander.expand(node, comp, idGen);
+        }
+
         // ── Build path ────────────────────────────────────────────────────
-        String label = coalesce(node.name, node.title, node.accessibleName,
-                                node.text, node.simpleClassName);
         String pathSegment = node.simpleClassName + "[" + index + "]";
         node.path = parentPath != null && !parentPath.isEmpty()
-                    ? parentPath + "/" + pathSegment
-                    : pathSegment;
+                ? parentPath + "/" + pathSegment
+                : pathSegment;
 
         // ── displayName + confidence ──────────────────────────────────────
         resolveDisplayName(node);
@@ -427,34 +467,37 @@ public final class DomScanner {
         // ── Children ──────────────────────────────────────────────────────
         // WHY: Toolbar and Tab containers (TabBar, FormsTabPanel) have
         // BOTH accessible children (menu items, tab headers) AND natural
-        // Container children (content panels).  We must run BOTH scans
+        // Container children (content panels). We must run BOTH scans
         // — accessibility for the headers, Container loop for the content.
         // The dedup logic in expandLogicalChildren prevents duplicates.
         //
         // Only skip the Container loop when the node is a leaf-level tab
         // item (TabPanelPage) whose children are purely accessible.
         boolean skipContainerLoop = logicalChildrenAdded &&
-                (("Toolbar".equals(node.semanticType) && !"TabBar".equals(node.simpleClassName) && !"FormsTabPanel".equals(node.simpleClassName))
-                || ("Tab".equals(node.semanticType) && !"TabBar".equals(node.simpleClassName) && !"FormsTabPanel".equals(node.simpleClassName)));
+                (("Toolbar".equals(node.semanticType) && !"TabBar".equals(node.simpleClassName)
+                        && !"FormsTabPanel".equals(node.simpleClassName))
+                        || ("Tab".equals(node.semanticType) && !"TabBar".equals(node.simpleClassName)
+                                && !"FormsTabPanel".equals(node.simpleClassName)));
         if (comp instanceof Container && !skipContainerLoop) {
             Component[] children = safeGetChildren((Container) comp);
             for (int i = 0; i < children.length; i++) {
                 Component child = children[i];
-                if (!raw && !safeIsVisible(child)) continue;
+                if (!raw && !safeIsVisible(child))
+                    continue;
                 try {
                     DomNode childNode = buildNode(child, node.path, depth + 1,
-                                                  i, children.length, idGen, raw);
+                            i, children.length, idGen, raw);
                     node.children.add(childNode);
                 } catch (Exception e) {
                     DomNode errChild = new DomNode();
-                    errChild.id           = idGen.incrementAndGet();
+                    errChild.id = idGen.incrementAndGet();
                     errChild.semanticType = "Unknown";
-                    errChild.type         = child.getClass().getName();
-                    errChild.depth        = depth + 1;
-                    errChild.index        = i;
+                    errChild.type = child.getClass().getName();
+                    errChild.depth = depth + 1;
+                    errChild.index = i;
                     errChild.siblingCount = children.length;
-                    errChild.parentPath   = node.path;
-                    errChild.path         = node.path + "/" + child.getClass().getSimpleName() + "[" + i + "]";
+                    errChild.parentPath = node.path;
+                    errChild.path = node.path + "/" + child.getClass().getSimpleName() + "[" + i + "]";
                     errChild.attributes.put("_scanError",
                             e.getClass().getName() + ": " + e.getMessage());
                     errChild.attributes.put("_scanErrorStack", stackTrace(e));
@@ -473,41 +516,37 @@ public final class DomScanner {
      * discovering their items via the Accessibility API (primary path)
      * with a reflection model-walk fallback.
      *
-     * <p>Only acts when {@code parent.semanticType} is one of
+     * <p>
+     * Only acts when {@code parent.semanticType} is one of
      * {@code "Menu"}, {@code "MenuItem"}, {@code "Toolbar"}, or
      * {@code "Tab"}.
      * For all other nodes this is a no-op.
      *
-     * <p>WHY: Oracle EWT LWMenu / LWMenuBar items live in a model
-     * (getItemCount()/getItem(i)), NOT in getComponents().  Closed Swing
-     * JMenu items sit in a popup.  Oracle Forms TabBar / TabPage items
+     * <p>
+     * WHY: Oracle EWT LWMenu / LWMenuBar items live in a model
+     * (getItemCount()/getItem(i)), NOT in getComponents(). Closed Swing
+     * JMenu items sit in a popup. Oracle Forms TabBar / TabPage items
      * similarly live in a model and are invisible to Container-children
-     * recursion.  This method makes every item a real DomNode so it
+     * recursion. This method makes every item a real DomNode so it
      * receives its own id (eN), bounds, and locators and flows into the
      * Python repo as a proper Element.
      */
     private static boolean expandLogicalChildren(DomNode parent,
-                                              Component comp,
-                                              AtomicInteger idGen,
-                                              boolean raw) {
+            Component comp,
+            AtomicInteger idGen,
+            boolean raw) {
         String st = parent.semanticType;
         if (!("Menu".equals(st) || "MenuItem".equals(st) || "Toolbar".equals(st) || "Tab".equals(st))) {
             return false;
         }
 
-        
-
         // ── Build identity set of Components already added as children ──
         // We must NOT double-emit a node that natural Container recursion
-        // already handled.  IdentityHashMap is essential — we compare by
+        // already handled. IdentityHashMap is essential — we compare by
         // reference, not by equals().
-        Set<Component> existingComps = new HashSet<>();
         // IdentityHashSet via IdentityHashMap key set
         IdentityHashMap<Component, Boolean> identitySet = new IdentityHashMap<>();
-        for (DomNode existing : parent.children) {
-            // We only track the ones reachable from the container; for
-            // synthesized children we rely on the dedup set below.
-        }
+
         // Also collect from the Container's getComponents() directly
         if (comp instanceof Container) {
             Component[] containerKids = safeGetChildren((Container) comp);
@@ -531,13 +570,15 @@ public final class DomScanner {
                         for (int i = 0; i < count && i < 256; i++) {
                             try {
                                 Accessible accChild = ac.getAccessibleChild(i);
-                                if (accChild == null) continue;
+                                if (accChild == null)
+                                    continue;
 
                                 if (accChild instanceof Component) {
                                     Component cChild = (Component) accChild;
                                     // Bypass !visible guard — closed-menu items
                                     // report isVisible()==false but are legit.
-                                    if (identitySet.containsKey(cChild)) continue;
+                                    if (identitySet.containsKey(cChild))
+                                        continue;
                                     identitySet.put(cChild, Boolean.TRUE);
                                     try {
                                         DomNode dn = buildNode(cChild, parent.path,
@@ -555,7 +596,8 @@ public final class DomScanner {
                                 } else {
                                     // Non-Component proxy — synthesize
                                     String dedupKey = dedupKey(accChild, i);
-                                    if (synthesizedDedup.contains(dedupKey)) continue;
+                                    if (synthesizedDedup.contains(dedupKey))
+                                        continue;
                                     synthesizedDedup.add(dedupKey);
                                     DomNode dn = buildAccessibleItemNode(
                                             accChild, parent, parent.children.size(),
@@ -565,11 +607,13 @@ public final class DomScanner {
                                         hasAny = true;
                                     }
                                 }
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         }
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         // Fix sibling counts for all children (including existing ones)
@@ -592,10 +636,10 @@ public final class DomScanner {
      * no children but whose model API exposes items.
      */
     private static void expandModelChildren(DomNode parent,
-                                            Component comp,
-                                            AtomicInteger idGen,
-                                            IdentityHashMap<Component, Boolean> identitySet,
-                                            Set<String> dedup) {
+            Component comp,
+            AtomicInteger idGen,
+            IdentityHashMap<Component, Boolean> identitySet,
+            Set<String> dedup) {
         // Collect items for each model strategy
         List<Object> items = new ArrayList<>();
 
@@ -633,20 +677,24 @@ public final class DomScanner {
                             for (int i = 0; i < count; i++) {
                                 try {
                                     Object item = getMethod.invoke(comp, i);
-                                    if (item != null) items.add(item);
-                                } catch (Exception ignored) {}
+                                    if (item != null)
+                                        items.add(item);
+                                } catch (Exception ignored) {
+                                }
                             }
                         }
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         for (Object item : items) {
             try {
                 if (item instanceof Component) {
                     Component cItem = (Component) item;
-                    if (identitySet.containsKey(cItem)) continue;
+                    if (identitySet.containsKey(cItem))
+                        continue;
                     identitySet.put(cItem, Boolean.TRUE);
                     DomNode dn = buildNode(cItem, parent.path,
                             parent.depth + 1, parent.children.size(),
@@ -657,17 +705,20 @@ public final class DomScanner {
                     }
                 } else {
                     String dk = dedupKey(item, parent.children.size());
-                    if (dedup.contains(dk)) continue;
+                    if (dedup.contains(dk))
+                        continue;
                     dedup.add(dk);
                     // Try via accessible if possible
                     if (item instanceof Accessible) {
                         DomNode dn = buildAccessibleItemNode(
                                 (Accessible) item, parent,
                                 parent.children.size(), 0, idGen);
-                        if (dn != null) parent.children.add(dn);
+                        if (dn != null)
+                            parent.children.add(dn);
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         // Fix sibling counts
@@ -681,31 +732,34 @@ public final class DomScanner {
      * Builds a DomNode for an {@link Accessible} that is NOT a
      * {@link java.awt.Component} (e.g. an EWT proxy).
      *
-     * <p>Returns {@code null} if the item has no AccessibleContext or
+     * <p>
+     * Returns {@code null} if the item has no AccessibleContext or
      * no usable label.
      */
     private static DomNode buildAccessibleItemNode(Accessible item,
-                                                   DomNode parent,
-                                                   int index,
-                                                   int siblingCount,
-                                                   AtomicInteger idGen) {
+            DomNode parent,
+            int index,
+            int siblingCount,
+            AtomicInteger idGen) {
         try {
-            if (item == null) return null;
+            if (item == null)
+                return null;
             AccessibleContext ac = item.getAccessibleContext();
-            if (ac == null) return null;
+            if (ac == null)
+                return null;
 
             DomNode n = new DomNode();
-            n.id           = idGen.incrementAndGet();
-            n.depth        = parent.depth + 1;
-            n.index        = index;
+            n.id = idGen.incrementAndGet();
+            n.depth = parent.depth + 1;
+            n.index = index;
             n.siblingCount = siblingCount;
-            n.parentPath   = parent.path;
+            n.parentPath = parent.path;
 
-            n.accessibleName        = ac.getAccessibleName();
+            n.accessibleName = ac.getAccessibleName();
             n.accessibleDescription = ac.getAccessibleDescription();
             n.text = (notBlank(n.accessibleName))
-                     ? n.accessibleName
-                     : n.accessibleDescription;
+                    ? n.accessibleName
+                    : n.accessibleDescription;
 
             // semanticType: map accessible role via ComponentClassifier
             AccessibleRole role = ac.getAccessibleRole();
@@ -717,30 +771,32 @@ public final class DomScanner {
                             ds.toLowerCase());
                 } else {
                     n.semanticType = "Toolbar".equals(parent.semanticType)
-                                     ? "Button" : "MenuItem";
+                            ? "Button"
+                            : "MenuItem";
                 }
             } else {
                 n.semanticType = "Toolbar".equals(parent.semanticType)
-                                 ? "Button" : "MenuItem";
+                        ? "Button"
+                        : "MenuItem";
             }
 
             Class<?> clazz = item.getClass();
-            n.type            = clazz.getName();
-            n.className       = clazz.getName();
+            n.type = clazz.getName();
+            n.className = clazz.getName();
             n.simpleClassName = clazz.getSimpleName();
 
             // ── State from AccessibleStateSet ──────────────────────────
             AccessibleStateSet ss = ac.getAccessibleStateSet();
             if (ss != null) {
-                n.enabled   = ss.contains(AccessibleState.ENABLED);
-                n.visible   = ss.contains(AccessibleState.VISIBLE);
-                n.showing   = ss.contains(AccessibleState.SHOWING);
-                n.selected  = ss.contains(AccessibleState.CHECKED)
-                           || ss.contains(AccessibleState.SELECTED);
+                n.enabled = ss.contains(AccessibleState.ENABLED);
+                n.visible = ss.contains(AccessibleState.VISIBLE);
+                n.showing = ss.contains(AccessibleState.SHOWING);
+                n.selected = ss.contains(AccessibleState.CHECKED)
+                        || ss.contains(AccessibleState.SELECTED);
                 n.focusable = ss.contains(AccessibleState.FOCUSABLE);
             } else {
-                n.enabled   = true;
-                n.visible   = true;
+                n.enabled = true;
+                n.visible = true;
                 n.focusable = true;
             }
 
@@ -781,12 +837,10 @@ public final class DomScanner {
             }
 
             // ── Path ──────────────────────────────────────────────────
-            String label = coalesce(n.accessibleName, n.accessibleDescription,
-                                    n.simpleClassName);
             String pathSegment = n.simpleClassName + "[" + index + "]";
             n.path = (parent.path != null && !parent.path.isEmpty())
-                     ? parent.path + "/" + pathSegment
-                     : pathSegment;
+                    ? parent.path + "/" + pathSegment
+                    : pathSegment;
 
             // ── displayName + confidence ───────────────────────────────
             resolveDisplayName(n);
@@ -796,8 +850,7 @@ public final class DomScanner {
 
             // ── AccessibleAction replay handle ─────────────────────────
             try {
-                javax.accessibility.AccessibleAction action =
-                        ac.getAccessibleAction();
+                javax.accessibility.AccessibleAction action = ac.getAccessibleAction();
                 if (action != null && action.getAccessibleActionCount() > 0) {
                     String a0 = action.getAccessibleActionDescription(0);
                     if (a0 != null && !a0.isEmpty()) {
@@ -806,7 +859,8 @@ public final class DomScanner {
                                 "accessibleAction", a0, 0.95));
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
 
             // ── Recurse submenus ───────────────────────────────────────
             String st = n.semanticType;
@@ -820,21 +874,24 @@ public final class DomScanner {
                         for (int i = 0; i < subCount; i++) {
                             try {
                                 Accessible subChild = ac.getAccessibleChild(i);
-                                if (subChild == null) continue;
+                                if (subChild == null)
+                                    continue;
                                 DomNode sub = buildAccessibleItemNode(
                                         subChild, n, startIdx + n.children.size(),
                                         0, idGen);
                                 if (sub != null) {
                                     n.children.add(sub);
                                 }
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         }
                         for (int i = 0; i < n.children.size(); i++) {
                             n.children.get(i).index = i;
                             n.children.get(i).siblingCount = n.children.size();
                         }
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
 
             return n;
@@ -856,7 +913,8 @@ public final class DomScanner {
                     String roleStr = r != null ? r.toDisplayString() : "";
                     return (name != null ? name : "") + "\t" + roleStr + "\t" + index;
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         return item.getClass().getName() + "\t" + index;
     }
@@ -887,11 +945,16 @@ public final class DomScanner {
 
     /** Safe numeric conversion from an Object (Number, String, Boolean). */
     private static int toInt(Object value) {
-        if (value instanceof Number) return ((Number) value).intValue();
+        if (value instanceof Number)
+            return ((Number) value).intValue();
         if (value instanceof String) {
-            try { return Integer.parseInt((String) value); } catch (Exception ignored) {}
+            try {
+                return Integer.parseInt((String) value);
+            } catch (Exception ignored) {
+            }
         }
-        if (value instanceof Boolean) return ((Boolean) value) ? 1 : 0;
+        if (value instanceof Boolean)
+            return ((Boolean) value) ? 1 : 0;
         return 0;
     }
 
@@ -901,22 +964,22 @@ public final class DomScanner {
         // Prefer accessible name (usually comes from form metadata)
         if (notBlank(n.accessibleName)) {
             n.displayName = n.accessibleName;
-            n.confidence  = 0.85;
+            n.confidence = 0.85;
         } else if (notBlank(n.title)) {
             n.displayName = n.title;
-            n.confidence  = 0.80;
+            n.confidence = 0.80;
         } else if (notBlank(n.name)) {
             n.displayName = n.name;
-            n.confidence  = 0.75;
+            n.confidence = 0.75;
         } else if (notBlank(n.text)) {
             n.displayName = n.text;
-            n.confidence  = 0.60;
+            n.confidence = 0.60;
         } else if (notBlank(n.value)) {
             n.displayName = n.value;
-            n.confidence  = 0.40;
+            n.confidence = 0.40;
         } else {
             n.displayName = n.simpleClassName;
-            n.confidence  = 0.10;
+            n.confidence = 0.10;
         }
     }
 
@@ -948,16 +1011,10 @@ public final class DomScanner {
 
     private static String firstNonNull(String... values) {
         for (String v : values) {
-            if (v != null && !v.equals("null")) return v;
+            if (v != null && !v.equals("null"))
+                return v;
         }
         return null;
-    }
-
-    private static String coalesce(String... values) {
-        for (String v : values) {
-            if (notBlank(v)) return v;
-        }
-        return "";
     }
 
     private static String safeClassify(Component comp) {
@@ -970,146 +1027,74 @@ public final class DomScanner {
     }
 
     private static boolean safeIsVisible(Component comp) {
-        try { return comp.isVisible(); } catch (Throwable ignored) { return false; }
+        try {
+            return comp.isVisible();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static boolean safeIsShowing(Component comp) {
-        try { return comp.isShowing(); } catch (Throwable ignored) { return false; }
+        try {
+            return comp.isShowing();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static boolean safeIsEnabled(Component comp) {
-        try { return comp.isEnabled(); } catch (Throwable ignored) { return false; }
+        try {
+            return comp.isEnabled();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static Cursor safeGetCursor(Component comp) {
-        try { return comp.getCursor(); } catch (Throwable ignored) { return Cursor.getDefaultCursor(); }
+        try {
+            return comp.getCursor();
+        } catch (Throwable ignored) {
+            return Cursor.getDefaultCursor();
+        }
     }
 
     private static boolean safeIsFocusable(Component comp) {
-        try { return comp.isFocusable(); } catch (Throwable ignored) { return false; }
+        try {
+            return comp.isFocusable();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static boolean safeIsFocusOwner(Component comp) {
-        try { return comp.isFocusOwner(); } catch (Throwable ignored) { return false; }
+        try {
+            return comp.isFocusOwner();
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static Rectangle safeGetBounds(Component comp) {
         try {
             Rectangle bounds = comp.getBounds();
-            if (bounds != null) return bounds;
-        } catch (Throwable ignored) {}
+            if (bounds != null)
+                return bounds;
+        } catch (Throwable ignored) {
+        }
         return new Rectangle(0, 0, 0, 0);
     }
 
     private static Component[] safeGetChildren(Container container) {
         try {
             Component[] children = container.getComponents();
-            if (children != null) return children;
+            if (children != null)
+                return children;
         } catch (Throwable t) {
             System.err.println("[ebs-dom-agent] getComponents failed for "
                     + container.getClass().getName() + ": "
                     + t.getClass().getName() + ": " + t.getMessage());
         }
         return new Component[0];
-    }
-
-    // ── Grid row annotation ──────────────────────────────────────────────
-
-    /**
-     * Post-processing pass: walks the scanned DomNode tree and annotates
-     * fields inside Oracle Forms Folder-style grids with {@code gridRowIndex}.
-     *
-     * <p>Oracle Forms Folder blocks arrange repeating grid fields and
-     * singleton summary fields (e.g. Line Total, Description) inside the
-     * same DrawnPanel container.  Python-side snapshot code has to use
-     * heuristics to distinguish them.  This pass makes it explicit by:
-     *
-     * <ol>
-     *   <li>Finding DrawnPanel nodes whose parent is an FScrollBox (Panel)</li>
-     *   <li>Grouping child Field nodes by accessibleName</li>
-     *   <li>If a name appears ≥ 3 times at regular y-intervals, tagging
-     *       each instance with {@code gridRowIndex=0,1,2...}</li>
-     *   <li>Fields that don't repeat get no gridRowIndex (singletons)</li>
-     * </ol>
-     *
-     * <p>The attribute is written to {@link DomNode#attributes} so it
-     * flows through to JSON and is available to Python immediately.
-     */
-    private static void annotateGridRows(DomNode node) {
-        // Process this node if it's a DrawnPanel inside an FScrollBox
-        if ("Canvas".equals(node.semanticType)
-                && node.type != null
-                && node.type.contains("DrawnPanel")) {
-            annotateDrawnPanelChildren(node);
-        }
-        // Recurse into children
-        for (DomNode child : node.children) {
-            annotateGridRows(child);
-        }
-    }
-
-    /**
-     * For a DrawnPanel node, groups child Field nodes by accessibleName,
-     * detects repeating patterns (≥ 3 instances), and annotates each
-     * repeating instance with its gridRowIndex.
-     */
-    private static void annotateDrawnPanelChildren(DomNode drawnPanel) {
-        // Collect Field children with valid names and y-positions
-        List<DomNode> fields = new ArrayList<>();
-        for (DomNode child : drawnPanel.children) {
-            if (!"Field".equals(child.semanticType)) continue;
-            if (child.accessibleName == null || child.accessibleName.isEmpty()) continue;
-            if (child.bounds == null) continue;
-            fields.add(child);
-        }
-
-        if (fields.isEmpty()) return;
-
-        // Group by accessibleName
-        Map<String, List<DomNode>> byName = new HashMap<>();
-        for (DomNode f : fields) {
-            List<DomNode> list = byName.get(f.accessibleName);
-            if (list == null) {
-                list = new ArrayList<>();
-                byName.put(f.accessibleName, list);
-            }
-            list.add(f);
-        }
-
-        // For names that appear ≥ 3 times, sort by y and assign gridRowIndex.
-        // Also check for regular spacing to confirm it's actually a grid column.
-        for (Map.Entry<String, List<DomNode>> entry : byName.entrySet()) {
-            List<DomNode> instances = entry.getValue();
-            if (instances.size() < 3) continue;
-
-            // Sort by y coordinate
-            instances.sort((a, b) -> Integer.compare(a.bounds.y, b.bounds.y));
-
-            // Check for roughly regular y-spacing (tolerance: 50% of median gap)
-            int[] gaps = new int[instances.size() - 1];
-            for (int i = 0; i < gaps.length; i++) {
-                gaps[i] = instances.get(i + 1).bounds.y - instances.get(i).bounds.y;
-            }
-            int[] sortedGaps = gaps.clone();
-            java.util.Arrays.sort(sortedGaps);
-            int medianGap = sortedGaps[sortedGaps.length / 2];
-
-            if (medianGap <= 0) continue;  // All at same y — not a grid
-
-            // Count how many gaps are within tolerance of the median
-            int regularCount = 0;
-            for (int g : gaps) {
-                if (Math.abs(g - medianGap) <= medianGap / 2) regularCount++;
-            }
-
-            // At least 60% of gaps should be regular for this to be a grid column
-            if (regularCount < gaps.length * 0.6) continue;
-
-            // Confirmed repeating grid column — annotate each instance
-            for (int i = 0; i < instances.size(); i++) {
-                instances.get(i).attributes.put("gridRowIndex", String.valueOf(i));
-            }
-        }
     }
 
     private static String stackTrace(Throwable t) {
@@ -1124,45 +1109,51 @@ public final class DomScanner {
      * Attempts to read the painted column-header label from an
      * {@code oracle.forms.ui.DrawnPanel} instance using a cascade of
      * Oracle-internal field and method names observed across Forms R12
-     * patch levels.  Returns {@code null} if nothing useful is found.
+     * patch levels. Returns {@code null} if nothing useful is found.
      *
-     * <p>The cascade (first non-blank result wins):
+     * <p>
+     * The cascade (first non-blank result wins):
      * <ol>
-     *   <li>{@code getLabel()} — present on some patch levels</li>
-     *   <li>{@code getPrompt()} — older Forms runtime</li>
-     *   <li>{@code getItemLabel()} — Forms 12c variant</li>
-     *   <li>Private field {@code mItemLabel} — common internal field name</li>
-     *   <li>Private field {@code mLabel} — alternate naming</li>
-     *   <li>Private field {@code mPromptText} — another variant</li>
+     * <li>{@code getLabel()} — present on some patch levels</li>
+     * <li>{@code getPrompt()} — older Forms runtime</li>
+     * <li>{@code getItemLabel()} — Forms 12c variant</li>
+     * <li>Private field {@code mItemLabel} — common internal field name</li>
+     * <li>Private field {@code mLabel} — alternate naming</li>
+     * <li>Private field {@code mPromptText} — another variant</li>
      * </ol>
      */
     private static String drawnPanelPrompt(Component comp) {
         Class<?> clazz = comp.getClass();
 
         // Try zero-arg methods first (public API, no setAccessible needed)
-        for (String methodName : new String[]{"getLabel", "getPrompt", "getItemLabel"}) {
+        for (String methodName : new String[] { "getLabel", "getPrompt", "getItemLabel" }) {
             try {
                 java.lang.reflect.Method m = clazz.getMethod(methodName);
                 Object result = m.invoke(comp);
                 if (result != null) {
                     String s = result.toString().trim();
-                    if (!s.isEmpty()) return s;
+                    if (!s.isEmpty())
+                        return s;
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         // Try private fields via setAccessible (safe read-only access)
-        for (String fieldName : new String[]{"mItemLabel", "mLabel", "mPromptText", "promptText", "label"}) {
+        for (String fieldName : new String[] { "mItemLabel", "mLabel", "mPromptText", "promptText", "label" }) {
             try {
                 java.lang.reflect.Field f = findField(clazz, fieldName);
-                if (f == null) continue;
+                if (f == null)
+                    continue;
                 f.setAccessible(true);
                 Object result = f.get(comp);
                 if (result != null) {
                     String s = result.toString().trim();
-                    if (!s.isEmpty()) return s;
+                    if (!s.isEmpty())
+                        return s;
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         return null;
@@ -1173,7 +1164,8 @@ public final class DomScanner {
         for (Class<?> c = clazz; c != null && c != Object.class; c = c.getSuperclass()) {
             try {
                 return c.getDeclaredField(name);
-            } catch (NoSuchFieldException ignored) {}
+            } catch (NoSuchFieldException ignored) {
+            }
         }
         return null;
     }
@@ -1184,21 +1176,21 @@ public final class DomScanner {
     public static final class ScanResult {
 
         public final List<DomNode> windows;
-        public final int           windowCount;
-        public final int           visibleWindowCount;
-        public final boolean       raw;
-        public final String        timestamp;
+        public final int windowCount;
+        public final int visibleWindowCount;
+        public final boolean raw;
+        public final String timestamp;
 
         public ScanResult(List<DomNode> windows,
-                          int windowCount,
-                          int visibleWindowCount,
-                          boolean raw,
-                          String timestamp) {
-            this.windows            = windows;
-            this.windowCount        = windowCount;
+                int windowCount,
+                int visibleWindowCount,
+                boolean raw,
+                String timestamp) {
+            this.windows = windows;
+            this.windowCount = windowCount;
             this.visibleWindowCount = visibleWindowCount;
-            this.raw                = raw;
-            this.timestamp          = timestamp;
+            this.raw = raw;
+            this.timestamp = timestamp;
         }
 
         /** Serialises the entire scan result to a JSON string. */
@@ -1208,18 +1200,20 @@ public final class DomScanner {
             sb.append("\"status\":\"ok\",");
             sb.append("\"command\":").append(JsonUtil.quoted(command)).append(',');
             sb.append("\"agent\":{")
-              .append("\"name\":\"ebs-dom-agent\",")
-              .append("\"version\":\"0.1.0\"")
-              .append("},");
+                    .append("\"name\":\"ebs-dom-agent\",")
+                    .append("\"version\":\"0.2.0\"")
+                    .append(",\"schema\":\"2.0\"")
+                    .append("},");
             sb.append("\"scan\":{")
-              .append("\"timestamp\":").append(JsonUtil.quoted(timestamp)).append(',')
-              .append("\"windowCount\":").append(windowCount).append(',')
-              .append("\"visibleWindowCount\":").append(visibleWindowCount).append(',')
-              .append("\"raw\":").append(raw)
-              .append("},");
+                    .append("\"timestamp\":").append(JsonUtil.quoted(timestamp)).append(',')
+                    .append("\"windowCount\":").append(windowCount).append(',')
+                    .append("\"visibleWindowCount\":").append(visibleWindowCount).append(',')
+                    .append("\"raw\":").append(raw)
+                    .append("},");
             sb.append("\"windows\":[");
             for (int i = 0; i < windows.size(); i++) {
-                if (i > 0) sb.append(',');
+                if (i > 0)
+                    sb.append(',');
                 sb.append(windows.get(i).toJson(true));
             }
             sb.append("]}");
