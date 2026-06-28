@@ -1,6 +1,12 @@
 Form: Decision
-  Decision
-    Message: This query could take a long time.
-
-Do you wish to continue? (read-only)
-    [e33] Yes (Button, enabled) , [e34] No (Button, enabled)
+  [e33] Yes (Button, enabled) , [e34] No (Button, enabled)
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    [ ] Show Line Details
+    Book Sales Order
+    [ ] ATO Summary View
+    Copy Sales Order Prgram
+    [ ] Pricing Options
+    [ ] Star Model Status
+    Mass Price Adjustment Tool

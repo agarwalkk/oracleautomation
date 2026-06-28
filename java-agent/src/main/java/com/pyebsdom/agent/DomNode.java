@@ -51,6 +51,14 @@ public final class DomNode {
      */
     public boolean locatorAmbiguous;
 
+    /**
+     * Oracle Forms item handler id (from {@link FormsHandler}). Unique per item
+     * within a form module and Forms-native (more stable than the AWT name), so
+     * it is the highest-confidence deterministic locator within a live session.
+     * {@code null} for non-Forms-item components.
+     */
+    public String handlerId;
+
     // ── Type ──────────────────────────────────────────────────────────────
     /** Fully-qualified Java class name. */
     public String type;
@@ -162,6 +170,7 @@ public final class DomNode {
         sb.append("\"primaryLocator\":")
                 .append(primaryLocator != null ? primaryLocator.toJson() : "null").append(',');
         sb.append("\"locatorAmbiguous\":").append(locatorAmbiguous).append(',');
+        sb.append("\"handlerId\":").append(JsonUtil.quoted(handlerId)).append(',');
 
         // Type
         sb.append("\"type\":").append(JsonUtil.quoted(type)).append(',');

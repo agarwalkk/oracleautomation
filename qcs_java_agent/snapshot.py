@@ -266,6 +266,7 @@ def java_nodes_to_repo_elements(scan: dict) -> list[dict]:
                 # schema-2.0 structure + identity
                 "semanticId": node.get("semanticId"),
                 "primaryLocator": node.get("primaryLocator"),
+                "handlerId": node.get("handlerId"),
                 "containerRole": node.get("containerRole"),
                 "ownerTab": node.get("ownerTab"),
                 "recordIndex": node.get("recordIndex", -1),
@@ -466,6 +467,12 @@ def _build_locator_params(node: dict) -> dict[str, str]:
     model-level selector.
     """
     params: dict[str, str] = {}
+    # Forms item handler id first — strongest within-session locator (the agent
+    # tries it before everything else). Falls back to the rest for cross-session
+    # recordings, so emitting it is always safe.
+    hid = node.get("handlerId")
+    if hid:
+        params["locatorHandlerId"] = str(hid)
     sem = node.get("semanticId")
     if sem:
         params["locatorSemanticId"] = str(sem)
@@ -497,6 +504,78 @@ def _build_locator_params(node: dict) -> dict[str, str]:
     return params
 
 
+def _assign_owner_tabs(scan: dict) -> None:
+    """Compute each element's owning tab from the DOM hierarchy (Python-owned).
+
+    Oracle Forms labels only a few fields with a "<Tab> tab page " prefix, so we
+    propagate from the CONTAINER: a node belongs to the tab of the *innermost*
+    FScrollBox whose subtree contains exactly one distinct tab prefix
+    ("dedicated"). A data field inside the tabbed area (any FScrollBox carrying
+    >=1 prefix) but owned by no dedicated box is background content
+    (containerRole='OrphanTabContent' -> dropped by the renderer). Buttons and
+    trees are never orphaned, so footer buttons (Clear/Find/Open Folder) that
+    sit in a prefix-less box fall through to form level.
+
+    Mutates nodes in place, OVERRIDING any agent-set ownerTab/OrphanTabContent.
+    Leaves Grid/GridCell/TabFolder/TreeItem container roles untouched.
+    """
+    nodes: list[dict] = []
+    parent: dict[int, dict | None] = {}
+
+    def walk(n: dict, p: dict | None = None) -> None:
+        nodes.append(n)
+        parent[id(n)] = p
+        for c in n.get("children") or []:
+            walk(c, n)
+
+    for w in scan.get("windows") or []:
+        walk(w)
+
+    def subtree_prefixes(n: dict, acc: set[str]) -> None:
+        an = str(n.get("accessibleName") or "")
+        i = an.find(" tab page ")
+        if i > 0:
+            acc.add(an[:i])
+        for c in n.get("children") or []:
+            subtree_prefixes(c, acc)
+
+    dedicated: dict[int, str] = {}   # id(FScrollBox) -> tab
+    region: set[int] = set()         # id(FScrollBox) with >=1 prefix
+    for n in nodes:
+        if str(n.get("simpleClassName") or "") != "FScrollBox":
+            continue
+        acc: set[str] = set()
+        subtree_prefixes(n, acc)
+        if acc:
+            region.add(id(n))
+        if len(acc) == 1:
+            dedicated[id(n)] = next(iter(acc))
+
+    _DATA = ("Field", "LOV", "ComboBox", "Checkbox", "RadioButton")
+    for n in nodes:
+        cur = parent.get(id(n))
+        owner: str | None = None
+        in_region = False
+        while cur is not None:
+            if owner is None and id(cur) in dedicated:
+                owner = dedicated[id(cur)]
+            if id(cur) in region:
+                in_region = True
+            cur = parent.get(id(cur))
+
+        cr = n.get("containerRole")
+        if owner:
+            n["ownerTab"] = owner
+            if cr == "OrphanTabContent":
+                n["containerRole"] = None
+        else:
+            n["ownerTab"] = None
+            if in_region and cr != "GridCell" and n.get("semanticType") in _DATA:
+                n["containerRole"] = "OrphanTabContent"
+            elif cr == "OrphanTabContent":
+                n["containerRole"] = None
+
+
 def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str, Any]], dict[str, dict]]:
     """Return ``(tree, id_map)`` for a scan.
 
@@ -508,6 +587,11 @@ def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str
     enriched scan already contains every tab's content tagged with ``ownerTab``.
     """
     scoped = active_window_scan(scan)
+    # Grouping (which tab owns each element) is INTERPRETATION, not extraction,
+    # so it lives here — tuned without recompiling the agent. This overrides any
+    # ownerTab/orphan the agent stamped, using only the raw hierarchy + labels
+    # the agent provides (Java stays an unfiltered extractor).
+    _assign_owner_tabs(scoped)
     nodes = flatten_nodes(scoped)
     repo_by_id = {e["elementid"]: e for e in java_nodes_to_repo_elements(scoped)}
 
@@ -846,8 +930,9 @@ def locator_params(element: dict) -> dict[str, str]:
     java = element.get("java") or {}
     params: dict[str, str] = {}
 
-    # schema-2.0 verified identity first.
-    if java.get("semanticId") or java.get("primaryLocator") or java.get("treePath"):
+    # schema-2.0 verified identity first (handlerId / semanticId / primaryLocator).
+    if (java.get("handlerId") or java.get("semanticId")
+            or java.get("primaryLocator") or java.get("treePath")):
         params.update(_build_locator_params(java))
         if params:
             # Still append legacy bounds/text as harmless extra fallbacks below.

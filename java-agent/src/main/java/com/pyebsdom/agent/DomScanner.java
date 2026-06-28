@@ -48,6 +48,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class DomScanner {
 
+    private static boolean PROBE_ENABLED = false;
+
+    // Diagnostic: one probe per FScrollBox, capped. Reset each scan.
+    private static final java.util.Set<Integer> PROBED_BOXES = java.util.Collections
+            .synchronizedSet(new java.util.HashSet<Integer>());
+    private static final int PROBE_BOX_CAP = 40;
+
     private DomScanner() {
     }
 
@@ -59,13 +66,23 @@ public final class DomScanner {
      * @param raw {@code true} to include invisible/empty components
      */
     public static ScanResult scan(final boolean raw) throws Exception {
+        return scan(raw, false);
+    }
+
+    /**
+     * Scans the entire component tree and returns a {@link ScanResult}.
+     *
+     * @param raw   {@code true} to include invisible/empty components
+     * @param probe {@code true} to enable reflection probing
+     */
+    public static ScanResult scan(final boolean raw, final boolean probe) throws Exception {
         final ScanResult[] holder = { null };
         final Exception[] error = { null };
 
         Runnable work = new Runnable() {
             public void run() {
                 try {
-                    holder[0] = doScanOnEDT(raw);
+                    holder[0] = doScanOnEDT(raw, probe);
                 } catch (Exception e) {
                     error[0] = e;
                 }
@@ -136,7 +153,9 @@ public final class DomScanner {
     }
 
     /** Must be called on the Event Dispatch Thread. */
-    private static ScanResult doScanOnEDT(boolean raw) {
+    private static ScanResult doScanOnEDT(boolean raw, boolean probe) {
+        PROBE_ENABLED = probe;
+        PROBED_BOXES.clear();
         Window[] windows = AwtContext.getWindows();
 
         AtomicInteger idGen = new AtomicInteger(0);
@@ -207,6 +226,31 @@ public final class DomScanner {
         node.enabled = safeIsEnabled(comp);
         node.focusable = safeIsFocusable(comp);
         node.focused = safeIsFocusOwner(comp);
+
+        // --- DIAGNOSTIC PROBE: first field per FScrollBox (remove later) ---
+        try {
+            boolean isField = "Field".equals(node.semanticType)
+                    || "LOV".equals(node.semanticType)
+                    || "TextArea".equals(node.semanticType);
+            if (PROBE_ENABLED && isField && PROBED_BOXES.size() < PROBE_BOX_CAP) {
+                java.awt.Container box = comp.getParent();
+                while (box != null
+                        && !"FScrollBox".equals(box.getClass().getSimpleName())) {
+                    box = box.getParent();
+                }
+                if (box != null) {
+                    // add() is true only the FIRST time we see this box
+                    if (PROBED_BOXES.add(System.identityHashCode(box))) {
+                        node.attributes.put("_probe", ReflectionProbe.probe(comp));
+                    }
+                }
+            }
+        } catch (Throwable probeErr) {
+            node.attributes.put("_probeError",
+                    probeErr.getClass().getName() + ": " + probeErr.getMessage());
+        }
+        // --- END DIAGNOSTIC PROBE ---
+
         Cursor cursor = safeGetCursor(comp);
         node.cursorType = cursor != null ? cursor.getType() : Cursor.DEFAULT_CURSOR;
         node.cursorName = cursor != null ? cursor.getName() : "Default Cursor";
@@ -449,6 +493,12 @@ public final class DomScanner {
         node.path = parentPath != null && !parentPath.isEmpty()
                 ? parentPath + "/" + pathSegment
                 : pathSegment;
+
+        // Forms-native item id — strongest within-session locator (see FormsHandler).
+        node.handlerId = FormsHandler.handlerId(comp);
+        if (node.handlerId != null && !node.handlerId.isEmpty()) {
+            node.locators.add(new LocatorCandidate("handlerId", node.handlerId, 0.97));
+        }
 
         // ── displayName + confidence ──────────────────────────────────────
         resolveDisplayName(node);

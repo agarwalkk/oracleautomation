@@ -48,6 +48,7 @@ public final class ComponentResolver {
     // ── Public API ────────────────────────────────────────────────────────
 
     public static Component resolve(AgentCommand cmd) {
+        String locHandlerId = cmd.getParam("locatorhandlerid");
         String locPath = cmd.getParam("locatorpath");
         String locSemanticId = cmd.getParam("locatorsemanticid");
         String locTreePath = cmd.getParam("locatortreepath");
@@ -64,6 +65,21 @@ public final class ComponentResolver {
         int ordinal = parseInt(locOrdinalS, -1);
 
         List<Component> all = collectAllVisible();
+
+        // -1) Forms item handler id — the strongest within-session locator:
+        // Forms-native, unique per item, exact. Tried first; on a stale/old
+        // recording replayed in a new session it simply won't match and we fall
+        // through to path/semanticId/label, so there is no downside to trying it.
+        if (notBlank(locHandlerId)) {
+            List<Component> m = new ArrayList<>();
+            for (Component c : all) {
+                if (locHandlerId.equals(FormsHandler.handlerId(c)))
+                    m.add(c);
+            }
+            Component r = pick(m, ordinal);
+            if (r != null)
+                return r;
+        }
 
         // 0) exact DOM path — deterministic, unique by construction. Structural
         // components (tab bars, panels, scroll boxes) have no semantic label, so

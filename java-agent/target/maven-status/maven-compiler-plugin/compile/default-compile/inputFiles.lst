@@ -3,6 +3,7 @@ C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\StructureAn
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\AttachAgentByPid.java
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\ReflectionExtractor.java
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\ComponentClassifier.java
+C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\ReflectionProbe.java
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\testapp\SampleSwingApp.java
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\ActionExecutor.java
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\IdentityResolver.java
@@ -22,4 +23,5 @@ C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\FileUtil.ja
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\TextLayoutWriter.java
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\AgentCommand.java
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\ComponentResolver.java
+C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\FormsHandler.java
 C:\Apps\OracleAutomation\java-agent\src\main\java\com\pyebsdom\agent\TableDetector.java
