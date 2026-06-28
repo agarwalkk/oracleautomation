@@ -137,10 +137,10 @@ class TestBuildActionContext:
         assert "e5" not in id_map, "Disabled Field should not be in map"
         assert "e5" not in _element_ids_in_text(text), "Disabled Field should not appear in text"
 
-    def test_toolbar_exempt_from_enabled_check(self, ctx):
-        """Toolbar is allowed even when not enabled."""
+    def test_toolbar_excluded_from_actionable(self, ctx):
+        """Toolbar is not actionable under schema-2.0."""
         text, id_map = ctx
-        assert "e6" in id_map, "Toolbar should be in map regardless of enabled state"
+        assert "e6" not in id_map, "Toolbar should not be in map"
 
     def test_window_excluded(self, ctx):
         """Window-role node must not appear."""
@@ -165,10 +165,10 @@ class TestBuildActionContext:
         assert text == "(no actionable elements found)"
 
     def test_snapshot_text_contains_role_and_name(self, ctx):
-        """Spot-check that the text has the expected '[eN] Name | Role' format."""
+        """Spot-check that the text has the expected format."""
         text, _ = ctx
-        assert "Find | Button" in text
-        assert "PO Number | Field" in text
+        assert "[e3] Find (Button, enabled)" in text
+        assert "[e2] PO Number" in text
 
 
 def test_merge_scans_keeps_different_tab_scrollboxes_separate():

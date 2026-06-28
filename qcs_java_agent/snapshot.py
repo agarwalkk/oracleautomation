@@ -405,9 +405,14 @@ def actioned_element_at(scan: dict, screen_x: int, screen_y: int) -> dict | None
 # ───────────────────────────────────────────────────────────────────────────
 
 _ACTION_ROLES = frozenset({
-    "Field", "TextArea", "Button", "List", "LOV", "ComboBox",
-    "Checkbox", "RadioButton", "Menu", "MenuItem", "Tab", "Tree", "TreeItem",
+    "Field", "TextArea", "LOV", "ComboBox", "Checkbox", "RadioButton",
+    "Button", "List", "Tab", "Tree", "TreeItem",
 })
+
+# Oracle Forms button labels carry "alt X" / "mnemonic X" accelerator suffixes.
+_ALT_RE = re.compile(r"\s+(?:alt|mnemonic)\s+\S+$", re.IGNORECASE)
+# Defensive: strip a trailing "List of Values" the agent may not have stripped.
+_LOV_RE = re.compile(r"\s*List of Values$")
 
 # Locator strategy → ComponentResolver command-param key.
 _LOCATOR_PARAM_KEYS = {
@@ -426,17 +431,28 @@ def _eid(n: dict) -> str:
 
 
 def _label(n: dict) -> str:
-    return str(n.get("canonicalLabel") or n.get("displayName")
-               or n.get("accessibleName") or n.get("name") or "").strip()
+    raw = str(n.get("canonicalLabel") or n.get("displayName")
+              or n.get("accessibleName") or n.get("name") or "").strip()
+    return _ALT_RE.sub("", _LOV_RE.sub("", raw))
 
 
 def _is_actionable(n: dict) -> bool:
+    """Gate for both the snapshot tree and the id_map (AI-targetable set).
+
+    Relies on the agent's resolved structure: isMirror (read-only echoes) and
+    containerRole == 'OrphanTabContent' (data fields inside the tab region that
+    belong to no matched tab) are dropped. Unlabeled chrome (technical names,
+    or a label equal to the widget's class name like 'ToolBarButton') is hidden.
+    """
     role = str(n.get("semanticType") or "")
     if role not in _ACTION_ROLES:
         return False
-    if n.get("isMirror"):
+    if n.get("isMirror") or n.get("containerRole") == "OrphanTabContent":
         return False
-    if "enabled" not in _states(n) and role not in ("Toolbar", "TreeItem", "Tab"):
+    lbl = _label(n)
+    if not lbl or _looks_like_technical_name(lbl) or lbl == str(n.get("simpleClassName") or ""):
+        return False
+    if "enabled" not in _states(n) and role not in ("TreeItem", "Tab"):
         return False
     return True
 
@@ -497,6 +513,12 @@ def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str
 
     tree = _build_semantic_tree(nodes)
 
+    # Tools menu lives on the menu bar, OUTSIDE the scoped frame — read from
+    # the full scan and append as a group.
+    tools = _tools_menu_group(flatten_nodes(scan))
+    if tools:
+        tree.append(tools)
+
     id_map: dict[str, dict] = {}
     for n in nodes:
         if not _is_actionable(n):
@@ -529,26 +551,50 @@ def build_action_payload(scan: dict, all_tabs: bool = False) -> dict[str, Any]:
 
 # ── tree assembly (grouping by agent-resolved fields) ──────────────────────
 
+def _tab_titles(folder: dict) -> list[str]:
+    attrs = folder.get("attributes") or {}
+    return [t.strip() for t in str(attrs.get("tabTitles", "")).split("|") if t.strip()]
+
+
 def _build_semantic_tree(nodes: list[dict]) -> list[dict]:
-    tab_folders = [n for n in nodes if n.get("containerRole") == "TabFolder"]
+    # Use the innermost multi-title TabFolder for the tab list (a single-title
+    # folder is a sub-region, not the form's tab bar).
+    folders = [n for n in nodes if n.get("containerRole") == "TabFolder" and len(_tab_titles(n)) > 1]
+    folders.sort(key=lambda n: (n.get("screenBounds") or {}).get("y", 0))
     tab_titles: list[str] = []
     selected_tab = ""
-    if tab_folders:
-        attrs = tab_folders[0].get("attributes") or {}
-        tab_titles = [t.strip() for t in str(attrs.get("tabTitles", "")).split("|") if t.strip()]
+    tab_enabled: dict[str, bool] = {}
+    if folders:
+        tab_titles = _tab_titles(folders[-1])
+        attrs = folders[-1].get("attributes") or {}
         selected_tab = str(attrs.get("tabSelectedTitle", "")).strip()
+        # tabStates = "1,1 | 0,1 | ..." (enabled,visible per tab) — mark disabled.
+        # Absent/empty → all tabs default enabled (do not fabricate "disabled").
+        states_raw = str(attrs.get("tabStates", "")).strip()
+        if states_raw:
+            for idx, part in enumerate(states_raw.split("|")):
+                bits = [b.strip() for b in part.strip().split(",")]
+                if idx < len(tab_titles) and bits and bits[0] in ("0", "1"):
+                    tab_enabled[tab_titles[idx]] = (bits[0] == "1")
 
     actionable = [n for n in nodes if _is_actionable(n)]
 
+    # Dedup by semanticId (collapses the duplicates produced by merge_scans).
+    seen: set = set()
     by_tab: dict[str, list[dict]] = {}
     form_level: list[dict] = []
     tree_nodes: list[dict] = []
     for n in actionable:
-        if n.get("containerRole") == "TreeItem":
-            continue  # rendered under its owning Tree node
-        if n.get("semanticType") == "Tree":
+        role = str(n.get("semanticType") or "")
+        if role == "Tab" or n.get("containerRole") == "TreeItem":
+            continue  # tabs come from the tab list; tree rows from their tree
+        if role == "Tree":
             tree_nodes.append(n)
             continue
+        key = n.get("semanticId") or (_label(n), n.get("ownerTab"), role)
+        if key in seen:
+            continue
+        seen.add(key)
         ot = n.get("ownerTab")
         if ot:
             by_tab.setdefault(ot, []).append(n)
@@ -558,11 +604,16 @@ def _build_semantic_tree(nodes: list[dict]) -> list[dict]:
     children: list[dict] = []
     for t in (tab_titles or list(by_tab.keys())):
         is_sel = (t == selected_tab) if selected_tab else False
+        en = tab_enabled.get(t, True)
+        if not en:
+            state = "disabled"
+        else:
+            state = "enabled, selected" if is_sel else "enabled"
         children.append({
             "element_ref": _tab_ref(nodes, t),
             "label": t,
             "role": "Tab",
-            "states": "enabled, selected" if is_sel else "enabled",
+            "states": state,
             "children": _render_tab_content(by_tab.get(t, [])),
         })
 
@@ -570,6 +621,33 @@ def _build_semantic_tree(nodes: list[dict]) -> list[dict]:
     for tr in tree_nodes:
         children.append(_tree_node(tr))
     return children
+
+
+def _tools_menu_group(all_nodes: list[dict]) -> dict | None:
+    """Build the Tools-menu group from the LWMenu's accessibleMenuItems."""
+    for n in all_nodes:
+        if str(n.get("simpleClassName") or "") != "LWMenu":
+            continue
+        nm = str(n.get("accessibleName") or n.get("name") or "")
+        if not nm.startswith("Tools"):
+            continue
+        items: list[dict] = []
+        raw = str((n.get("attributes") or {}).get("accessibleMenuItems") or "")
+        for entry in raw.split(" || "):
+            parts = entry.split("\t")
+            if len(parts) < 3:
+                continue
+            label = re.sub(r"\s+mnemonic\s+\S+$", "", parts[0].strip()).strip()
+            if not label:
+                continue
+            item = {"label": label, "role": "Item", "children": []}
+            if parts[1] == "check_box":
+                item["checked"] = (parts[2] == "1")
+            items.append(item)
+        if items:
+            return {"label": "Tools Menu", "role": "Group", "children": items}
+        return None
+    return None
 
 
 def _tab_ref(nodes: list[dict], title: str) -> str:
@@ -581,10 +659,14 @@ def _tab_ref(nodes: list[dict], title: str) -> str:
 
 def _render_tab_content(tab_nodes: list[dict]) -> list[dict]:
     grid_cells = [n for n in tab_nodes if n.get("containerRole") == "GridCell"]
+    # A real grid needs >=2 distinct columns; a lone repeating column is not a
+    # table (guards against a stray single-column GridCell annotation).
+    distinct_cols = {(c.get("columnKey") or _label(c)) for c in grid_cells}
+    if len(distinct_cols) < 2:
+        return list(_field_rows(tab_nodes))
     loose = [n for n in tab_nodes if n.get("containerRole") != "GridCell"]
     out: list[dict] = list(_field_rows(loose))
-    if grid_cells:
-        out.append(_grid_node(grid_cells))
+    out.append(_grid_node(grid_cells))
     return out
 
 
@@ -678,7 +760,8 @@ def _render_text(tree: list[dict], form_title: str,
         label = n.get("label", "")
         role = n.get("role", "")
         if role == "Button":
-            return f"{tag}{label} (Button, {n.get('states') or 'enabled'})"
+            st = "enabled" if "enabled" in str(n.get("states") or "") else "disabled"
+            return f"{tag}{label} (Button, {st})"
         if role == "Checkbox":
             return f"{tag}{label} (Checkbox, {'checked' if n.get('checked') else 'unchecked'})"
         if role == "ComboBox":
@@ -694,10 +777,30 @@ def _render_text(tree: list[dict], form_title: str,
         return f"{tag}{label}{suffix}"
 
     def walk(nodes: list[dict], indent: str) -> None:
-        for n in nodes:
+        i = 0
+        while i < len(nodes):
+            n = nodes[i]
             role = n.get("role")
             ref = str(n.get("element_ref") or "")
             tag = f"[{ref}] " if ref.startswith("e") else ""
+            # Join a run of consecutive Buttons on one line (matches old output).
+            if role == "Button":
+                parts = []
+                while i < len(nodes) and nodes[i].get("role") == "Button":
+                    parts.append(field_text(nodes[i]))
+                    i += 1
+                lines.append(f"{indent}{' , '.join(parts)}")
+                continue
+            if role == "Group":
+                lines.append(f"{indent}{n.get('label')}:")
+                for it in n.get("children") or []:
+                    if it.get("checked") is not None:
+                        mark = "[x] " if it.get("checked") else "[ ] "
+                    else:
+                        mark = ""
+                    lines.append(f"{indent}  {mark}{it.get('label', '')}")
+                i += 1
+                continue
             if role == "Tab":
                 lines.append(f"{indent}{tag}{n.get('label')} (Tab, {n.get('states')})")
                 walk(n.get("children") or [], indent + "  ")
@@ -715,11 +818,12 @@ def _render_text(tree: list[dict], form_title: str,
                 for it in n.get("tree_items") or []:
                     mark = " *" if it.get("selected") else ""
                     lines.append(f"{indent}    [{it['element_ref']}] {it['label']}{mark}")
-            elif role in ("Field", "ReadOnly", "LOV", "ComboBox", "Checkbox", "Button"):
+            elif role in ("Field", "ReadOnly", "LOV", "ComboBox", "Checkbox"):
                 lines.append(f"{indent}{field_text(n)}")
             else:
                 lines.append(f"{indent}{tag}{n.get('label', '')}")
                 walk(n.get("children") or [], indent + "  ")
+            i += 1
 
     walk(tree, "  ")
     result = "\n".join(lines) or "(no actionable elements found)"

@@ -3,39 +3,45 @@ package com.pyebsdom.agent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Post-scan pass that resolves <b>layout structure inside the JVM</b> and
  * writes
- * it onto the nodes explicitly, so Python never re-infers it from
- * accessible-name
- * prefixes or pixel geometry.
+ * it onto the nodes explicitly, so Python renders without re-inferring
+ * anything.
  *
  * <p>
- * It sets, where applicable:
- * <ul>
- * <li>{@code containerRole = TabFolder / TabPage} and {@link DomNode#ownerTab}
- * on every node owned by a tab page — derived from {@code TabPanelSheet}
- * ancestry (deterministic) with the legacy "&lt;Tab&gt; tab page " prefix
- * only as a fallback.</li>
- * <li>{@code containerRole = Grid} on multi-record blocks and
- * {@code containerRole = GridCell} + {@link DomNode#recordIndex} +
- * {@link DomNode#columnKey} on the repeating cells, with
- * {@link DomNode#current} on the selected record.</li>
- * <li>{@link DomNode#isMirror} on read-only fields that merely echo an
- * editable field with the same canonical label.</li>
- * </ul>
+ * Pass order (each depends on the previous):
+ * <ol>
+ * <li>{@link #reclassifyLov} — a field whose label ends "List of Values" is an
+ * LOV; set {@code semanticType=LOV} (canonicalLabel is stripped in
+ * {@link IdentityResolver}).</li>
+ * <li>{@link #annotateGrids} — multi-record blocks → {@code Grid} /
+ * {@code GridCell}
+ * with {@code recordIndex} + {@code columnKey} (requires &ge;2 repeating
+ * columns, so a lone repeating field is NOT a spurious table).</li>
+ * <li>{@link #annotateTabs} — every field gets {@code ownerTab} from the
+ * <b>innermost FScrollBox whose subtree contains exactly one tab prefix</b>
+ * (Oracle omits the "&lt;Tab&gt; tab page " prefix on most fields, so we
+ * propagate from the container, not the field). Data fields inside a tab
+ * region but matching no tab are marked
+ * {@code containerRole=OrphanTabContent} (background views → dropped).</li>
+ * <li>{@link #annotateMirrors} — a non-editable plain field that is not a grid
+ * cell, orphan, or LOV is a read-only display echo → {@code isMirror}.</li>
+ * </ol>
  *
  * <p>
- * Run order: after {@link DomScanner} builds + materialises the tree
- * (including {@link TreeItemExpander}) and before {@link IdentityResolver},
- * because the resolver's scoping uses {@code containerRole} / {@code ownerTab}
- * / {@code recordIndex}.
+ * Runs after {@link DomScanner}/{@link TreeItemExpander} and before
+ * {@link IdentityResolver}.
  */
 public final class StructureAnnotator {
+
+    private static final String LOV_SUFFIX = "List of Values";
 
     private StructureAnnotator() {
     }
@@ -43,104 +49,53 @@ public final class StructureAnnotator {
     public static void annotate(DomNode window) {
         if (window == null)
             return;
-        // canonicalLabel is needed by grid + mirror grouping; compute up front
-        // (IdentityResolver recomputes the same value — cheap and idempotent).
-        forEach(window, n -> {
+        List<DomNode> all = new ArrayList<>();
+        flatten(window, all);
+        Map<DomNode, DomNode> parent = new HashMap<>();
+        linkParents(window, parent);
+
+        for (DomNode n : all) {
             if (n.canonicalLabel == null)
                 n.canonicalLabel = IdentityResolver.canonicalLabel(n);
-        });
-        annotateTabs(window);
-        annotateGrids(window);
-        annotateMirrors(window);
+        }
+        reclassifyLov(all);
+        annotateGrids(all);
+        annotateTabs(all, parent);
+        annotateMirrors(all);
     }
 
-    // ── Tabs ──────────────────────────────────────────────────────────────
+    // ── 1. LOV reclassification ───────────────────────────────────────────
 
-    private static void annotateTabs(DomNode root) {
-        List<DomNode> all = new ArrayList<>();
-        flatten(root, all);
-
-        for (DomNode tabPanel : all) {
-            if (!"FormsTabPanel".equals(tabPanel.simpleClassName)
-                    && !"TabBar".equals(tabPanel.simpleClassName)) {
-                continue;
-            }
-            String[] titles = tabTitles(tabPanel);
-            if (titles.length == 0)
-                continue;
-            tabPanel.containerRole = "TabFolder";
-
-            // Deterministic path: TabPanelSheet[i] children of the FormsTabPanel
-            // ARE the page contents, in tab order. Map sheet index -> title.
-            List<DomNode> sheets = descendantsOfType(tabPanel, "TabPanelSheet");
-            for (int i = 0; i < sheets.size() && i < titles.length; i++) {
-                DomNode sheet = sheets.get(i);
-                sheet.containerRole = "TabPage";
-                sheet.ownerTab = titles[i];
-                forEach(sheet, n -> {
-                    if (n.ownerTab == null)
-                        n.ownerTab = sheet.ownerTab;
-                });
-            }
-        }
-
-        // Fallback for forms that expose page content as siblings (not under a
-        // TabPanelSheet): use the un-volatile part of the prefix, but compute it
-        // HERE in Java so Python receives ownerTab directly.
+    private static void reclassifyLov(List<DomNode> all) {
         for (DomNode n : all) {
-            if (n.ownerTab != null)
+            if (!"Field".equals(n.semanticType))
                 continue;
-            String an = n.accessibleName;
-            if (an == null)
-                continue;
-            int idx = an.indexOf(" tab page ");
-            if (idx > 0)
-                n.ownerTab = an.substring(0, idx).trim();
-        }
-    }
-
-    private static String[] tabTitles(DomNode tabPanelOrBar) {
-        String raw = tabPanelOrBar.attributes.get("tabTitles");
-        if (raw == null) {
-            // TabBar holds the titles; a FormsTabPanel may wrap one.
-            for (DomNode d : descendantsOfType(tabPanelOrBar, "TabBar")) {
-                raw = d.attributes.get("tabTitles");
-                if (raw != null)
-                    break;
+            String an = n.accessibleName != null ? n.accessibleName : "";
+            String cl = n.canonicalLabel != null ? n.canonicalLabel : "";
+            if (endsWithLov(an) || endsWithLov(cl)) {
+                n.semanticType = "LOV";
             }
         }
-        if (raw == null || raw.trim().isEmpty())
-            return new String[0];
-        List<String> out = new ArrayList<>();
-        for (String t : raw.split("\\|")) {
-            String s = t.trim();
-            if (!s.isEmpty())
-                out.add(s);
-        }
-        return out.toArray(new String[0]);
     }
 
-    // ── Grids ─────────────────────────────────────────────────────────────
+    private static boolean endsWithLov(String s) {
+        if (s == null)
+            return false;
+        String t = s.trim();
+        return t.endsWith(LOV_SUFFIX);
+    }
 
-    /**
-     * Generalises the old {@code DomScanner.annotateGridRows}: any container
-     * whose Field/Checkbox/ComboBox children include labels that repeat with
-     * regular vertical spacing is a multi-record grid. Cells receive a
-     * {@code recordIndex} (the row) and {@code columnKey} (the canonical label),
-     * and the focused/selected row is flagged {@code current}.
-     */
-    private static void annotateGrids(DomNode root) {
-        List<DomNode> all = new ArrayList<>();
-        flatten(root, all);
+    // ── 2. Grids (≥2 columns required) ────────────────────────────────────
+
+    private static void annotateGrids(List<DomNode> all) {
         for (DomNode container : all) {
-            if (container.children.size() < 3)
+            if (container.children.size() < 6)
                 continue;
             annotateGridContainer(container);
         }
     }
 
     private static void annotateGridContainer(DomNode container) {
-        // Collect candidate cell children (positioned, labelled controls).
         List<DomNode> cells = new ArrayList<>();
         for (DomNode c : container.children) {
             if (!isCellRole(c.semanticType))
@@ -152,10 +107,8 @@ public final class StructureAnnotator {
             cells.add(c);
         }
         if (cells.size() < 6)
-            return; // need at least a couple of multi-col rows
+            return;
 
-        // Group by canonical label; a label that repeats >=3 times at regular
-        // y-spacing is a grid column.
         Map<String, List<DomNode>> byLabel = new LinkedHashMap<>();
         for (DomNode c : cells) {
             byLabel.computeIfAbsent(c.canonicalLabel, k -> new ArrayList<>()).add(c);
@@ -170,13 +123,13 @@ public final class StructureAnnotator {
             if (hasRegularSpacing(inst))
                 gridColumns.put(e.getKey(), inst);
         }
-        if (gridColumns.isEmpty())
+        // A real grid has at least TWO repeating columns; one repeating field
+        // (e.g. a column of "To" date fields) is NOT a table.
+        if (gridColumns.size() < 2)
             return;
 
         container.containerRole = "Grid";
 
-        // Build a canonical row y-ladder from the longest column so every
-        // column's cells map to the same record indices.
         List<DomNode> longest = null;
         for (List<DomNode> col : gridColumns.values()) {
             if (longest == null || col.size() > longest.size())
@@ -186,26 +139,16 @@ public final class StructureAnnotator {
         for (int i = 0; i < longest.size(); i++)
             rowYs[i] = longest.get(i).bounds.y;
 
+        int currentRow = -1;
         for (List<DomNode> col : gridColumns.values()) {
             for (DomNode cell : col) {
                 int row = nearestRow(rowYs, cell.bounds.y);
                 cell.containerRole = "GridCell";
                 cell.recordIndex = row;
                 cell.columnKey = cell.canonicalLabel;
+                if ((cell.focused || cell.selected) && currentRow < 0)
+                    currentRow = row;
             }
-        }
-
-        // Current record: the row containing the focused/selected cell.
-        int currentRow = -1;
-        for (List<DomNode> col : gridColumns.values()) {
-            for (DomNode cell : col) {
-                if ((cell.focused || cell.selected) && cell.recordIndex >= 0) {
-                    currentRow = cell.recordIndex;
-                    break;
-                }
-            }
-            if (currentRow >= 0)
-                break;
         }
         if (currentRow >= 0) {
             for (List<DomNode> col : gridColumns.values()) {
@@ -249,53 +192,103 @@ public final class StructureAnnotator {
     }
 
     private static boolean isCellRole(String st) {
-        return "Field".equals(st) || "Checkbox".equals(st)
-                || "ComboBox".equals(st) || "LOV".equals(st) || "Button".equals(st);
+        return "Field".equals(st) || "LOV".equals(st) || "Checkbox".equals(st)
+                || "ComboBox".equals(st) || "Button".equals(st);
     }
 
-    // ── Mirrors ───────────────────────────────────────────────────────────
+    // ── 3. Tabs: ownerTab via innermost single-prefix FScrollBox ──────────
 
-    /**
-     * A read-only field that echoes an editable field with the same canonical
-     * label (Oracle Forms pairs an input item with a non-editable display item).
-     * Decided from editability + label, not a name regex.
-     */
-    private static void annotateMirrors(DomNode root) {
-        List<DomNode> all = new ArrayList<>();
-        flatten(root, all);
-        Map<String, Boolean> hasEditable = new HashMap<>();
+    private static void annotateTabs(List<DomNode> all, Map<DomNode, DomNode> parent) {
+        // Mark the tab folders.
         for (DomNode n : all) {
-            if (!"Field".equals(n.semanticType))
-                continue;
-            if (n.canonicalLabel == null || n.canonicalLabel.isEmpty())
-                continue;
-            if (n.editable)
-                hasEditable.put(n.ownerTab + "|" + n.canonicalLabel, Boolean.TRUE);
+            if (("FormsTabPanel".equals(n.simpleClassName) || "TabBar".equals(n.simpleClassName))
+                    && tabTitleCount(n) >= 1) {
+                n.containerRole = "TabFolder";
+            }
         }
+
+        // For each FScrollBox compute the set of distinct tab prefixes in its
+        // subtree. Exactly one → "dedicated" (owns that tab). >=1 → "tab region".
+        Map<DomNode, String> dedicated = new HashMap<>();
+        Set<DomNode> tabRegion = new HashSet<>();
         for (DomNode n : all) {
-            if (!"Field".equals(n.semanticType))
+            if (!"FScrollBox".equals(n.simpleClassName))
                 continue;
-            if (n.editable || n.canonicalLabel == null || n.canonicalLabel.isEmpty())
-                continue;
-            if (n.containerRole != null)
-                continue; // grid cells are not mirrors
-            if (Boolean.TRUE.equals(hasEditable.get(n.ownerTab + "|" + n.canonicalLabel))) {
-                n.isMirror = true;
+            Set<String> prefixes = new HashSet<>();
+            collectPrefixes(n, prefixes);
+            if (!prefixes.isEmpty())
+                tabRegion.add(n);
+            if (prefixes.size() == 1)
+                dedicated.put(n, prefixes.iterator().next());
+        }
+        if (dedicated.isEmpty() && tabRegion.isEmpty())
+            return;
+
+        for (DomNode n : all) {
+            DomNode cur = parent.get(n);
+            String owner = null;
+            boolean inRegion = false;
+            while (cur != null) {
+                if (owner == null && dedicated.containsKey(cur))
+                    owner = dedicated.get(cur);
+                if (tabRegion.contains(cur))
+                    inRegion = true;
+                cur = parent.get(cur);
+            }
+            if (owner != null) {
+                n.ownerTab = owner;
+            } else if (inRegion && n.containerRole == null && isDataField(n.semanticType)) {
+                // data field inside the tab area but matching no tab → background
+                // view (e.g. a non-selected record block). Renderer drops it.
+                n.containerRole = "OrphanTabContent";
             }
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    private interface NodeVisitor {
-        void visit(DomNode n);
-    }
-
-    private static void forEach(DomNode n, NodeVisitor v) {
-        v.visit(n);
+    private static void collectPrefixes(DomNode n, Set<String> out) {
+        String an = n.accessibleName;
+        if (an != null) {
+            int i = an.indexOf(" tab page ");
+            if (i > 0)
+                out.add(an.substring(0, i));
+        }
         for (DomNode c : n.children)
-            forEach(c, v);
+            collectPrefixes(c, out);
     }
+
+    private static int tabTitleCount(DomNode n) {
+        String raw = n.attributes.get("tabTitles");
+        if (raw == null || raw.trim().isEmpty())
+            return 0;
+        int count = 0;
+        for (String t : raw.split("\\|"))
+            if (!t.trim().isEmpty())
+                count++;
+        return count;
+    }
+
+    private static boolean isDataField(String st) {
+        return "Field".equals(st) || "LOV".equals(st) || "ComboBox".equals(st)
+                || "Checkbox".equals(st) || "RadioButton".equals(st);
+    }
+
+    // ── 4. Mirrors ────────────────────────────────────────────────────────
+
+    private static void annotateMirrors(List<DomNode> all) {
+        for (DomNode n : all) {
+            if (!"Field".equals(n.semanticType))
+                continue;
+            if (n.editable)
+                continue;
+            if ("GridCell".equals(n.containerRole) || "OrphanTabContent".equals(n.containerRole))
+                continue;
+            if (endsWithLov(n.accessibleName))
+                continue;
+            n.isMirror = true;
+        }
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────
 
     private static void flatten(DomNode n, List<DomNode> out) {
         out.add(n);
@@ -303,17 +296,10 @@ public final class StructureAnnotator {
             flatten(c, out);
     }
 
-    private static List<DomNode> descendantsOfType(DomNode n, String simpleClassName) {
-        List<DomNode> out = new ArrayList<>();
-        collectType(n, simpleClassName, out);
-        return out;
-    }
-
-    private static void collectType(DomNode n, String scn, List<DomNode> out) {
+    private static void linkParents(DomNode n, Map<DomNode, DomNode> parent) {
         for (DomNode c : n.children) {
-            if (scn.equals(c.simpleClassName))
-                out.add(c);
-            collectType(c, scn, out);
+            parent.put(c, n);
+            linkParents(c, parent);
         }
     }
 }

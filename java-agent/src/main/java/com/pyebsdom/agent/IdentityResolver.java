@@ -140,21 +140,26 @@ public final class IdentityResolver {
      * prefer it; otherwise strip the prefix from accessibleName.
      */
     static String canonicalLabel(DomNode n) {
-        if (notBlank(n.accessibleDescription))
-            return n.accessibleDescription.trim();
-        String s = n.accessibleName;
-        if (notBlank(s)) {
+        String label;
+        if (notBlank(n.accessibleDescription)) {
+            label = n.accessibleDescription.trim();
+        } else if (notBlank(n.accessibleName)) {
+            String s = n.accessibleName;
             int idx = s.indexOf(" tab page ");
-            if (idx >= 0 && idx + 10 < s.length()) {
-                return s.substring(idx + 10).trim();
-            }
-            return s.trim();
+            label = (idx >= 0 && idx + 10 < s.length()) ? s.substring(idx + 10).trim() : s.trim();
+        } else if (notBlank(n.displayName)) {
+            label = n.displayName.trim();
+        } else if (notBlank(n.text)) {
+            label = n.text.trim();
+        } else {
+            return notBlank(n.simpleClassName) ? n.simpleClassName : "";
         }
-        if (notBlank(n.displayName))
-            return n.displayName.trim();
-        if (notBlank(n.text))
-            return n.text.trim();
-        return notBlank(n.simpleClassName) ? n.simpleClassName : "";
+        // Strip the trailing "List of Values" so an LOV field's canonical label
+        // is the business name ("Order Type"), not "Order TypeList of Values".
+        if (label.endsWith("List of Values")) {
+            label = label.substring(0, label.length() - "List of Values".length()).trim();
+        }
+        return label;
     }
 
     // ── Scope identity ────────────────────────────────────────────────────

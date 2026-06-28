@@ -18,6 +18,7 @@ from .snapshot import (
     java_nodes_to_repo_elements,
     locator_params,
 )
+from qcs_repo.snapshot import java_elements_to_ai_snapshot
 
 __all__ = [
     "JavaAgentDriver",
@@ -30,6 +31,7 @@ __all__ = [
     "flatten_nodes",
     "java_component_result_to_repo_element",
     "java_nodes_to_repo_elements",
+    "java_elements_to_ai_snapshot",
     "locator_params",
     "wait_for_forms_ready",
 ]
