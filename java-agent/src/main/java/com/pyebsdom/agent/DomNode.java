@@ -59,6 +59,14 @@ public final class DomNode {
      */
     public String handlerId;
 
+    // ── Forms item capabilities (from FormsHandler; ground truth, not inferred) ─
+    /** Item has a List-of-Values (from {@code isLOVButtonDisplayed()}). */
+    public boolean hasLov;
+    /** Item is required/mandatory (from {@code mReqdFlag}). */
+    public boolean required;
+    /** Item is runtime-locked / read-only (from {@code isLocked()}). */
+    public boolean locked;
+
     // ── Type ──────────────────────────────────────────────────────────────
     /** Fully-qualified Java class name. */
     public String type;
@@ -171,6 +179,9 @@ public final class DomNode {
                 .append(primaryLocator != null ? primaryLocator.toJson() : "null").append(',');
         sb.append("\"locatorAmbiguous\":").append(locatorAmbiguous).append(',');
         sb.append("\"handlerId\":").append(JsonUtil.quoted(handlerId)).append(',');
+        sb.append("\"hasLov\":").append(hasLov).append(',');
+        sb.append("\"required\":").append(required).append(',');
+        sb.append("\"locked\":").append(locked).append(',');
 
         // Type
         sb.append("\"type\":").append(JsonUtil.quoted(type)).append(',');

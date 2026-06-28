@@ -5,26 +5,26 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * Reads the Oracle Forms <b>item handler id</b> from a live UI component.
+ * Reads Oracle Forms item facts from a live UI component's handler peer.
  *
  * <p>
- * Every Oracle Forms UI item (VTextField, VButton, ExtendedCheckbox, …)
- * holds a private {@code mHandler} reference to its
- * {@code oracle.forms.handler.*Item} peer, which exposes a stable, item-native
- * {@code getHandlerId()} (the Forms runtime's item handle). The probe confirmed
- * this id is:
+ * Every Forms UI item (VTextField, VButton, …) holds a private
+ * {@code mHandler} reference to its {@code oracle.forms.handler.*Item} peer.
+ * The full-inventory probe confirmed the handler exposes, beyond identity, the
+ * exact item capabilities the .fmx defines:
  * <ul>
- * <li><b>unique per item within a form module</b> (e.g. 1109, 1204, 1224…),
- * and</li>
- * <li><b>Forms-native</b> — assigned by the runtime, not the AWT creation
- * order, so it is far more stable than {@code Component.getName()}
- * ("VTextField69").</li>
+ * <li>{@code getHandlerId()} — Forms-native item id (unique per item; the
+ * strongest within-session locator);</li>
+ * <li>{@code isLOVButtonDisplayed()} / {@code mHasLovButton} — whether the
+ * item has a List-of-Values (the GROUND TRUTH behind the
+ * "&lt;label&gt; List of Values" accessibleName suffix);</li>
+ * <li>{@code mReqdFlag} — required/mandatory item;</li>
+ * <li>{@code isLocked()} / {@code mLocked} — runtime-locked (read-only).</li>
  * </ul>
  *
  * <p>
- * Used both for extraction ({@link DomScanner} stamps {@code node.handlerId})
- * and for resolution ({@link ComponentResolver} matches a target by it). Pure
- * read-only reflection, fully guarded.
+ * All access is read-only reflection, fully guarded; a missing accessor
+ * (e.g. on a non-text item type) degrades to "no fact", never an error.
  */
 public final class FormsHandler {
 
@@ -32,36 +32,77 @@ public final class FormsHandler {
     }
 
     /**
-     * Returns the item handler id as a string, or {@code null} when the
-     * component is not a Forms item or the id cannot be read.
+     * Stamps all available item facts onto {@code node} in a single handler
+     * read. No-op when {@code comp} is not a Forms item.
      */
-    public static String handlerId(Component comp) {
-        if (comp == null)
-            return null;
-        try {
-            Object handler = readFieldDeep(comp, "mHandler");
-            if (handler == null)
-                return null;
+    public static void populate(Component comp, DomNode node) {
+        if (comp == null || node == null)
+            return;
+        Object h = handlerOf(comp);
+        if (h == null)
+            return;
 
-            // Preferred: public getHandlerId() (may be inherited from UICommon).
-            try {
-                Method m = handler.getClass().getMethod("getHandlerId");
-                Object v = m.invoke(handler);
-                if (v != null)
-                    return String.valueOf(v);
-            } catch (Throwable ignored) {
-            }
-
-            // Fallback: private mHandlerId field on the handler.
-            Object idField = readFieldDeep(handler, "mHandlerId");
-            if (idField != null)
-                return String.valueOf(idField);
-        } catch (Throwable ignored) {
+        String id = handlerIdOf(h);
+        if (id != null && !id.isEmpty()) {
+            node.handlerId = id;
+            node.locators.add(new LocatorCandidate("handlerId", id, 0.97));
         }
-        return null;
+        if (Boolean.TRUE.equals(boolGetterOrField(h, "isLOVButtonDisplayed", "mHasLovButton"))) {
+            node.hasLov = true;
+        }
+        if (Boolean.TRUE.equals(boolField(h, "mReqdFlag"))) {
+            node.required = true;
+        }
+        if (Boolean.TRUE.equals(boolGetterOrField(h, "isLocked", "mLocked"))) {
+            node.locked = true;
+        }
     }
 
-    /** Walk the class hierarchy to read a (possibly private) field by name. */
+    /**
+     * Forms item handler id, or {@code null}. Used by {@link ComponentResolver}.
+     */
+    public static String handlerId(Component comp) {
+        Object h = handlerOf(comp);
+        return h == null ? null : handlerIdOf(h);
+    }
+
+    // ── internals ─────────────────────────────────────────────────────────
+
+    private static Object handlerOf(Component comp) {
+        return readFieldDeep(comp, "mHandler");
+    }
+
+    private static String handlerIdOf(Object handler) {
+        try {
+            Method m = handler.getClass().getMethod("getHandlerId");
+            Object v = m.invoke(handler);
+            if (v != null)
+                return String.valueOf(v);
+        } catch (Throwable ignored) {
+        }
+        Object f = readFieldDeep(handler, "mHandlerId");
+        return f != null ? String.valueOf(f) : null;
+    }
+
+    /**
+     * Try a boolean getter, then a boolean field, returning null if neither works.
+     */
+    private static Boolean boolGetterOrField(Object o, String getter, String field) {
+        try {
+            Method m = o.getClass().getMethod(getter);
+            Object v = m.invoke(o);
+            if (v instanceof Boolean)
+                return (Boolean) v;
+        } catch (Throwable ignored) {
+        }
+        return boolField(o, field);
+    }
+
+    private static Boolean boolField(Object o, String field) {
+        Object v = readFieldDeep(o, field);
+        return (v instanceof Boolean) ? (Boolean) v : null;
+    }
+
     private static Object readFieldDeep(Object target, String name) {
         for (Class<?> c = target.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
             try {

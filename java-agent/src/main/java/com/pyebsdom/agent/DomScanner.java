@@ -494,11 +494,8 @@ public final class DomScanner {
                 ? parentPath + "/" + pathSegment
                 : pathSegment;
 
-        // Forms-native item id — strongest within-session locator (see FormsHandler).
-        node.handlerId = FormsHandler.handlerId(comp);
-        if (node.handlerId != null && !node.handlerId.isEmpty()) {
-            node.locators.add(new LocatorCandidate("handlerId", node.handlerId, 0.97));
-        }
+        // Forms item facts: handlerId (top locator), hasLov, required, locked.
+        FormsHandler.populate(comp, node);
 
         // ── displayName + confidence ──────────────────────────────────────
         resolveDisplayName(node);

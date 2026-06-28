@@ -70,10 +70,18 @@ public final class StructureAnnotator {
         for (DomNode n : all) {
             if (!"Field".equals(n.semanticType))
                 continue;
+            // Ground truth first: the item's isLOVButtonDisplayed() flag. Fall
+            // back to the "<label> List of Values" accessibleName suffix only
+            // when the flag is unavailable (non-text item types, older agent).
+            if (n.hasLov) {
+                n.semanticType = "LOV";
+                continue;
+            }
             String an = n.accessibleName != null ? n.accessibleName : "";
             String cl = n.canonicalLabel != null ? n.canonicalLabel : "";
             if (endsWithLov(an) || endsWithLov(cl)) {
                 n.semanticType = "LOV";
+                n.hasLov = true; // normalise so downstream sees a single signal
             }
         }
     }
