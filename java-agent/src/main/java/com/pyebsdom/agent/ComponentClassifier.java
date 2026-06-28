@@ -139,6 +139,7 @@ public final class ComponentClassifier {
     private static String classifyByExactFqn(String fqn) {
         switch (fqn) {
             // ── oracle.forms.ui ──────────────────────────────────────────
+            case "oracle.forms.ui.ListView":            return "Tree";
             case "oracle.forms.ui.VTextField":          return "Field";
             case "oracle.forms.ui.VTextArea":           return "TextArea";
             case "oracle.forms.ui.FLWTextArea":         return "TextArea";

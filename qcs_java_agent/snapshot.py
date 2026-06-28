@@ -458,8 +458,11 @@ def _is_actionable(n: dict) -> bool:
     if n.get("isMirror") or n.get("containerRole") == "OrphanTabContent":
         return False
     lbl = _label(n)
-    if not lbl or _looks_like_technical_name(lbl) or lbl == str(n.get("simpleClassName") or ""):
+    if not lbl:
         return False
+    if role not in ("Tree", "TreeItem"):
+        if _looks_like_technical_name(lbl) or lbl == str(n.get("simpleClassName") or ""):
+            return False
     if "enabled" not in _states(n) and role not in ("TreeItem", "Tab"):
         return False
     return True

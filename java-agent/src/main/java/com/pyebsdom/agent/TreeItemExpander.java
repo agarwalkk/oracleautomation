@@ -4,6 +4,7 @@ import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -199,6 +200,10 @@ public final class TreeItemExpander {
     }
 
     private static void readRowsOnEdt(Component comp, List<Row> out) throws Exception {
+        if ("ListView".equals(comp.getClass().getSimpleName())) {
+            readListViewRowsOnEdt(comp, out);
+            return;
+        }
         Class<?> c = comp.getClass();
         Method rowCount = method(c, "getRowCount");
         Method pathForRow = intMethod(c, "getPathForRow");
@@ -333,6 +338,147 @@ public final class TreeItemExpander {
             }
         }
         return null;
+    }
+
+    private static Method intIntMethod(Class<?> c, String name) {
+        for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
+            try {
+                return k.getMethod(name, int.class, int.class);
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static void readListViewRowsOnEdt(Component comp, List<Row> out) throws Exception {
+        Class<?> c = comp.getClass();
+        Method rowCountMethod = method(c, "getRowCount");
+        Method colCountMethod = method(c, "getColumnCount");
+        Method getCellData = intIntMethod(c, "getCellData");
+        Method getHeaderData = intMethod(c, "getHeaderData");
+
+        if (rowCountMethod == null || colCountMethod == null || getCellData == null) {
+            return;
+        }
+
+        int rowCount = toInt(rowCountMethod.invoke(comp));
+        int colCount = toInt(colCountMethod.invoke(comp));
+        if (rowCount <= 0 || colCount <= 0)
+            return;
+
+        int limit = Math.min(rowCount, 256);
+
+        // Get column headers
+        String[] headers = new String[colCount];
+        if (getHeaderData != null) {
+            for (int col = 0; col < colCount; col++) {
+                try {
+                    Object hdr = getHeaderData.invoke(comp, col);
+                    headers[col] = (hdr != null) ? hdr.toString().trim() : null;
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        // Get selected row
+        int selectedRow = -1;
+        try {
+            Method getSelectedRow = method(c, "getSelectedRow");
+            if (getSelectedRow != null) {
+                selectedRow = toInt(getSelectedRow.invoke(comp));
+            }
+        } catch (Exception ignored) {
+        }
+
+        // For row bounds
+        Method cellsToPixels = null;
+        try {
+            cellsToPixels = c.getDeclaredMethod("cellsToPixels", int.class, int.class, int.class, int.class);
+            cellsToPixels.setAccessible(true);
+        } catch (Exception ignored) {
+        }
+
+        int rowHeight = 18;
+        int headerHeight = 20;
+        try {
+            Field f = c.getDeclaredField("mRowHeight");
+            f.setAccessible(true);
+            rowHeight = f.getInt(comp);
+        } catch (Exception ignored) {
+        }
+        try {
+            Field f = c.getDeclaredField("mHeaderHeight");
+            f.setAccessible(true);
+            headerHeight = f.getInt(comp);
+        } catch (Exception ignored) {
+        }
+        int firstVisibleRow = 0;
+        try {
+            Method m = c.getMethod("getFirstRowOnScreen");
+            firstVisibleRow = (Integer) m.invoke(comp);
+        } catch (Exception ignored) {
+        }
+
+        Point origin = null;
+        try {
+            if (comp.isShowing()) {
+                origin = comp.getLocationOnScreen();
+            }
+        } catch (Exception ignored) {
+        }
+
+        for (int r = 0; r < limit; r++) {
+            StringBuilder sb = new StringBuilder();
+            for (int col = 0; col < colCount; col++) {
+                Object val = null;
+                try {
+                    val = getCellData.invoke(comp, col, r);
+                } catch (Exception ignored) {
+                }
+                String cellStr = (val != null) ? val.toString().trim() : "";
+                if (sb.length() > 0)
+                    sb.append(" ");
+                if (headers[col] != null && !headers[col].isEmpty()) {
+                    sb.append(headers[col]).append(":").append(cellStr);
+                } else {
+                    sb.append(cellStr);
+                }
+            }
+
+            String label = sb.toString().trim();
+            if (label.isEmpty()) {
+                label = "Row " + r;
+            }
+
+            Row row = new Row();
+            row.rowIndex = r;
+            row.depth = 0;
+            row.label = label;
+            row.selected = (r == selectedRow);
+            row.expanded = false;
+
+            Rectangle bounds = null;
+            if (cellsToPixels != null) {
+                try {
+                    bounds = (Rectangle) cellsToPixels.invoke(comp, 0, r, colCount - 1, r);
+                } catch (Exception ignored) {
+                }
+            }
+
+            if (bounds == null) {
+                // Fallback bounds calculation
+                int y = headerHeight + (r - firstVisibleRow) * rowHeight;
+                bounds = new Rectangle(0, y, comp.getWidth(), rowHeight);
+            }
+
+            row.bounds = bounds;
+            if (origin != null) {
+                row.screenX = origin.x + bounds.x;
+                row.screenY = origin.y + bounds.y;
+            }
+
+            out.add(row);
+        }
     }
 
     private static int toInt(Object v) {

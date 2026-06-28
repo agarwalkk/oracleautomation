@@ -22,3 +22,4 @@ _*.py*
 # AI Snapshot new
 tests/testdata/aisnapshot/new/
 *.class
+*.jar
