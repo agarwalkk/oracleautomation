@@ -253,23 +253,42 @@ export function App() {
     }
   }
 
+  // Full hoverable element overlay (every scanned element) for the active view.
+  const fullElements = useMemo<FullElement[]>(() => {
+    if (scan?.full_elements) {
+      return scan.full_elements;
+    }
+    if (detail?.full_elements) {
+      return detail.full_elements;
+    }
+    return [];
+  }, [scan, detail]);
+
+  const fullByRef = useMemo(() => {
+    const map = new Map<string, FullElement>();
+    for (const fe of fullElements) {
+      map.set(fe.element_ref, fe);
+    }
+    return map;
+  }, [fullElements]);
+
   // WHY: Screenshots are no longer cropped, so element coordinates already
   // align with the full screenshot. No origin adjustment needed.
   const baseTree = useMemo<TreeNode[]>(() => {
     if (scan?.tree?.length) {
-      return normalizeTree(scan.tree);
+      return normalizeTree(scan.tree, fullByRef);
     }
     if (detail) {
       const displayTree = detail.metadata?.display_tree as TreeNode[] | undefined;
       if (Array.isArray(displayTree) && displayTree.length > 0) {
-        return normalizeTree(displayTree);
+        return normalizeTree(displayTree, fullByRef);
       }
       if (detail.tree?.length) {
-        return normalizeTree(detail.tree);
+        return normalizeTree(detail.tree, fullByRef);
       }
     }
     return [];
-  }, [detail, scan]);
+  }, [detail, scan, fullByRef]);
 
   // Reset any pending tree edits whenever the active scan/container changes.
   useEffect(() => {
@@ -317,25 +336,6 @@ export function App() {
     };
     return [rootNode];
   }, [activeTree, containerTitle]);
-
-  // Full hoverable element overlay (every scanned element) for the active view.
-  const fullElements = useMemo<FullElement[]>(() => {
-    if (scan?.full_elements) {
-      return scan.full_elements;
-    }
-    if (detail?.full_elements) {
-      return detail.full_elements;
-    }
-    return [];
-  }, [scan, detail]);
-
-  const fullByRef = useMemo(() => {
-    const map = new Map<string, FullElement>();
-    for (const fe of fullElements) {
-      map.set(fe.element_ref, fe);
-    }
-    return map;
-  }, [fullElements]);
 
   // Elements present on screen but not yet in the curated tree — these are the
   // draggable "discovery" elements the user can drop onto a tree node.
@@ -411,8 +411,8 @@ export function App() {
               const displayLabel = target.title && target.type
                 ? `[${target.pid}] ${target.title} (${target.type})`
                 : target.title
-                ? `[${target.pid}] ${target.title}`
-                : target.label;
+                  ? `[${target.pid}] ${target.title}`
+                  : target.label;
               return (
                 <option key={target.pid} value={target.pid}>
                   {displayLabel}
@@ -728,7 +728,7 @@ function ImageCanvas(props: {
                 }
                 return (
                   <div
-                    key={fe.element_ref}
+                    key={`${fe.element_ref}-${b.x}-${b.y}`}
                     className="box discovery"
                     draggable
                     onDragStart={(e) => {
@@ -767,7 +767,7 @@ function ImageCanvas(props: {
                 }
                 return (
                   <div
-                    key={fe.element_ref}
+                    key={`${fe.element_ref}-${b.x}-${b.y}`}
                     className="box discovery"
                     draggable
                     onDragStart={(e) => {
@@ -796,7 +796,7 @@ function ImageCanvas(props: {
                 return (
                   <button
                     type="button"
-                    key={node.element_ref}
+                    key={`${node.element_ref || "ref"}-${b.x}-${b.y}`}
                     className={props.hoveredRef === node.element_ref ? "box active" : "box"}
                     style={{
                       left: `${Math.max(0, b.x) * scale}px`,
@@ -940,82 +940,138 @@ function explorerModeExpandedState(nodes: TreeNode[]): Record<string, boolean> {
   return state;
 }
 
+function computeEnclosingBounds(children: TreeNode[]): { x: number; y: number; width: number; height: number } | undefined {
+  if (!children || children.length === 0) {
+    return undefined;
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let hasValid = false;
+  for (const child of children) {
+    if (child.bounds) {
+      minX = Math.min(minX, child.bounds.x);
+      minY = Math.min(minY, child.bounds.y);
+      maxX = Math.max(maxX, child.bounds.x + child.bounds.width);
+      maxY = Math.max(maxY, child.bounds.y + child.bounds.height);
+      hasValid = true;
+    }
+  }
+  if (!hasValid) {
+    return undefined;
+  }
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
+}
+
+function fillAndAdjustTree(nodes: TreeNode[], fullByRef?: Map<string, FullElement>): TreeNode[] {
+  return nodes.map((node) => {
+    let children = node.children || [];
+    if (children.length > 0) {
+      children = fillAndAdjustTree(children, fullByRef);
+      const enclosing = computeEnclosingBounds(children);
+      return {
+        ...node,
+        bounds: enclosing || node.bounds || { x: 0, y: 0, width: 0, height: 0 },
+        children,
+      };
+    } else {
+      let bounds = node.bounds;
+      if (!bounds || (bounds.width === 0 && bounds.height === 0)) {
+        const lookedUp = node.element_ref && fullByRef?.get(node.element_ref)?.bounds;
+        if (lookedUp) {
+          bounds = lookedUp;
+        }
+      }
+      return {
+        ...node,
+        bounds: bounds || { x: 0, y: 0, width: 0, height: 0 },
+      };
+    }
+  });
+}
+
 // WHY: No origin parameter — screenshots are no longer cropped so coordinates
 // are raw (unadjusted) and align directly with the full screenshot.
-function normalizeTree(input: TreeElement[] | TreeNode[]): TreeNode[] {
+function normalizeTree(input: TreeElement[] | TreeNode[], fullByRef?: Map<string, FullElement>): TreeNode[] {
   const items = input || [];
   if (!items.length) {
     return [];
   }
 
   const first = items[0] as Partial<TreeNode>;
+  let result: TreeNode[];
   if (Array.isArray(first.children)) {
-    return (items as TreeNode[]).map((node) => ({
+    result = (items as TreeNode[]).map((node) => ({
       ...node,
-      children: normalizeTree(node.children || []),
+      children: normalizeTree(node.children || [], fullByRef),
     }));
-  }
+  } else {
+    const byRef = new Map<string, TreeNode>();
+    const roots: TreeNode[] = [];
+    const parentByRef = new Map<string, string>();
 
-  const byRef = new Map<string, TreeNode>();
-  const roots: TreeNode[] = [];
-  const parentByRef = new Map<string, string>();
-
-  for (const raw of items as TreeElement[]) {
-    const ref = String(raw.element_ref || raw.elementid || "").trim();
-    if (!ref) {
-      continue;
+    for (const raw of items as TreeElement[]) {
+      const ref = String(raw.element_ref || raw.elementid || "").trim();
+      if (!ref) {
+        continue;
+      }
+      const b = raw.bounds || {
+        x: Number(raw.x || 0),
+        y: Number(raw.y || 0),
+        width: Number(raw.width || 0),
+        height: Number(raw.height || 0),
+      };
+      byRef.set(ref, {
+        element_ref: ref,
+        label: String(raw.friendly_name || raw.name || ref),
+        role: String(raw.role || ""),
+        included: raw.included !== false,
+        bounds: {
+          x: Number(b.x || 0),
+          y: Number(b.y || 0),
+          width: Number(b.width || 0),
+          height: Number(b.height || 0),
+        },
+        children: [],
+      });
+      const parent = String(raw.parent_ref || raw.filteredparentid || "").trim();
+      if (parent) {
+        parentByRef.set(ref, parent);
+      }
     }
-    const b = raw.bounds || {
-      x: Number(raw.x || 0),
-      y: Number(raw.y || 0),
-      width: Number(raw.width || 0),
-      height: Number(raw.height || 0),
+
+    for (const [ref, node] of byRef.entries()) {
+      const parent = parentByRef.get(ref);
+      if (parent && byRef.has(parent)) {
+        byRef.get(parent)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    const sortNodes = (nodes: TreeNode[]): TreeNode[] => {
+      nodes.sort((a, b) => {
+        if (a.bounds?.y !== b.bounds?.y) {
+          return (a.bounds?.y || 0) - (b.bounds?.y || 0);
+        }
+        if (a.bounds?.x !== b.bounds?.x) {
+          return (a.bounds?.x || 0) - (b.bounds?.x || 0);
+        }
+        return a.label.localeCompare(b.label);
+      });
+      for (const node of nodes) {
+        node.children = sortNodes(node.children);
+      }
+      return nodes;
     };
-    byRef.set(ref, {
-      element_ref: ref,
-      label: String(raw.friendly_name || raw.name || ref),
-      role: String(raw.role || ""),
-      included: raw.included !== false,
-      bounds: {
-        x: Number(b.x || 0),
-        y: Number(b.y || 0),
-        width: Number(b.width || 0),
-        height: Number(b.height || 0),
-      },
-      children: [],
-    });
-    const parent = String(raw.parent_ref || raw.filteredparentid || "").trim();
-    if (parent) {
-      parentByRef.set(ref, parent);
-    }
+
+    result = sortNodes(roots);
   }
 
-  for (const [ref, node] of byRef.entries()) {
-    const parent = parentByRef.get(ref);
-    if (parent && byRef.has(parent)) {
-      byRef.get(parent)!.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  }
-
-  const sortNodes = (nodes: TreeNode[]): TreeNode[] => {
-    nodes.sort((a, b) => {
-      if (a.bounds.y !== b.bounds.y) {
-        return a.bounds.y - b.bounds.y;
-      }
-      if (a.bounds.x !== b.bounds.x) {
-        return a.bounds.x - b.bounds.x;
-      }
-      return a.label.localeCompare(b.label);
-    });
-    for (const node of nodes) {
-      node.children = sortNodes(node.children);
-    }
-    return nodes;
-  };
-
-  return sortNodes(roots);
+  return fillAndAdjustTree(result, fullByRef);
 }
 
 // Icon + clean label for a tree node. The snapshot text encodes the element
@@ -1044,7 +1100,7 @@ function elementMeta(node: TreeNode): {
   enabled: boolean;
   typeLabel: string;
 } {
-  const label = node.label || node.element_ref;
+  const label = node.label ?? node.element_ref ?? "";
   const enabled = !/disabled/i.test(label);
   let role = node.role || "";
   const low = label.toLowerCase();

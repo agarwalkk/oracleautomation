@@ -48,6 +48,7 @@ public final class ComponentResolver {
     // ── Public API ────────────────────────────────────────────────────────
 
     public static Component resolve(AgentCommand cmd) {
+        String locPath = cmd.getParam("locatorpath");
         String locSemanticId = cmd.getParam("locatorsemanticid");
         String locTreePath = cmd.getParam("locatortreepath");
         String locCanonical = cmd.getParam("locatorcanonicallabel");
@@ -63,6 +64,19 @@ public final class ComponentResolver {
         int ordinal = parseInt(locOrdinalS, -1);
 
         List<Component> all = collectAllVisible();
+
+        // 0) exact DOM path — deterministic, unique by construction. Structural
+        // components (tab bars, panels, scroll boxes) have no semantic label, so
+        // path is the load-bearing locator for them (e.g. the studio clicks a
+        // tab bar via locatorPath + tab_index). MUST run first so these resolve
+        // to the right component instead of falling through to the bounds
+        // strategy with parent-relative coordinates.
+        if (notBlank(locPath)) {
+            for (Component c : all) {
+                if (locPath.equals(componentPath(c)))
+                    return c;
+            }
+        }
 
         // 1) semanticId — reconstruct the same identity and match exactly-one.
         if (notBlank(locSemanticId)) {

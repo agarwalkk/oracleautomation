@@ -505,6 +505,8 @@ def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str
         el = dict(repo_by_id.get(eid) or {"elementid": eid})
         el["locator_params"] = _build_locator_params(n)
         el["semantic_id"] = n.get("semanticId")
+        if n.get("treePath"):
+            el["tree_path"] = n.get("treePath")
         id_map[eid] = el
     return tree, id_map
 
@@ -781,12 +783,22 @@ def locator_params(element: dict) -> dict[str, str]:
             params.setdefault("locatorText", str(value))
     if element.get("name"):
         params.setdefault("locatorText", str(element["name"]))
-    bounds = element.get("bounds") or {}
-    if bounds:
-        params.setdefault(
-            "locatorBounds",
-            f"{bounds.get('x', 0)},{bounds.get('y', 0)},{bounds.get('width', 0)},{bounds.get('height', 0)}",
-        )
+
+    # locatorBounds MUST be screen-absolute. Raw DOM nodes carry parent-relative
+    # `bounds` and screen-absolute `screenBounds`; repo elements already store
+    # screen coords under `bounds`. Prefer screenBounds so the bounds fallback in
+    # ComponentResolver never resolves a relative rectangle to the wrong widget.
+    sb = element.get("screenBounds") or {}
+    bnd = element.get("bounds") or {}
+    bx = _screen_x(sb) if sb else -1
+    by = _screen_y(sb) if sb else -1
+    if bx < 0 or by < 0:
+        bx = _int(bnd.get("x"), 0)
+        by = _int(bnd.get("y"), 0)
+    bw = _int(sb.get("width"), bnd.get("width", 0))
+    bh = _int(sb.get("height"), bnd.get("height", 0))
+    if bw > 0 and bh > 0:
+        params.setdefault("locatorBounds", f"{bx},{by},{bw},{bh}")
     return params
 
 
