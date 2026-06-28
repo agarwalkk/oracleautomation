@@ -277,6 +277,7 @@ class ScanBundle:
     capture_mode: str
     created_at: str
     tab_screenshots: dict[str, str]
+    tab_doms: dict[str, dict] | None = None
 class StudioService:
     """Application service for Studio scan and container operations."""
 
@@ -378,6 +379,7 @@ class StudioService:
         temp_dir = Path(tempfile.gettempdir())
         
         tab_screenshots: dict[str, str] = {}
+        tab_doms: dict[str, dict] = {}
         merged_dom = raw_dom
         temp_screenshot = None
 
@@ -386,6 +388,17 @@ class StudioService:
             sc = active_window_scan(dom_tree)
             nodes = flatten_nodes(sc)
             tab_bars = [n for n in nodes if str(n.get("simpleClassName") or "") == "TabBar"]
+            
+            # Filter out tab bars with only 1 title if there are other tab bars with >1 titles
+            tab_bars_with_multi_titles = []
+            for tb in tab_bars:
+                tb_attrs = tb.get("attributes") or {}
+                tb_titles = [t.strip() for t in str(tb_attrs.get("tabTitles", "")).split("|") if t.strip()]
+                if len(tb_titles) > 1:
+                    tab_bars_with_multi_titles.append(tb)
+            if tab_bars_with_multi_titles:
+                tab_bars = tab_bars_with_multi_titles
+
             tab_bars.sort(key=lambda n: (n.get("screenBounds") or {}).get("y", 0))
             return tab_bars, nodes
 
@@ -435,13 +448,17 @@ class StudioService:
                         titles = [t.strip() for t in str(attrs.get("tabTitles", "")).split("|") if t.strip()]
                         tab_states_raw = str(attrs.get("tabStates", ""))
                         enabled_flags = []
+                        visible_flags = []
                         for part in tab_states_raw.split("|"):
                             bits = [b.strip() for b in part.strip().split(",")]
                             enabled_flags.append(bits[0] == "1" if len(bits) > 0 else True)
+                            visible_flags.append(bits[1] == "1" if len(bits) > 1 else True)
 
                         for idx, t in enumerate(titles):
                             if idx < len(enabled_flags) and not enabled_flags[idx]:
                                 continue # skip disabled tabs
+                            if idx < len(visible_flags) and not visible_flags[idx]:
+                                continue # skip invisible tabs
                             
                             next_path = current_path + (t,)
                             if next_path not in visited:
@@ -464,12 +481,16 @@ class StudioService:
                 top_titles = [t.strip() for t in str(top_attrs.get("tabTitles", "")).split("|") if t.strip()]
                 top_states_raw = str(top_attrs.get("tabStates", ""))
                 top_enabled = []
+                top_visible = []
                 for part in top_states_raw.split("|"):
                     bits = [b.strip() for b in part.strip().split(",")]
                     top_enabled.append(bits[0] == "1" if len(bits) > 0 else True)
+                    top_visible.append(bits[1] == "1" if len(bits) > 1 else True)
 
                 for idx, t in enumerate(top_titles):
                     if idx < len(top_enabled) and not top_enabled[idx]:
+                        continue
+                    if idx < len(top_visible) and not top_visible[idx]:
                         continue
                     path = (t,)
                     visited.add(path)
@@ -496,18 +517,22 @@ class StudioService:
                     for path, res in results.items():
                         if path != first_path:
                             merged_dom = merge_scans(merged_dom, res["dom"])
-                        tab_screenshots[" -> ".join(path)] = str(res["screenshot_path"])
+                        tab_path_str = " -> ".join(path)
+                        tab_screenshots[tab_path_str] = str(res["screenshot_path"])
+                        tab_doms[tab_path_str] = res["dom"]
                     temp_screenshot = Path(results[first_path]["screenshot_path"])
                 else:
                     # Fallback to standard capture if DFS produced no results
                     temp_screenshot = temp_dir / f"qcs_studio_scan_{ts}_{uuid4().hex[:8]}.png"
                     screenshot_result = driver.screenshot(temp_screenshot)
                     tab_screenshots["default"] = str(temp_screenshot)
+                    tab_doms["default"] = raw_dom
             else:
                 # Standard scan flow
                 temp_screenshot = temp_dir / f"qcs_studio_scan_{ts}_{uuid4().hex[:8]}.png"
                 screenshot_result = driver.screenshot(temp_screenshot)
                 tab_screenshots["default"] = str(temp_screenshot)
+                tab_doms["default"] = raw_dom
         finally:
             # Restore the Java form to its original size/position first,
             # then switch away from it back to the previous application.
@@ -543,6 +568,7 @@ class StudioService:
             capture_mode=capture_mode,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             tab_screenshots=tab_screenshots,
+            tab_doms=tab_doms,
         )
         StudioService._drafts[scan_id] = bundle
         self._scan_cache[scan_id] = bundle
@@ -614,6 +640,15 @@ class StudioService:
             # 4. ai_snapshot.txt
             with open(target_dir / "ai_snapshot.txt", "w", encoding="utf-8") as f:
                 f.write(bundle.snapshot_text)
+            
+            # 5. Per-tab full/raw java scans (when multi-tab scan produced multiple)
+            if getattr(bundle, "tab_doms", None):
+                for tab_path, tab_dom in bundle.tab_doms.items():
+                    if tab_path == "default":
+                        continue
+                    safe_name = tab_path.replace(" -> ", "_").replace("/", "_").replace("\\", "_")
+                    with open(target_dir / f"java_scan_dump_{safe_name}.json", "w", encoding="utf-8") as f:
+                        json.dump(tab_dom, f, indent=2, ensure_ascii=False)
         except Exception as e:
             import sys
             print(f"Error auto-dumping scan files: {e}", file=sys.stderr)

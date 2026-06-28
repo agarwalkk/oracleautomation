@@ -169,3 +169,80 @@ class TestBuildActionContext:
         text, _ = ctx
         assert "Find | Button" in text
         assert "PO Number | Field" in text
+
+
+def test_merge_scans_keeps_different_tab_scrollboxes_separate():
+    from qcs_java_agent.snapshot import merge_scans, flatten_nodes
+
+    scan1 = {
+        "windows": [{
+            "id": 1,
+            "simpleClassName": "ExtendedFrame",
+            "path": "w0",
+            "parentPath": "",
+            "showing": True,
+            "focusable": True,
+            "children": [{
+                "id": 2,
+                "simpleClassName": "DrawnPanel",
+                "path": "w0/dp",
+                "parentPath": "w0",
+                "children": [{
+                    "id": 33,
+                    "simpleClassName": "FScrollBox",
+                    "path": "w0/dp/sb",
+                    "parentPath": "w0/dp",
+                    "children": [{
+                        "id": 36,
+                        "simpleClassName": "VTextField",
+                        "accessibleName": "Quote/Order Information tab page Order Number",
+                        "path": "w0/dp/sb/tf",
+                        "parentPath": "w0/dp/sb"
+                    }]
+                }]
+            }]
+        }]
+    }
+
+    scan2 = {
+        "windows": [{
+            "id": 1,
+            "simpleClassName": "ExtendedFrame",
+            "path": "w0",
+            "parentPath": "",
+            "showing": True,
+            "focusable": True,
+            "children": [{
+                "id": 2,
+                "simpleClassName": "DrawnPanel",
+                "path": "w0/dp",
+                "parentPath": "w0",
+                "children": [{
+                    "id": 33,
+                    "simpleClassName": "FScrollBox",
+                    "path": "w0/dp/sb",
+                    "parentPath": "w0/dp",
+                    "children": [{
+                        "id": 1356,
+                        "simpleClassName": "LWCheckbox",
+                        "accessibleName": "Advanced tab page Include Closed Orders",
+                        "path": "w0/dp/sb/cb",
+                        "parentPath": "w0/dp/sb"
+                    }]
+                }]
+            }]
+        }]
+    }
+
+    merged = merge_scans(scan1, scan2)
+
+    nodes = flatten_nodes(merged)
+    scrollboxes = [n for n in nodes if n.get("simpleClassName") == "FScrollBox"]
+
+    assert len(scrollboxes) == 2
+    sb1, sb2 = scrollboxes
+    assert len(sb1.get("children", [])) == 1
+    assert len(sb2.get("children", [])) == 1
+    assert sb1["children"][0]["accessibleName"] == "Quote/Order Information tab page Order Number"
+    assert sb2["children"][0]["accessibleName"] == "Advanced tab page Include Closed Orders"
+

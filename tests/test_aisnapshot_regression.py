@@ -51,7 +51,7 @@ def test_ai_snapshot_matches_baseline(case_dir: Path):
     with open(scan_path, encoding="utf-8") as f:
         scan = json.load(f)
 
-    actual_text, _ = build_action_context(scan)
+    actual_text, _ = build_action_context(scan, all_tabs=True)
     expected_text = baseline_path.read_text(encoding="utf-8")
 
     if actual_text != expected_text:

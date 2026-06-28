@@ -201,9 +201,9 @@ def full_view_scan(scan: dict) -> list[dict]:
     for n in nodes:
         nid = n.get("id")
         if nid not in exclude_ids:
-            result.append(n)
-    for n in result:
-        n.pop("children", None)
+            n_copy = n.copy()
+            n_copy.pop("children", None)
+            result.append(n_copy)
     return result
 
 
@@ -839,20 +839,26 @@ def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str
         # section rather than collapsing everything into one block.
         per_tab_elements: dict[str, list[dict]] = {}
         all_prefixes = {t: f"{t} tab page " for t in tab_titles}
+        id_to_tab = tab_info.get("id_to_tab") or {}
         for el in tab_elements:
-            name = el.get("name") or ""
-            matched = False
-            for t, prefix in all_prefixes.items():
-                if name.startswith(prefix) or (
-                    # Also match unstripped names (pre-tab-prefix removal)
-                    str(el.get("java", {}).get("accessibleName") or "").startswith(prefix)
-                ):
-                    per_tab_elements.setdefault(t, []).append(el)
-                    matched = True
-                    break
-            if not matched:
-                # Fallback: put unmatched into selected tab
-                per_tab_elements.setdefault(selected_tab, []).append(el)
+            eid = el.get("elementid", "")
+            matched_tab_from_id = id_to_tab.get(eid)
+            if matched_tab_from_id:
+                per_tab_elements.setdefault(matched_tab_from_id, []).append(el)
+            else:
+                name = el.get("name") or ""
+                matched = False
+                for t, prefix in all_prefixes.items():
+                    if name.startswith(prefix) or (
+                        # Also match unstripped names (pre-tab-prefix removal)
+                        str(el.get("java", {}).get("accessibleName") or "").startswith(prefix)
+                    ):
+                        per_tab_elements.setdefault(t, []).append(el)
+                        matched = True
+                        break
+                if not matched:
+                    # Fallback: put unmatched into selected tab
+                    per_tab_elements.setdefault(selected_tab, []).append(el)
 
         # ── TabBar DOM nodes (for mapping tab titles → element IDs) ───
         tab_bar_nodes: list[dict] = []
@@ -892,19 +898,53 @@ def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str
     id_map: dict[str, dict] = {
         el["elementid"]: el
         for el in actionable
-        if el.get("elementid")
     }
+
+    # Register synthetic tree items in id_map so they are separately interactive and replayable
+    for root_node in tree:
+        def collect_tree_items(node):
+            if node.get("role") == "Tree":
+                for idx, child in enumerate(node.get("children") or []):
+                    ref = child.get("element_ref")
+                    if ref and ref not in id_map:
+                        parent_el = next((e for e in actionable if e["elementid"] == node["element_ref"]), None)
+                        path = parent_el.get("path") if parent_el else ""
+                        id_map[ref] = {
+                            "elementid": ref,
+                            "friendly_name": _friendly_name(child["label"]),
+                            "surface": "java",
+                            "role": "Item",
+                            "name": child["label"].replace(" *", ""),
+                            "xpath": path,
+                            "path": path,
+                            "x": child["bounds"]["x"],
+                            "y": child["bounds"]["y"],
+                            "width": child["bounds"]["width"],
+                            "height": child["bounds"]["height"],
+                            "bounds": child["bounds"],
+                            "java": {
+                                "path": path,
+                                "type": "oracle.ewt.dTree.DTreeItem",
+                                "screenBounds": child["bounds"],
+                            }
+                        }
+            for child in node.get("children") or []:
+                collect_tree_items(child)
+        collect_tree_items(root_node)
+
     _populate_bounds(tree)
     return tree, id_map
 
 
-def build_action_context(scan: dict) -> tuple[str, dict[str, dict]]:
+def build_action_context(scan: dict, all_tabs: bool = False) -> tuple[str, dict[str, dict]]:
     """Return ``(snapshot_text, {element_id: repo_element})`` for a scan.
 
     The AI snapshot text is derived from the tree via
     :func:`render_snapshot_text`.
     """
-    tree, id_map = build_action_tree(scan)
+    tree, id_map = build_action_tree(scan, all_tabs=all_tabs)
+    if not id_map:
+        return "(no actionable elements found)", id_map
     form_title = active_form_title(active_window_scan(scan))
     snapshot_text = render_snapshot_text(tree, form_title)
     return snapshot_text, id_map
@@ -925,6 +965,12 @@ def build_action_payload(
     (unadjusted) and align directly with the fullscreen screenshot.
     """
     tree, id_map = build_action_tree(scan, all_tabs=all_tabs)
+    if not id_map:
+        return {
+            "text": "(no actionable elements found)",
+            "tree": tree,
+            "id_map": id_map,
+        }
     # Extract form title from the scoped scan, not from the tree root.
     # The tree is a flat list of top-level children (no Form wrapper),
     # so active_form_title() is the canonical source for the title.
@@ -955,6 +1001,16 @@ def _detect_tabs(nodes: list[dict], all_tabs: bool = False) -> dict | None:
                 all_tab_bars.append(n)
     if not all_tab_bars:
         return None
+
+    # Filter out tab bars with only 1 title if there are other tab bars with >1 titles
+    tab_bars_with_multi_titles = []
+    for tb in all_tab_bars:
+        tb_attrs = tb.get("attributes") or {}
+        tb_titles = [t.strip() for t in str(tb_attrs.get("tabTitles", "")).split("|") if t.strip()]
+        if len(tb_titles) > 1:
+            tab_bars_with_multi_titles.append(tb)
+    if tab_bars_with_multi_titles:
+        all_tab_bars = tab_bars_with_multi_titles
 
     # Sort by y ascending — innermost (largest y) drives content matching
     all_tab_bars.sort(
@@ -1047,6 +1103,7 @@ def _detect_tabs(nodes: list[dict], all_tabs: bool = False) -> dict | None:
 
     unmatched_boxes: list[dict] = []
     matched_tab_names: set[str] = set()
+    id_to_tab: dict[str, str] = {}
     for box in sibling_boxes:
         # Check if this box belongs to any tab
         matched_tab = None
@@ -1055,9 +1112,14 @@ def _detect_tabs(nodes: list[dict], all_tabs: bool = False) -> dict | None:
                 matched_tab = t
                 break
         if matched_tab == selected or (all_tabs and matched_tab is not None):
-            _collect_ids(box, selected_content_ids)
+            box_ids = set()
+            _collect_ids(box, box_ids)
+            selected_content_ids.update(box_ids)
+            tab_name = matched_tab if matched_tab is not None else selected
             if matched_tab is not None:
                 matched_tab_names.add(matched_tab)
+            for bid in box_ids:
+                id_to_tab[bid] = tab_name
         elif matched_tab is not None:
             matched_tab_names.add(matched_tab)
             pass  # belongs to another tab — skip
@@ -1078,7 +1140,11 @@ def _detect_tabs(nodes: list[dict], all_tabs: bool = False) -> dict | None:
         largest_unmatched = max(unmatched_boxes, key=lambda b: _subtree_size(b))
         largest_size = _subtree_size(largest_unmatched)
         if largest_size > len(selected_content_ids) * 3 and largest_size > 50:
-            _collect_ids(largest_unmatched, selected_content_ids)
+            box_ids = set()
+            _collect_ids(largest_unmatched, box_ids)
+            selected_content_ids.update(box_ids)
+            for bid in box_ids:
+                id_to_tab[bid] = selected
             unmatched_boxes = [b for b in unmatched_boxes if b is not largest_unmatched]
 
     # Frozen-column merge: Oracle Forms multi-record grids often have a
@@ -1125,7 +1191,38 @@ def _detect_tabs(nodes: list[dict], all_tabs: bool = False) -> dict | None:
                     is_narrow = sel_width > 0 and box_width < sel_width * 0.5
                     if is_narrow:
                         # Narrow strip → frozen columns, merge
-                        _collect_ids_in_y_range(box, y_min, y_max, selected_content_ids, form_level_ids)
+                        merged_box_ids = set()
+                        _collect_ids_in_y_range(box, y_min, y_max, merged_box_ids, form_level_ids)
+                        selected_content_ids.update(merged_box_ids)
+                        
+                        # Find the matched box that is closest in y-coordinate range
+                        box_y = _collect_all_field_ys(box)
+                        box_ymin = min(box_y) if box_y else 0
+                        box_ymax = max(box_y) if box_y else 0
+                        
+                        best_tab = selected
+                        best_overlap = 0
+                        for other_box in sibling_boxes:
+                            other_ids = set()
+                            _collect_ids(other_box, other_ids)
+                            other_tab = None
+                            for bid in other_ids:
+                                if bid in id_to_tab:
+                                    other_tab = id_to_tab[bid]
+                                    break
+                            if not other_tab:
+                                continue
+                            other_ys = _collect_all_field_ys(other_box)
+                            if not other_ys:
+                                continue
+                            o_min, o_max = min(other_ys), max(other_ys)
+                            overlap = max(0, min(box_ymax, o_max) - max(box_ymin, o_min))
+                            if overlap > best_overlap:
+                                best_overlap = overlap
+                                best_tab = other_tab
+                        
+                        for bid in merged_box_ids:
+                            id_to_tab[bid] = best_tab
                     else:
                         pass  # full-width → likely another tab page, drop
                 else:
@@ -1168,6 +1265,7 @@ def _detect_tabs(nodes: list[dict], all_tabs: bool = False) -> dict | None:
         "tab_bar_y": tab_bar_y,
         "tab_bar_element_id": f"e{tab_bar_id}" if tab_bar_id is not None else None,
         "outer_tab_bars": outer_tab_bars,
+        "id_to_tab": id_to_tab,
     }
 
 
@@ -1715,7 +1813,25 @@ def _build_action_tree(
         for el in (tree_elements or []):
             tnode = _field_node(el)
             tnode["role"] = "Tree"
-            tnode["tree_items"] = _extract_tree_items(el)
+            items = _extract_tree_items(el)
+            tnode["tree_items"] = items
+            tnode["children"] = [
+                {
+                    "element_ref": f"{tnode.get('element_ref')}_item_{i}",
+                    "label": item["label"] + (" *" if item["selected"] else ""),
+                    "role": "Item",
+                    "states": "selected" if item["selected"] else "",
+                    "included": True,
+                    "bounds": {
+                        "x": (tnode.get("bounds") or {}).get("x", 0),
+                        "y": (tnode.get("bounds") or {}).get("y", 0) + 4 + i * 18,
+                        "width": (tnode.get("bounds") or {}).get("width", 0),
+                        "height": 18,
+                    },
+                    "children": [],
+                }
+                for i, item in enumerate(items)
+            ]
             tree_children.append(tnode)
 
     # Outer tab bars: build each outer tab as a Tab node.
@@ -1797,6 +1913,8 @@ def _build_action_tree(
             for row in pre_rows:
                 row_children = []
                 for el in row:
+                    if _is_readonly_display(el):
+                        continue
                     fn = _field_node(el, t_prefix)
                     fn["tab_path"] = t
                     row_children.append(fn)
@@ -1821,6 +1939,8 @@ def _build_action_tree(
             for row in post_rows:
                 row_children = []
                 for el in row:
+                    if _is_readonly_display(el):
+                        continue
                     fn = _field_node(el, t_prefix)
                     fn["tab_path"] = t
                     row_children.append(fn)
@@ -1871,7 +1991,12 @@ def _build_action_tree(
     if form_field_elements:
         form_rows = _group_by_rows(form_field_elements)
         for row in form_rows:
-            row_children = [_field_node(el, tab_page_prefix) for el in row]
+            row_children = []
+            for el in row:
+                if _is_readonly_display(el):
+                    continue
+                fn = _field_node(el, tab_page_prefix)
+                row_children.append(fn)
             tree_children.extend(row_children)
     # ── Footer buttons ─────────────────────────────────────────────────
     if footer_buttons:
@@ -1883,7 +2008,25 @@ def _build_action_tree(
         for el in (tree_elements or []):
             tnode = _field_node(el)
             tnode["role"] = "Tree"
-            tnode["tree_items"] = _extract_tree_items(el)
+            items = _extract_tree_items(el)
+            tnode["tree_items"] = items
+            tnode["children"] = [
+                {
+                    "element_ref": f"{tnode.get('element_ref')}_item_{i}",
+                    "label": item["label"] + (" *" if item["selected"] else ""),
+                    "role": "Item",
+                    "states": "selected" if item["selected"] else "",
+                    "included": True,
+                    "bounds": {
+                        "x": (tnode.get("bounds") or {}).get("x", 0),
+                        "y": (tnode.get("bounds") or {}).get("y", 0) + 4 + i * 18,
+                        "width": (tnode.get("bounds") or {}).get("width", 0),
+                        "height": 18,
+                    },
+                    "children": [],
+                }
+                for i, item in enumerate(items)
+            ]
             tree_children.append(tnode)
 
     # ── Tools menu ─────────────────────────────────────────────────────
@@ -2036,6 +2179,12 @@ def _build_table_node(
 
         table_rows_data.append({"marker": marker, "cells": cells})
 
+    table_children = []
+    for r_data in table_rows_data:
+        for cell in r_data["cells"]:
+            if cell.get("element_ref"):
+                table_children.append(cell)
+
     return {
         "element_ref": synth_ref_fn(),
         "label": "",
@@ -2043,7 +2192,7 @@ def _build_table_node(
         "states": "",
         "included": True,
         "bounds": {"x": 0, "y": 0, "width": 0, "height": 0},
-        "children": [],
+        "children": table_children,
         "table_columns": columns,
         "table_rows": table_rows_data,
     }
@@ -2729,6 +2878,29 @@ def _has_tab_prefix(node: dict) -> bool:
     return False
 
 
+def _find_descendant_tab_prefix(node: dict) -> str | None:
+    """Find any node in subtree whose accessibleName has a tab page prefix."""
+    an = node.get("accessibleName") or ""
+    if " tab page " in an:
+        idx = an.find(" tab page ")
+        return an[:idx + 10]
+    for child in node.get("children") or []:
+        pfx = _find_descendant_tab_prefix(child)
+        if pfx:
+            return pfx
+    return None
+
+
+def _strip_all_tab_prefixes(name: str) -> str:
+    """Repeatedly remove any '<Tab Name> tab page ' prefix from a name."""
+    while True:
+        match = _ANY_TAB_PAGE_PREFIX.match(name)
+        if not match:
+            break
+        name = name[match.end():]
+    return name
+
+
 def _node_identity(node: dict) -> tuple | None:
     """Return a semantic identity tuple for a DOM node, or None if unnamed.
 
@@ -2740,9 +2912,14 @@ def _node_identity(node: dict) -> tuple | None:
     """
     name = str(node.get("accessibleName") or node.get("name") or "")
     cls = str(node.get("simpleClassName") or "")
+    if cls == "FScrollBox" and not name:
+        prefix = _find_descendant_tab_prefix(node)
+        if prefix:
+            return (prefix, cls)
     if not name:
         return None
-    return (name, cls)
+    normalized_name = _strip_all_tab_prefixes(name)
+    return (normalized_name, cls)
 
 
 def _merge_dom_nodes(n1: dict, n2: dict) -> None:
@@ -2754,7 +2931,7 @@ def _merge_dom_nodes(n1: dict, n2: dict) -> None:
     # overwrite n1's attributes with n2's to preserve active state metadata.
     if (n2_has_prefix and not n1_has_prefix) or (not n1_has_prefix and not n1.get("name") and n2.get("name")):
         for k, v in n2.items():
-            if k != "children":
+            if k != "children" and k != "id":
                 n1[k] = v
 
     c1 = n1.get("children") or []
@@ -2774,27 +2951,72 @@ def _merge_dom_nodes(n1: dict, n2: dict) -> None:
                 c1_by_identity.setdefault(ident, c)
         for child2 in c2:
             path2 = child2.get("path")
-            if path2 in c1_by_path:
-                _merge_dom_nodes(c1_by_path[path2], child2)
-            else:
-                # Fallback: check by name+className identity
+            cls2 = str(child2.get("simpleClassName") or "")
+            if cls2 == "FScrollBox":
                 ident2 = _node_identity(child2)
-                if ident2 and ident2 in c1_by_identity:
-                    _merge_dom_nodes(c1_by_identity[ident2], child2)
+                merged = False
+                if ident2:
+                    if ident2 in c1_by_identity:
+                        _merge_dom_nodes(c1_by_identity[ident2], child2)
+                        merged = True
                 else:
+                    if path2 in c1_by_path:
+                        target = c1_by_path[path2]
+                        target_ident = _node_identity(target)
+                        if not target_ident:
+                            _merge_dom_nodes(target, child2)
+                            merged = True
+                if not merged:
                     c1.append(child2)
-                    # Register the new child in the identity index
                     if ident2:
                         c1_by_identity.setdefault(ident2, child2)
+            else:
+                if path2 in c1_by_path:
+                    _merge_dom_nodes(c1_by_path[path2], child2)
+                else:
+                    # Fallback: check by name+className identity
+                    ident2 = _node_identity(child2)
+                    if ident2 and ident2 in c1_by_identity:
+                        _merge_dom_nodes(c1_by_identity[ident2], child2)
+                    else:
+                        c1.append(child2)
+                        # Register the new child in the identity index
+                        if ident2:
+                            c1_by_identity.setdefault(ident2, child2)
         n1["children"] = c1
+
+
+def _max_node_id(node: dict) -> int:
+    max_id = node.get("id") or 0
+    for child in node.get("children") or []:
+        max_id = max(max_id, _max_node_id(child))
+    for win in node.get("windows") or []:
+        max_id = max(max_id, _max_node_id(win))
+    return max_id
+
+
+def _offset_node_ids(node: dict, offset: int) -> None:
+    nid = node.get("id")
+    if nid is not None:
+        node["id"] = nid + offset
+    for child in node.get("children") or []:
+        _offset_node_ids(child, offset)
+    for win in node.get("windows") or []:
+        _offset_node_ids(win, offset)
 
 
 def merge_scans(scan1: dict, scan2: dict) -> dict:
     """Recursively merge the DOM trees of scan2 into scan1."""
     import copy
     res = copy.deepcopy(scan1)
+    
+    # Offset IDs in scan2 to ensure uniqueness of appended nodes
+    scan2_copy = copy.deepcopy(scan2)
+    max_id1 = _max_node_id(res)
+    _offset_node_ids(scan2_copy, max_id1 + 1)
+    
     w1 = res.get("windows") or []
-    w2 = scan2.get("windows") or []
+    w2 = scan2_copy.get("windows") or []
     w1_by_path = {w.get("path"): w for w in w1 if w.get("path")}
     for win2 in w2:
         path2 = win2.get("path")

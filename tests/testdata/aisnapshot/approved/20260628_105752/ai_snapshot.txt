@@ -3,4 +3,4 @@ Form: Decision
     Message: This query could take a long time.
 
 Do you wish to continue? (read-only)
-    [e32] Yes (Button, enabled) , [e33] No (Button, enabled)
+    [e33] Yes (Button, enabled) , [e34] No (Button, enabled)
