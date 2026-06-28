@@ -239,7 +239,15 @@ public final class DomScanner {
         // --- DIAGNOSTIC PROBE (remove once item metadata is finalised) ---
         try {
             if (PROBE_ENABLED) {
-                if (PROBE_TARGET != null && !PROBE_TARGET.isEmpty()) {
+                if (("runtime".equalsIgnoreCase(PROBE_TARGET)
+                        || "runform".equalsIgnoreCase(PROBE_TARGET))
+                        && PROBE_COUNT.get() < 1) {
+                    // Try to find any item in this window that has a Forms handler
+                    if (FormsHandler.handlerId(comp) != null) {
+                        node.attributes.put("_runtime", ReflectionProbe.probeRuntime(comp));
+                        PROBE_COUNT.incrementAndGet();
+                    }
+                } else if (PROBE_TARGET != null && !PROBE_TARGET.isEmpty()) {
                     // Targeted: probe ANY matching component, capped.
                     if (PROBE_COUNT.get() < PROBE_TARGET_CAP
                             && matchesProbeTarget(comp, node, PROBE_TARGET)) {
@@ -1260,6 +1268,10 @@ public final class DomScanner {
                     return value.equals(FormsHandler.handlerId(comp));
                 case "name":
                     return value.equals(safeName(comp));
+                case "selected": // model state — checkbox/radio/list/record
+                    return liveSelected(comp);
+                case "focused": // keyboard focus owner (window must be active)
+                    return safeIsFocusOwner(comp);
                 case "label":
                 default: {
                     // node.accessibleName isn't set yet at probe time — read live.
@@ -1294,6 +1306,37 @@ public final class DomScanner {
         } catch (Throwable t) {
             return null;
         }
+    }
+
+    /**
+     * Live model-selection state: checked checkbox/radio, selected list item,
+     * current grid record. Independent of OS window focus.
+     */
+    private static boolean liveSelected(Component comp) {
+        try {
+            if (comp instanceof javax.accessibility.Accessible) {
+                javax.accessibility.AccessibleContext ac = ((javax.accessibility.Accessible) comp)
+                        .getAccessibleContext();
+                if (ac != null) {
+                    javax.accessibility.AccessibleStateSet ss = ac.getAccessibleStateSet();
+                    if (ss != null
+                            && (ss.contains(javax.accessibility.AccessibleState.SELECTED)
+                                    || ss.contains(javax.accessibility.AccessibleState.CHECKED))) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        for (String m : new String[] { "isSelected", "isChecked" }) {
+            try {
+                Object v = comp.getClass().getMethod(m).invoke(comp);
+                if (Boolean.TRUE.equals(v))
+                    return true;
+            } catch (Throwable ignored) {
+            }
+        }
+        return false;
     }
 
     // ── ScanResult inner class ────────────────────────────────────────────

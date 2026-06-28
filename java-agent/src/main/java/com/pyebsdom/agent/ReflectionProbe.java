@@ -79,6 +79,74 @@ public final class ReflectionProbe {
     }
 
     /**
+     * Mines the Forms engine / applet context from a component's handler.
+     */
+    public static String probeRuntime(Component comp) {
+        if (comp == null)
+            return "{}";
+        try {
+            // Find mHandler of comp
+            Object handler = null;
+            for (Class<?> c = comp.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                try {
+                    Field f = c.getDeclaredField("mHandler");
+                    f.setAccessible(true);
+                    handler = f.get(comp);
+                    if (handler != null)
+                        break;
+                } catch (Throwable ignored) {}
+            }
+            if (handler == null)
+                return "{}";
+
+            // Find dispatcher/Runform and applet/Main from handler
+            Object dispatcher = null;
+            try {
+                Method m = handler.getClass().getMethod("getDispatcher");
+                m.setAccessible(true);
+                dispatcher = m.invoke(handler);
+            } catch (Throwable ignored) {}
+            if (dispatcher == null) {
+                for (Class<?> c = handler.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                    try {
+                        Field f = c.getDeclaredField("mDispatcher");
+                        f.setAccessible(true);
+                        dispatcher = f.get(handler);
+                        if (dispatcher != null)
+                            break;
+                    } catch (Throwable ignored) {}
+                }
+            }
+
+            Object applet = null;
+            try {
+                Method m = handler.getClass().getMethod("getApplet");
+                m.setAccessible(true);
+                applet = m.invoke(handler);
+            } catch (Throwable ignored) {}
+            if (applet == null) {
+                for (Class<?> c = handler.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                    try {
+                        Field f = c.getDeclaredField("mMainApplet");
+                        f.setAccessible(true);
+                        applet = f.get(handler);
+                        if (applet != null)
+                            break;
+                    } catch (Throwable ignored) {}
+                }
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("{");
+            sb.append("\"dispatcher\":").append(dispatcher != null ? inspect(dispatcher, 1) : "null");
+            sb.append(",\"applet\":").append(applet != null ? inspect(applet, 1) : "null");
+            sb.append("}");
+            return sb.toString();
+        } catch (Throwable ignored) {}
+        return "{}";
+    }
+
+    /**
      * Inspect one object. {@code nestDepth} > 0 allows following one level of
      * indirection into keyword-matched oracle.* members.
      */
