@@ -153,7 +153,8 @@ public final class EbsDomAgent {
      */
     private static String executeScan(AgentCommand cmd, boolean raw) throws Exception {
         boolean probe = "true".equalsIgnoreCase(cmd.getParam("probe"));
-        DomScanner.ScanResult result = DomScanner.scan(raw, probe);
+        String target = cmd.getParam("probetarget"); // may be null
+        DomScanner.ScanResult result = DomScanner.scan(raw, probe, target);
         return result.toJson(cmd.getCommand());
     }
 

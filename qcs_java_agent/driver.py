@@ -55,10 +55,12 @@ class JavaAgentDriver:
     def health(self) -> dict:
         return self._run({"command": "health"})
 
-    def scan(self, probe: bool = False) -> dict:
+    def scan(self, probe: bool = False, target: str | None = None) -> dict:
         command = {"command": "scan"}
         if probe:
             command["probe"] = "true"
+        if target:
+            command["probetarget"] = target
         return self._run(command)
 
     def raw(self) -> dict:

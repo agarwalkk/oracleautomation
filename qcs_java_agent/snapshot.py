@@ -267,6 +267,9 @@ def java_nodes_to_repo_elements(scan: dict) -> list[dict]:
                 "semanticId": node.get("semanticId"),
                 "primaryLocator": node.get("primaryLocator"),
                 "handlerId": node.get("handlerId"),
+                "hasLov": node.get("hasLov", False),
+                "required": node.get("required", False),
+                "locked": node.get("locked", False),
                 "containerRole": node.get("containerRole"),
                 "ownerTab": node.get("ownerTab"),
                 "recordIndex": node.get("recordIndex", -1),
@@ -339,8 +342,12 @@ def _element_actions(el: dict) -> list[str]:
     states: list[str] = el.get("states") or []
     if java.get("treePath") or role == "TreeItem":
         return ["click", "select"]
-    if bool(java.get("isMirror")):
-        return ["inspect"]
+    if bool(java.get("isMirror")) or bool(java.get("locked")):
+        return ["inspect"]  # read-only echo / runtime-locked
+    # LOV field — ground truth from isLOVButtonDisplayed(): supports opening the
+    # List-of-Values in addition to typing.
+    if role == "LOV" or bool(java.get("hasLov")):
+        return ["type", "open_lov", "clear"]
     base = _ROLE_ACTIONS.get(role, [])
     if not base:
         return ["inspect"]
@@ -810,6 +817,14 @@ def _field_rows(nodes: list[dict]) -> list[dict]:
             node["checked"] = bool(n.get("selected"))
         elif role == "LOV":
             node["has_lov"] = True
+        # Forms item capabilities (ground truth from the agent). has_lov also
+        # set defensively from the flag in case role wasn't reclassified.
+        if n.get("hasLov"):
+            node["has_lov"] = True
+        if n.get("required"):
+            node["required"] = True
+        if n.get("locked"):
+            node["locked"] = True
         cur = str(n.get("text") or "").strip()
         if cur and cur != node["label"]:
             node["current_value"] = cur
@@ -853,8 +868,14 @@ def _render_text(tree: list[dict], form_title: str,
             vo = n.get("value_options")
             if vo:
                 extra += f" values: {vo}"
+            if n.get("required"):
+                extra += " (required)"
             return f"{tag}{label} (ComboBox){extra}"
         suffix = " (LOV)" if n.get("has_lov") else ""
+        if n.get("required"):
+            suffix += " (required)"
+        if n.get("locked"):
+            suffix += " (locked)"
         cv = n.get("current_value")
         if cv:
             suffix += f" = {cv}"

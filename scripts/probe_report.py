@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Read the ReflectionProbe output from a live scan or scan dump and surface
-tab/canvas/block ownership candidates.
+"""Read the ReflectionProbe output from a scan dump and surface tab/canvas/block
+ownership candidates.
 
 Usage:
-    python scripts/probe_report.py [<java_scan_dump.json>]
+    python scripts/probe_report.py <java_scan_dump.json>
 
 For each probed field it prints: the field's label, then — for the field, each
 ancestor canvas, and any nested Forms handler — every method/field whose VALUE
@@ -65,68 +65,14 @@ def _walk(node, out):
 
 def main() -> int:
     global FULL
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-    import argparse
-    ap = argparse.ArgumentParser(
-        description="Report reflection probe data from a live scan or scan dump."
-    )
-    ap.add_argument(
-        "dump_file",
-        nargs="?",
-        default=None,
-        help="Path to the JSON scan dump. If omitted, performs a live scan.",
-    )
-    ap.add_argument(
-        "--full",
-        action="store_true",
-        help="Print the complete method/field name inventory.",
-    )
-    ap.add_argument(
-        "--pid",
-        type=int,
-        default=None,
-        help="Forms JVM pid (optional, for live scan)",
-    )
-    ap.add_argument(
-        "--contains",
-        default=None,
-        help="process-name substring to match (optional, for live scan)",
-    )
-    parsed_args = ap.parse_args()
-
-    FULL = parsed_args.full
-
-    if parsed_args.dump_file:
-        try:
-            with open(parsed_args.dump_file, "r", encoding="utf-8") as fh:
-                d = json.load(fh)
-        except Exception as e:
-            print(f"Failed to read {parsed_args.dump_file}: {e}", file=sys.stderr)
-            return 1
-    else:
-        try:
-            from qcs_java_agent.driver import JavaAgentDriver
-        except Exception as e:
-            print("Could not import qcs_java_agent — run this from the repo root.",
-                  file=sys.stderr)
-            print("  ", e, file=sys.stderr)
-            return 2
-
-        try:
-            driver = JavaAgentDriver.attach(pid=parsed_args.pid, contains=parsed_args.contains)
-        except Exception as e:
-            print("Attach failed. Is the Oracle Forms applet running?", file=sys.stderr)
-            print("  Try --pid <pid> or --contains <name>.  Detail:", e, file=sys.stderr)
-            return 1
-
-        print(f"Attached to pid {driver.pid}. Running live scan with probe=True (setting PROBE_ENABLED as true in DomScanner)...")
-        try:
-            d = driver.scan(probe=True)
-        except Exception as e:
-            print("Scan failed. Detail:", e, file=sys.stderr)
-            return 1
-
+    args = [a for a in sys.argv[1:] if a != "--full"]
+    FULL = "--full" in sys.argv
+    if not args:
+        print(__doc__)
+        print("\nAdd --full to also print every method/field name (mine for "
+              "possible actions / richer item metadata).")
+        return 2
+    d = json.load(open(args[0], encoding="utf-8"))
     probed = []
     for w in d.get("windows") or []:
         _walk(w, probed)

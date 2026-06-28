@@ -55,6 +55,11 @@ public final class DomScanner {
             .synchronizedSet(new java.util.HashSet<Integer>());
     private static final int PROBE_BOX_CAP = 40;
 
+    private static String PROBE_TARGET = null; // null → default sampling
+    private static final java.util.concurrent.atomic.AtomicInteger PROBE_COUNT = new java.util.concurrent.atomic.AtomicInteger(
+            0);
+    private static final int PROBE_TARGET_CAP = 8;
+
     private DomScanner() {
     }
 
@@ -76,21 +81,23 @@ public final class DomScanner {
      * @param probe {@code true} to enable reflection probing
      */
     public static ScanResult scan(final boolean raw, final boolean probe) throws Exception {
+        return scan(raw, probe, null);
+    }
+
+    public static ScanResult scan(final boolean raw, final boolean probe,
+            final String probeTarget) throws Exception {
         final ScanResult[] holder = { null };
         final Exception[] error = { null };
-
         Runnable work = new Runnable() {
             public void run() {
                 try {
-                    holder[0] = doScanOnEDT(raw, probe);
+                    holder[0] = doScanOnEDT(raw, probe, probeTarget);
                 } catch (Exception e) {
                     error[0] = e;
                 }
             }
         };
-
         runOnEdtOrCurrent(work);
-
         if (error[0] != null)
             throw error[0];
         return holder[0];
@@ -153,9 +160,11 @@ public final class DomScanner {
     }
 
     /** Must be called on the Event Dispatch Thread. */
-    private static ScanResult doScanOnEDT(boolean raw, boolean probe) {
+    private static ScanResult doScanOnEDT(boolean raw, boolean probe, String probeTarget) {
         PROBE_ENABLED = probe;
+        PROBE_TARGET = probeTarget;
         PROBED_BOXES.clear();
+        PROBE_COUNT.set(0);
         Window[] windows = AwtContext.getWindows();
 
         AtomicInteger idGen = new AtomicInteger(0);
@@ -227,21 +236,30 @@ public final class DomScanner {
         node.focusable = safeIsFocusable(comp);
         node.focused = safeIsFocusOwner(comp);
 
-        // --- DIAGNOSTIC PROBE: first field per FScrollBox (remove later) ---
+        // --- DIAGNOSTIC PROBE (remove once item metadata is finalised) ---
         try {
-            boolean isField = "Field".equals(node.semanticType)
-                    || "LOV".equals(node.semanticType)
-                    || "TextArea".equals(node.semanticType);
-            if (PROBE_ENABLED && isField && PROBED_BOXES.size() < PROBE_BOX_CAP) {
-                java.awt.Container box = comp.getParent();
-                while (box != null
-                        && !"FScrollBox".equals(box.getClass().getSimpleName())) {
-                    box = box.getParent();
-                }
-                if (box != null) {
-                    // add() is true only the FIRST time we see this box
-                    if (PROBED_BOXES.add(System.identityHashCode(box))) {
+            if (PROBE_ENABLED) {
+                if (PROBE_TARGET != null && !PROBE_TARGET.isEmpty()) {
+                    // Targeted: probe ANY matching component, capped.
+                    if (PROBE_COUNT.get() < PROBE_TARGET_CAP
+                            && matchesProbeTarget(comp, node, PROBE_TARGET)) {
                         node.attributes.put("_probe", ReflectionProbe.probe(comp));
+                        PROBE_COUNT.incrementAndGet();
+                    }
+                } else {
+                    // Default: first field per FScrollBox (your existing behaviour).
+                    boolean isField = "Field".equals(node.semanticType)
+                            || "LOV".equals(node.semanticType)
+                            || "TextArea".equals(node.semanticType);
+                    if (isField && PROBED_BOXES.size() < PROBE_BOX_CAP) {
+                        java.awt.Container box = comp.getParent();
+                        while (box != null
+                                && !"FScrollBox".equals(box.getClass().getSimpleName())) {
+                            box = box.getParent();
+                        }
+                        if (box != null && PROBED_BOXES.add(System.identityHashCode(box))) {
+                            node.attributes.put("_probe", ReflectionProbe.probe(comp));
+                        }
                     }
                 }
             }
@@ -1215,6 +1233,67 @@ public final class DomScanner {
             }
         }
         return null;
+    }
+
+    /**
+     * True when {@code comp}/{@code node} matches a "mode:value" probe selector.
+     */
+    private static boolean matchesProbeTarget(Component comp, DomNode node, String target) {
+        String mode, value;
+        int colon = target.indexOf(':');
+        if (colon < 0) {
+            mode = "label";
+            value = target;
+        } else {
+            mode = target.substring(0, colon).trim().toLowerCase();
+            value = target.substring(colon + 1).trim();
+        }
+        if (value.isEmpty())
+            return false;
+        try {
+            switch (mode) {
+                case "class":
+                    return value.equalsIgnoreCase(comp.getClass().getSimpleName());
+                case "role":
+                    return value.equalsIgnoreCase(node.semanticType);
+                case "handler":
+                    return value.equals(FormsHandler.handlerId(comp));
+                case "name":
+                    return value.equals(safeName(comp));
+                case "label":
+                default: {
+                    // node.accessibleName isn't set yet at probe time — read live.
+                    String an = liveAccessibleName(comp);
+                    String nm = safeName(comp);
+                    String lc = value.toLowerCase();
+                    return (an != null && an.toLowerCase().contains(lc))
+                            || (nm != null && nm.toLowerCase().contains(lc));
+                }
+            }
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static String liveAccessibleName(Component comp) {
+        try {
+            if (comp instanceof javax.accessibility.Accessible) {
+                javax.accessibility.AccessibleContext ac = ((javax.accessibility.Accessible) comp)
+                        .getAccessibleContext();
+                if (ac != null)
+                    return ac.getAccessibleName();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static String safeName(Component comp) {
+        try {
+            return comp.getName();
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     // ── ScanResult inner class ────────────────────────────────────────────

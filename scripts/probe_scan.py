@@ -2,22 +2,33 @@
 """Run ONE raw Java-agent scan (no tab navigation, no focus dependency) and save
 the dump for the reflection probe.
 
-This deliberately bypasses the Studio multi-tab capture (qcs_studio.service.
-run_scan), which is the thing that clicks across tabs and steals focus. The raw
-agent `scan` command just walks the current live component tree — it navigates
-nothing — and with the per-FScrollBox probe wiring it samples every tab region
-(Q/O, Line, Advanced, Holds, ...) in this single pass.
+This bypasses the Studio multi-tab capture (which clicks across tabs and steals
+focus). The raw agent `scan` command navigates nothing.
 
-Run from the repo root (so `config` and `qcs_java_agent` import):
+Default (no --target): probes the first field of every FScrollBox — one sample
+per tab region.
+
+Targeted (--target): probes only elements matching a selector, so you can mine
+ANY element's full method/field surface — a specific button, all checkboxes, one
+LOV, etc. Selector syntax:
+
+    --target "label:Held By"     any item whose accessibleName/name contains it
+    --target "class:VButton"     every button (by simpleClassName)
+    --target "class:LWCheckbox"  every checkbox
+    --target "role:LOV"          every LOV the agent typed
+    --target "role:Button"       every Button
+    --target "handler:1204"      the item with that Forms handler id
+    --target "Held By"           (no mode: → treated as a label substring)
+
+Run from the repo root:
 
     python scripts/probe_scan.py
-    python scripts/probe_scan.py --out probe_scan.json
-    python scripts/probe_scan.py --pid 12345          # if auto-attach misses
-    python scripts/probe_scan.py --contains "frmweb"  # match a different process
+    python scripts/probe_scan.py --target "class:VButton" --out buttons.json
+    python scripts/probe_scan.py --pid 12345 --target "role:Checkbox"
 
 Then:
 
-    python scripts/probe_report.py probe_scan.json
+    python scripts/probe_report.py <out.json> --full
 """
 import argparse
 import json
@@ -30,6 +41,10 @@ def main() -> int:
     ap.add_argument("--pid", type=int, default=None, help="Forms JVM pid (optional)")
     ap.add_argument("--contains", default=None,
                     help="process-name substring to match (optional)")
+    ap.add_argument("--target", default=None,
+                    help="probe only elements matching this selector "
+                         "(e.g. 'class:VButton', 'role:LOV', 'label:Held By'); "
+                         "default samples first field per FScrollBox")
     args = ap.parse_args()
 
     try:
@@ -47,31 +62,35 @@ def main() -> int:
         print("  Try --pid <pid> or --contains <name>.  Detail:", e, file=sys.stderr)
         return 1
 
-    print(f"Attached to pid {driver.pid}. Running one raw scan (no tab navigation)…")
-    dump = driver.scan(probe=True)
+    where = f" targeting '{args.target}'" if args.target else " (first field per FScrollBox)"
+    print(f"Attached to pid {driver.pid}. Running one raw scan{where}…")
+    # driver.scan must accept probe=bool and target=str|None (see driver patch below).
+    dump = driver.scan(probe=True, target=args.target)
 
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(dump, fh)
 
-    # quick confirmation of how many regions got probed
-    probed = 0
+    probed = []
 
     def _count(n):
-        nonlocal probed
         if "_probe" in (n.get("attributes") or {}):
-            probed += 1
+            probed.append(n)
         for c in n.get("children") or []:
             _count(c)
 
     for w in dump.get("windows") or []:
         _count(w)
 
-    print(f"Saved {args.out}.  Probed {probed} field(s) (one per FScrollBox).")
-    if probed == 0:
-        print("No _probe attributes — did you rebuild the agent with the "
-              "ReflectionProbe wiring (DomScanner.PROBE.patch.java)?")
+    print(f"Saved {args.out}.  Probed {len(probed)} element(s).")
+    for n in probed[:12]:
+        label = (n.get("canonicalLabel") or n.get("accessibleName")
+                 or n.get("name") or f"e{n.get('id')}")
+        print(f"   - {label}  [{n.get('simpleClassName')} / {n.get('semanticType')}]")
+    if not probed:
+        print("No matches. Check the agent has the targeted-probe wiring, and that "
+              "your selector matches something on the current screen.")
     else:
-        print("Next:  python scripts/probe_report.py", args.out)
+        print("Next:  python scripts/probe_report.py", args.out, "--full")
     return 0
 
 
