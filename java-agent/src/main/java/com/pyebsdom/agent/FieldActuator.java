@@ -202,17 +202,39 @@ public final class FieldActuator {
                 }
             }
         };
-        try {
-            if (SwingUtilities.isEventDispatchThread()) {
-                work.run();
-            } else {
-                SwingUtilities.invokeAndWait(work);
-            }
-        } catch (Throwable t) {
-            return Result.fail("EDT dispatch failed: " + t);
-        }
+        runOnEdt(work);
         Result r = out.get();
         return r != null ? r : Result.fail("no result");
+    }
+
+    /**
+     * Run on the AWT EDT, but tolerate the attach-listener thread having no AWT
+     * AppContext (where {@code invokeLater}/{@code invokeAndWait} throw NPE) by
+     * running the work directly — exactly as {@code ActionExecutor.invokeOnEDT}
+     * does for the other commands.
+     */
+    private static void runOnEdt(Runnable r) {
+        try {
+            if (SwingUtilities.isEventDispatchThread()) {
+                r.run();
+            } else {
+                final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+                SwingUtilities.invokeLater(new Runnable() {
+                    public void run() {
+                        try {
+                            r.run();
+                        } finally {
+                            latch.countDown();
+                        }
+                    }
+                });
+                latch.await();
+            }
+        } catch (NullPointerException appContextMissing) {
+            r.run(); // no AppContext on the attach thread → run directly
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     // ── reflection helpers (mirror TreeItemActuator) ──────────────────────
