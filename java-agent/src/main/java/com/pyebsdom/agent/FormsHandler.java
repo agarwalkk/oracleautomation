@@ -56,6 +56,19 @@ public final class FormsHandler {
         if (Boolean.TRUE.equals(boolGetterOrField(h, "isLocked", "mLocked"))) {
             node.locked = true;
         }
+
+        // Forms-native item type from the handler peer itself (e.g.
+        // "TextFieldItem", "CheckboxItem") — the authoritative item kind,
+        // independent of the (sometimes ambiguous) AWT widget class.
+        node.formsType = h.getClass().getSimpleName();
+
+        // Authoritative owning tab, straight from the Forms runtime. Supersedes
+        // the prefix/FScrollBox heuristic in StructureAnnotator and also covers
+        // items (e.g. tree rows) the heuristic cannot place.
+        String tab = stringGetter(h, "getParentTabName");
+        if (tab != null && !tab.trim().isEmpty()) {
+            node.formsTabName = tab.trim();
+        }
     }
 
     /**
@@ -101,6 +114,17 @@ public final class FormsHandler {
     private static Boolean boolField(Object o, String field) {
         Object v = readFieldDeep(o, field);
         return (v instanceof Boolean) ? (Boolean) v : null;
+    }
+
+    /** Invoke a 0-arg getter and return its value as a String, or null. */
+    private static String stringGetter(Object o, String getter) {
+        try {
+            Method m = o.getClass().getMethod(getter);
+            Object v = m.invoke(o);
+            return v == null ? null : String.valueOf(v);
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     private static Object readFieldDeep(Object target, String name) {

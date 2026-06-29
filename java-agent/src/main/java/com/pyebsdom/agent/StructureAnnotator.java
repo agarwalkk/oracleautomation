@@ -273,26 +273,38 @@ public final class StructureAnnotator {
             if (prefixes.size() == 1)
                 dedicated.put(n, prefixes.iterator().next());
         }
-        if (dedicated.isEmpty() && tabRegion.isEmpty())
-            return;
-
-        for (DomNode n : all) {
-            DomNode cur = parent.get(n);
-            String owner = null;
-            boolean inRegion = false;
-            while (cur != null) {
-                if (owner == null && dedicated.containsKey(cur))
-                    owner = dedicated.get(cur);
-                if (tabRegion.contains(cur))
-                    inRegion = true;
-                cur = parent.get(cur);
+        // Layout heuristic (prefix / FScrollBox dedication) — only meaningful
+        // when tab regions exist. Handler-authoritative names are applied after.
+        if (!(dedicated.isEmpty() && tabRegion.isEmpty())) {
+            for (DomNode n : all) {
+                DomNode cur = parent.get(n);
+                String owner = null;
+                boolean inRegion = false;
+                while (cur != null) {
+                    if (owner == null && dedicated.containsKey(cur))
+                        owner = dedicated.get(cur);
+                    if (tabRegion.contains(cur))
+                        inRegion = true;
+                    cur = parent.get(cur);
+                }
+                if (owner != null) {
+                    n.ownerTab = owner;
+                } else if (inRegion && n.containerRole == null && isDataField(n.semanticType)) {
+                    // data field inside the tab area but matching no tab → background
+                    // view (e.g. a non-selected record block). Renderer drops it.
+                    n.containerRole = "OrphanTabContent";
+                }
             }
-            if (owner != null) {
-                n.ownerTab = owner;
-            } else if (inRegion && n.containerRole == null && isDataField(n.semanticType)) {
-                // data field inside the tab area but matching no tab → background
-                // view (e.g. a non-selected record block). Renderer drops it.
-                n.containerRole = "OrphanTabContent";
+        }
+
+        // Authoritative override: the Forms handler's own tab name
+        // (FormsHandler.getParentTabName) supersedes the heuristic wherever an
+        // item carries it — deterministic, and it covers items the prefix scan
+        // can't place (e.g. tree rows). This is what retires the
+        // box-dedication heuristic for items that have a handler.
+        for (DomNode n : all) {
+            if (n.formsTabName != null && !n.formsTabName.trim().isEmpty()) {
+                n.ownerTab = n.formsTabName;
             }
         }
     }

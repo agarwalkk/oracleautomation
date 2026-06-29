@@ -113,6 +113,13 @@ public final class IdentityResolver {
     private static List<Candidate> candidates(DomNode n, Map<DomNode, DomNode> parent) {
         String scope = scopeId(n, parent);
         List<Candidate> out = new ArrayList<>();
+        // Forms-native item id — globally unique within the module and the
+        // strongest within-session locator (ComponentResolver tries it first).
+        // semanticId is still computed independently below, so cross-session
+        // replay falls back to it when a stale id no longer matches.
+        if (notBlank(n.handlerId)) {
+            out.add(new Candidate("handlerId", n.handlerId, scope));
+        }
         // treePath is already a unique path within a tree.
         if (notBlank(n.treePath)) {
             out.add(new Candidate("treePath", n.treePath, scope));

@@ -66,6 +66,18 @@ public final class DomNode {
     public boolean required;
     /** Item is runtime-locked / read-only (from {@code isLocked()}). */
     public boolean locked;
+    /**
+     * Forms-native item type from the handler peer (e.g. {@code "TextFieldItem"},
+     * {@code "CheckboxItem"}) — the authoritative item kind, independent of the
+     * AWT widget class. {@code null} for non-Forms-item components.
+     */
+    public String formsType;
+    /**
+     * Authoritative owning tab title from the Forms handler
+     * ({@code getParentTabName()}). When present it supersedes the layout
+     * heuristic that sets {@link #ownerTab}. {@code null} when unavailable.
+     */
+    public String formsTabName;
 
     // ── Type ──────────────────────────────────────────────────────────────
     /** Fully-qualified Java class name. */
@@ -182,6 +194,8 @@ public final class DomNode {
         sb.append("\"hasLov\":").append(hasLov).append(',');
         sb.append("\"required\":").append(required).append(',');
         sb.append("\"locked\":").append(locked).append(',');
+        sb.append("\"formsType\":").append(JsonUtil.quoted(formsType)).append(',');
+        sb.append("\"formsTabName\":").append(JsonUtil.quoted(formsTabName)).append(',');
 
         // Type
         sb.append("\"type\":").append(JsonUtil.quoted(type)).append(',');

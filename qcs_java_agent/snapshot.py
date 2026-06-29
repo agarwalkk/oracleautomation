@@ -270,6 +270,8 @@ def java_nodes_to_repo_elements(scan: dict) -> list[dict]:
                 "hasLov": node.get("hasLov", False),
                 "required": node.get("required", False),
                 "locked": node.get("locked", False),
+                "formsType": node.get("formsType"),
+                "formsTabName": node.get("formsTabName"),
                 "containerRole": node.get("containerRole"),
                 "ownerTab": node.get("ownerTab"),
                 "recordIndex": node.get("recordIndex", -1),
@@ -424,6 +426,7 @@ _LOV_RE = re.compile(r"\s*List of Values$")
 
 # Locator strategy → ComponentResolver command-param key.
 _LOCATOR_PARAM_KEYS = {
+    "handlerId": "locatorHandlerId",
     "semanticId": "locatorSemanticId",
     "treePath": "locatorTreePath",
     "canonicalLabel": "locatorCanonicalLabel",
@@ -519,8 +522,10 @@ def _assign_owner_tabs(scan: dict) -> None:
     trees are never orphaned, so footer buttons (Clear/Find/Open Folder) that
     sit in a prefix-less box fall through to form level.
 
-    Mutates nodes in place, OVERRIDING any agent-set ownerTab/OrphanTabContent.
-    Leaves Grid/GridCell/TabFolder/TreeItem container roles untouched.
+    Prefers the agent-extracted handler tab name (``formsTabName``) when an item
+    carries it; otherwise mutates nodes in place using the prefix heuristic,
+    overriding any agent-set ownerTab/OrphanTabContent. Leaves
+    Grid/GridCell/TabFolder/TreeItem container roles untouched.
     """
     nodes: list[dict] = []
     parent: dict[int, dict | None] = {}
@@ -556,6 +561,17 @@ def _assign_owner_tabs(scan: dict) -> None:
 
     _DATA = ("Field", "LOV", "ComboBox", "Checkbox", "RadioButton")
     for n in nodes:
+        # Authoritative tab from the Forms handler (agent-extracted via
+        # getParentTabName): when the item itself knows its tab, trust it over
+        # the layout heuristic and never orphan it. The prefix heuristic below
+        # stays the fallback for nodes with no handler (containers, chrome).
+        forms_tab = n.get("formsTabName")
+        if forms_tab:
+            n["ownerTab"] = forms_tab
+            if n.get("containerRole") == "OrphanTabContent":
+                n["containerRole"] = None
+            continue
+
         cur = parent.get(id(n))
         owner: str | None = None
         in_region = False
