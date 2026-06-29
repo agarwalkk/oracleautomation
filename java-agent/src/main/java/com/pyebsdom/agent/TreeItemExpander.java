@@ -322,29 +322,66 @@ public final class TreeItemExpander {
         }
     }
 
+    // Oracle EWT/Forms accessors (getCellData, getHeaderData, ...) are very
+    // often declared on a NON-PUBLIC base class. Class.getMethod() then either
+    // fails outright or returns a Method whose invoke() throws
+    // IllegalAccessException. The proven path (ReflectionExtractor) walks the
+    // hierarchy with getDeclaredMethod() + setAccessible(true) and also accepts
+    // Integer-wrapper parameter variants. These helpers mirror that exactly;
+    // public getMethod() is still tried first as the cheap, common case.
+
     private static Method method(Class<?> c, String name) {
         try {
-            return c.getMethod(name);
-        } catch (Exception e) {
-            return null;
+            Method m = c.getMethod(name);
+            m.setAccessible(true);
+            return m;
+        } catch (Exception ignored) {
         }
-    }
-
-    private static Method intMethod(Class<?> c, String name) {
         for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
             try {
-                return k.getMethod(name, int.class);
+                Method m = k.getDeclaredMethod(name);
+                m.setAccessible(true);
+                return m;
             } catch (Exception ignored) {
             }
         }
         return null;
     }
 
+    private static Method intMethod(Class<?> c, String name) {
+        return argMethod(c, name, new Class<?>[][] {
+                { int.class }, { Integer.class } });
+    }
+
     private static Method intIntMethod(Class<?> c, String name) {
-        for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
+        return argMethod(c, name, new Class<?>[][] {
+                { int.class, int.class },
+                { int.class, Integer.class },
+                { Integer.class, int.class },
+                { Integer.class, Integer.class } });
+    }
+
+    /**
+     * Resolve a method by name against each candidate parameter-type signature,
+     * trying public getMethod() first then a declared-method walk up the
+     * hierarchy (so non-public declaring classes are found), always making the
+     * result accessible.
+     */
+    private static Method argMethod(Class<?> c, String name, Class<?>[][] sigs) {
+        for (Class<?>[] sig : sigs) {
             try {
-                return k.getMethod(name, int.class, int.class);
+                Method m = c.getMethod(name, sig);
+                m.setAccessible(true);
+                return m;
             } catch (Exception ignored) {
+            }
+            for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
+                try {
+                    Method m = k.getDeclaredMethod(name, sig);
+                    m.setAccessible(true);
+                    return m;
+                } catch (Exception ignored) {
+                }
             }
         }
         return null;
