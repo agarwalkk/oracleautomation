@@ -10,6 +10,8 @@ com\pyebsdom\testapp\SampleSwingApp.class
 com\pyebsdom\agent\SafeRobot.class
 com\pyebsdom\testapp\SampleSwingApp$2.class
 com\pyebsdom\agent\TextLayoutWriter.class
+com\pyebsdom\agent\TreeItemActuator.class
+com\pyebsdom\agent\TreeItemActuator$Result.class
 com\pyebsdom\agent\FileUtil.class
 com\pyebsdom\agent\FormsHandler.class
 com\pyebsdom\agent\IdentityResolver.class
@@ -25,8 +27,10 @@ com\pyebsdom\agent\JsonUtil.class
 com\pyebsdom\testapp\SampleSwingApp$3.class
 com\pyebsdom\agent\ActionExecutor.class
 com\pyebsdom\agent\EbsDomBootstrapAgent$1.class
+com\pyebsdom\agent\TreeItemActuator$Op.class
 com\pyebsdom\agent\AgentCommand.class
 com\pyebsdom\agent\ReflectionProbe.class
+com\pyebsdom\agent\TreeItemActuator$1.class
 com\pyebsdom\agent\AttachAgentByPid.class
 com\pyebsdom\agent\Bounds.class
 com\pyebsdom\agent\TreeItemExpander$1.class

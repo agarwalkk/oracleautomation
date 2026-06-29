@@ -260,3 +260,29 @@ class TestLocatorParamsIntegration:
         expected_encoded = base64.b64encode(b"10").decode("ascii")
         expected = {"command": "settext", "text64": expected_encoded, **locator_params(element)}
         assert cmd == expected
+
+
+class TestTreeAction:
+
+    def test_dispatches_treeaction_command_with_op_and_locator_params(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="tree_action", element_id="e10", value="expand")
+
+        execute_resolved_action(driver, element, action)
+
+        expected_params = locator_params(element)
+        driver._run.assert_called_once_with({
+            "command": "treeaction",
+            "op": "expand",
+            **expected_params,
+        })
+
+    def test_returns_driver_run_result(self):
+        element = _make_element()
+        driver = _mock_driver({"status": "ok", "expanded": True})
+        action = SnapshotAction(action="tree_action", element_id="e10", value="expand")
+
+        result = execute_resolved_action(driver, element, action)
+
+        assert result == {"status": "ok", "expanded": True}

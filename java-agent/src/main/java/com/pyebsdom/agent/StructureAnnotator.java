@@ -231,25 +231,6 @@ public final class StructureAnnotator {
         return regular >= gaps.length * 0.6;
     }
 
-    private static boolean hasRegularSpacing(List<DomNode> sortedByY) {
-        if (sortedByY.size() < 3)
-            return false;
-        int[] gaps = new int[sortedByY.size() - 1];
-        for (int i = 0; i < gaps.length; i++) {
-            gaps[i] = sortedByY.get(i + 1).bounds.y - sortedByY.get(i).bounds.y;
-        }
-        int[] sorted = gaps.clone();
-        Arrays.sort(sorted);
-        int median = sorted[sorted.length / 2];
-        if (median <= 0)
-            return false;
-        int regular = 0;
-        for (int g : gaps)
-            if (Math.abs(g - median) <= median / 2)
-                regular++;
-        return regular >= gaps.length * 0.6;
-    }
-
     private static int nearestRow(int[] rowYs, int y) {
         int best = 0, bestD = Integer.MAX_VALUE;
         for (int i = 0; i < rowYs.length; i++) {

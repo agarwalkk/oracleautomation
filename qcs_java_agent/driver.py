@@ -108,6 +108,10 @@ class JavaAgentDriver:
     def element_at(self, x: int, y: int) -> dict:
         return self._run({"command": "elementat", "x": int(x), "y": int(y)})
 
+    def tree_action(self, descriptor: dict, op: str) -> dict:
+        command = {"command": "treeaction", "op": op, **locator_params(descriptor)}
+        return self._run(command)
+
     def _run(self, command: dict[str, Any], *, text_output: bool = False) -> dict:
         return run_agent_command(
             pid=self.pid,

@@ -625,8 +625,9 @@ async def java_form_close(session: RecorderSession) -> str:
 
 # ── Approach B: snapshot-based action schema + parser ─────────────────────────
 
-_VALID_ACTIONS: frozenset[str] = frozenset({"set_text", "click", "press_key", "assert", "done"})
-_ELEMENT_ID_REQUIRED: frozenset[str] = frozenset({"set_text", "click", "assert"})
+_VALID_ACTIONS: frozenset[str] = frozenset({"set_text", "click", "press_key", "assert", "done", "tree_action"})
+_ELEMENT_ID_REQUIRED: frozenset[str] = frozenset({"set_text", "click", "assert", "tree_action"})
+_TREE_OPS: frozenset[str] = frozenset({"select", "expand", "collapse", "activate"})
 _ASSERTION_KINDS: frozenset[str] = frozenset({"text", "value", "visible", "enabled"})
 
 
@@ -708,6 +709,17 @@ def parse_snapshot_action(
         raise SnapshotActionError(
             "record_action: 'value' is required and must be non-empty for action='set_text'"
         )
+
+    if action == "tree_action":
+        if not value:
+            raise SnapshotActionError(
+                "record_action: 'value' is required and must be non-empty for action='tree_action'"
+            )
+        if value.strip().lower() not in _TREE_OPS:
+            raise SnapshotActionError(
+                f"record_action: unknown tree operation {value!r}. "
+                f"Must be one of: {', '.join(sorted(_TREE_OPS))}"
+            )
 
     raw_key = raw_args.get("key")
     key: str | None = str(raw_key).strip() if raw_key is not None else None
@@ -806,12 +818,19 @@ def execute_resolved_action(
         cmd.update(params)  # element context for active field (empty dict is a no-op)
         return driver._run(cmd)
 
+    if act == "tree_action":
+        return driver._run({
+            "command": "treeaction",
+            "op": (action.value or "").strip().lower(),
+            **params
+        })
+
     if act in ("assert", "done"):
         return {}  # recording markers — no Java agent call at record time
 
     raise ValueError(
         f"execute_resolved_action: unsupported action {act!r}; "
-        f"expected one of: click, set_text, press_key, assert, done"
+        f"expected one of: click, set_text, press_key, tree_action, assert, done"
     )
 
 
@@ -831,20 +850,21 @@ SNAPSHOT_ACTION_TOOL_SCHEMA: dict = {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["set_text", "click", "press_key", "assert", "done"],
+                    "enum": ["set_text", "click", "press_key", "assert", "done", "tree_action"],
                     "description": (
                         "set_text — type a value into a field; "
                         "click — click a button/tab/menu item; "
                         "press_key — press a keyboard shortcut (no element target); "
                         "assert — verify an element's text, value, or state; "
-                        "done — step is already complete or FAIL note."
+                        "done — step is already complete or FAIL note; "
+                        "tree_action — perform a tree operation (select, expand, collapse, activate) on a tree node."
                     ),
                 },
                 "element_id": {
                     "type": "string",
                     "description": (
                         "The element_id from the action snapshot, e.g. 'e12'. "
-                        "Required for set_text, click, and assert. "
+                        "Required for set_text, click, assert, and tree_action. "
                         "Must appear verbatim in the snapshot — do NOT invent ids."
                     ),
                 },
@@ -853,7 +873,8 @@ SNAPSHOT_ACTION_TOOL_SCHEMA: dict = {
                     "description": (
                         "For set_text: the exact text to type (required). "
                         "For assert: the expected text or value. "
-                        "For done: optional note; prefix 'FAIL: ' to signal a failure."
+                        "For done: optional note; prefix 'FAIL: ' to signal a failure. "
+                        "For tree_action: the tree operation, one of: select, expand, collapse, activate (required)."
                     ),
                 },
                 "key": {

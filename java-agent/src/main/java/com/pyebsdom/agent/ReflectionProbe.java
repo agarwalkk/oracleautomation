@@ -60,11 +60,23 @@ public final class ReflectionProbe {
     private ReflectionProbe() {
     }
 
-    /** Members whose name/type contains any of these get their value captured. */
+    /**
+     * Members whose name/type contains any of these get their value captured —
+     * and, on the target object, one level of nesting is followed into them.
+     * <p>
+     * {@code "selection"} is included specifically to expand
+     * {@code DTree.getSelection()} → {@code oracle.ewt.dTree.DTreeSelection},
+     * so the programmatic select API (add/set/clear selection) shows up in the
+     * report. Expand/collapse needs nothing extra — it lives on the item itself
+     * ({@code DTreeItem.setExpanded(boolean)}), which is already captured via the
+     * {@code "item"} keyword. This is what lets us drive the tree without a
+     * Robot click.
+     */
     private static final String[] KEYWORDS = {
             "canvas", "tab", "page", "block", "item", "sheet", "module", "mmb",
             "prompt", "owner", "handler", "peer", "impl", "fmx", "navig",
-            "container", "region", "parent", "label", "name", "title"
+            "container", "region", "parent", "label", "name", "title",
+            "selection"
     };
 
     private static final int MAX_ANCESTORS = 8;

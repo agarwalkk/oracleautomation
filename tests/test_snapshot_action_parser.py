@@ -227,3 +227,18 @@ class TestEdgeCases:
         assert result.value is None
         assert result.key is None
         assert result.assertion_kind is None
+
+    def test_tree_action_valid_ops(self):
+        for op in ("select", "expand", "collapse", "activate"):
+            result = _parse({"action": "tree_action", "element_id": "e11", "value": op})
+            assert result.action == "tree_action"
+            assert result.element_id == "e11"
+            assert result.value == op
+
+    def test_tree_action_missing_value(self):
+        with pytest.raises(SnapshotActionError, match="value"):
+            _parse({"action": "tree_action", "element_id": "e11"})
+
+    def test_tree_action_invalid_value(self):
+        with pytest.raises(SnapshotActionError, match="unknown tree operation"):
+            _parse({"action": "tree_action", "element_id": "e11", "value": "dance"})

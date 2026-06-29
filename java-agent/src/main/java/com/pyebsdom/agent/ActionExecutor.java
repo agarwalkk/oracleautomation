@@ -766,4 +766,101 @@ public final class ActionExecutor {
         }
         return null;
     }
+
+    public static String executeTreeAction(AgentCommand cmd) throws Exception {
+        String op = cmd.getParam("op", "");
+        if (op.trim().isEmpty()) {
+            return JsonUtil.errorResult("treeAction",
+                    "Required parameter 'op' is missing."
+                            + " Use one of: select, expand, collapse, activate.",
+                    null);
+        }
+        TreeItemActuator.Op parsedOp;
+        try {
+            parsedOp = TreeItemActuator.Op.valueOf(op.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return JsonUtil.errorResult("treeAction",
+                    "Unsupported op '" + op + "'."
+                            + " Use one of: select, expand, collapse, activate.",
+                    null);
+        }
+
+        String treePath = cmd.getParam("locatortreepath");
+        if (treePath == null || treePath.trim().isEmpty()) {
+            return JsonUtil.errorResult("treeAction",
+                    "Required parameter 'locatorTreePath' is missing.", null);
+        }
+
+        // Resolve the DTree component (or any component inside it) from locators,
+        // then make sure we hand TreeItemActuator the DTree itself.
+        Component resolved = resolveOrThrow(cmd, "treeAction");
+        final Component resolvedFinal = resolved;
+        final AtomicReference<Component> treeRef = new AtomicReference<Component>();
+        invokeOnEDT(() -> treeRef.set(findEnclosingDTree(resolvedFinal)));
+        Component tree = treeRef.get();
+        if (tree == null) {
+            tree = resolved; // best-effort; actuator reports if it isn't a tree
+        }
+
+        TreeItemActuator.Result r = TreeItemActuator.act(tree, treePath, parsedOp);
+        if (!r.ok) {
+            return JsonUtil.errorResult("treeAction", r.message, null);
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append('{');
+        sb.append("\"status\":\"ok\",");
+        sb.append("\"command\":").append(JsonUtil.quoted("treeAction")).append(',');
+        sb.append("\"op\":").append(JsonUtil.quoted(op)).append(',');
+        sb.append("\"via\":").append(JsonUtil.quoted("reflection:DTree")).append(',');
+        sb.append("\"treePath\":").append(JsonUtil.quoted(treePath)).append(',');
+        if (r.matchedLabel != null) {
+            sb.append("\"matchedLabel\":").append(JsonUtil.quoted(r.matchedLabel)).append(',');
+        }
+        sb.append("\"detail\":").append(JsonUtil.quoted(r.message)).append(',');
+        sb.append("\"component\":").append(ComponentResolver.componentJson(tree));
+        sb.append('}');
+        return sb.toString();
+    }
+
+    /**
+     * Return the DTree at or around {@code comp}: {@code comp} itself, the
+     * nearest DTree ancestor, or the first DTree descendant. {@code null} if
+     * none. Must be called on the EDT.
+     */
+    private static Component findEnclosingDTree(Component comp) {
+        for (Component c = comp; c != null; c = c.getParent()) {
+            if (isDTree(c)) {
+                return c;
+            }
+        }
+        return findDTreeDescendant(comp);
+    }
+
+    private static boolean isDTree(Component c) {
+        for (Class<?> k = c.getClass(); k != null && k != Object.class; k = k.getSuperclass()) {
+            if (k.getName().equals("oracle.ewt.dTree.DTree")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Component findDTreeDescendant(Component comp) {
+        if (comp == null) {
+            return null;
+        }
+        if (isDTree(comp)) {
+            return comp;
+        }
+        if (comp instanceof Container) {
+            for (Component ch : ((Container) comp).getComponents()) {
+                Component d = findDTreeDescendant(ch);
+                if (d != null) {
+                    return d;
+                }
+            }
+        }
+        return null;
+    }
 }

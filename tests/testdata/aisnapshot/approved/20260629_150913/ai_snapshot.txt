@@ -32,3 +32,13 @@ Form: Order Organizer
       [e484] Search Results *
       [e485] Personal Folders
       [e486] Public Folders
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    [ ] Show Line Details
+    Book Sales Order
+    [ ] ATO Summary View
+    Copy Sales Order Prgram
+    [ ] Pricing Options
+    [ ] Star Model Status
+    Mass Price Adjustment Tool
