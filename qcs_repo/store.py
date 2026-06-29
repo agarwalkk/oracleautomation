@@ -257,12 +257,6 @@ def _descriptor_from_node(node: dict) -> dict[str, Any]:
     text = node.get("text") or java.get("displayName")
     if text:
         descriptor["locatorText"] = str(text)
-    if bounds:
-        bx = int(bounds.get("x") or 0)
-        by = int(bounds.get("y") or 0)
-        bw = int(bounds.get("width") or 0)
-        bh = int(bounds.get("height") or 0)
-        descriptor["locatorBounds"] = f"{bx},{by},{bw},{bh}"
     return descriptor
 
 

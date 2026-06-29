@@ -504,13 +504,6 @@ def _build_locator_params(node: dict) -> dict[str, str]:
     if int(node.get("recordIndex", -1)) >= 0:
         params.setdefault("locatorRecordIndex", str(node["recordIndex"]))
 
-    sb = node.get("screenBounds") or node.get("bounds") or {}
-    x = sb.get("screenX", sb.get("x"))
-    y = sb.get("screenY", sb.get("y"))
-    w = sb.get("width")
-    h = sb.get("height")
-    if None not in (x, y, w, h) and (w or 0) > 0 and (h or 0) > 0:
-        params.setdefault("locatorBounds", f"{x},{y},{w},{h}")
     return params
 
 
@@ -837,6 +830,7 @@ def _field_rows(nodes: list[dict]) -> list[dict]:
 
 def _tree_node(tree: dict) -> dict:
     items = []
+    children_list = []
     for c in tree.get("children") or []:
         if c.get("containerRole") != "TreeItem":
             continue
@@ -846,8 +840,25 @@ def _tree_node(tree: dict) -> dict:
             "selected": bool(c.get("selected")),
             "depth": c.get("depth", 0),
         })
+        sb = c.get("screenBounds") or c.get("bounds") or {}
+        cx = _screen_x(sb)
+        cy = _screen_y(sb)
+        cw = _int(sb.get("width"), 0)
+        ch = _int(sb.get("height"), 0)
+        if cx < 0 or cy < 0:
+            bnd = c.get("bounds") or {}
+            cx = _int(bnd.get("x"), 0)
+            cy = _int(bnd.get("y"), 0)
+        children_list.append({
+            "element_ref": _eid(c),
+            "label": _label(c),
+            "role": "TreeItem",
+            "included": True,
+            "bounds": {"x": cx, "y": cy, "width": cw, "height": ch},
+            "children": [],
+        })
     return {"element_ref": _eid(tree), "label": _label(tree),
-            "role": "Tree", "tree_items": items, "children": []}
+            "role": "Tree", "tree_items": items, "children": children_list}
 
 
 # ── tree → AI snapshot text (same format the recorder prompt expects) ───────
@@ -997,21 +1008,6 @@ def locator_params(element: dict) -> dict[str, str]:
     if element.get("name"):
         params.setdefault("locatorText", str(element["name"]))
 
-    # locatorBounds MUST be screen-absolute. Raw DOM nodes carry parent-relative
-    # `bounds` and screen-absolute `screenBounds`; repo elements already store
-    # screen coords under `bounds`. Prefer screenBounds so the bounds fallback in
-    # ComponentResolver never resolves a relative rectangle to the wrong widget.
-    sb = element.get("screenBounds") or {}
-    bnd = element.get("bounds") or {}
-    bx = _screen_x(sb) if sb else -1
-    by = _screen_y(sb) if sb else -1
-    if bx < 0 or by < 0:
-        bx = _int(bnd.get("x"), 0)
-        by = _int(bnd.get("y"), 0)
-    bw = _int(sb.get("width"), bnd.get("width", 0))
-    bh = _int(sb.get("height"), bnd.get("height", 0))
-    if bw > 0 and bh > 0:
-        params.setdefault("locatorBounds", f"{bx},{by},{bw},{bh}")
     return params
 
 

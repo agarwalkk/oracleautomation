@@ -15,13 +15,14 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <h3>EDT / Robot threading model</h3>
  * All component-state reads and focus requests are performed on the AWT EDT
- * via {@link SwingUtilities#invokeAndWait}.  After the EDT work returns,
+ * via {@link SwingUtilities#invokeAndWait}. After the EDT work returns,
  * {@link SafeRobot} is called on the <em>agent thread</em> (not the EDT).
  * This avoids deadlocks that could occur if Robot waited for EDT-generated
  * events while we held the EDT lock.
  *
  * <h3>Result format</h3>
  * Each action returns a JSON string:
+ * 
  * <pre>
  * {
  *   "status": "ok",
@@ -29,24 +30,27 @@ import java.util.concurrent.atomic.AtomicReference;
  *   "component": { "name": "...", "screenX": 123, "screenY": 456, ... }
  * }
  * </pre>
+ * 
  * On error the standard {@link JsonUtil#errorResult} envelope is returned.
  */
 public final class ActionExecutor {
 
-    private ActionExecutor() {}
+    private ActionExecutor() {
+    }
 
     // ── focus ─────────────────────────────────────────────────────────────
 
     /**
      * Request keyboard focus on the resolved component.
      *
-     * <p>First attempts {@link Component#requestFocusInWindow()}.  If that
+     * <p>
+     * First attempts {@link Component#requestFocusInWindow()}. If that
      * fails or the component is not yet focusable, falls back to a Robot
      * left-click at the component's centre.
      */
     public static String executeFocus(AgentCommand cmd) throws Exception {
         Component comp = resolveOrThrow(cmd, "focus");
-        Point centre   = screenCentre(comp);
+        Point centre = screenCentre(comp);
 
         requestFocusBestEffort(comp);
 
@@ -66,13 +70,24 @@ public final class ActionExecutor {
      * Left-click the centre of the resolved component using Robot.
      */
     public static String executeClick(AgentCommand cmd) throws Exception {
+        // Tree items (EWT DTree) are accessibility nodes, not AWT components, so
+        // resolveOrThrow cannot find a component for them. When the click targets
+        // a treePath, act via the item's AccessibleAction — pure DOM, no pixels.
+        // Runs BEFORE resolveOrThrow (which would otherwise throw "not found").
+        String treePath = cmd.getParam("locatortreepath");
+        if (treePath != null && !treePath.trim().isEmpty()) {
+            String viaA11y = clickTreeItemViaAccessibility(treePath);
+            if (viaA11y != null)
+                return viaA11y;
+        }
+
         Component comp = resolveOrThrow(cmd, "click");
-        Point centre   = null;
+        Point centre = null;
 
         String tabIndexStr = cmd.getParam("tab_index");
         if (tabIndexStr != null && !tabIndexStr.isEmpty()) {
             final int index = Integer.parseInt(tabIndexStr);
-            
+
             // Resolve the actual TabBar component from comp (e.g. if comp is FormsTabPanel)
             final AtomicReference<Component> targetRef = new AtomicReference<>(comp);
             invokeOnEDT(() -> {
@@ -82,7 +97,8 @@ public final class ActionExecutor {
                     if (tb != null) {
                         targetRef.set(tb);
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             });
             Component target = targetRef.get();
 
@@ -101,7 +117,7 @@ public final class ActionExecutor {
                 Point loc = locRef.get();
                 if (loc != null) {
                     centre = new Point(loc.x + rect.x + rect.width / 2,
-                                       loc.y + rect.y + rect.height / 2);
+                            loc.y + rect.y + rect.height / 2);
                 }
             } else {
                 // Fallback: divide width of target evenly
@@ -118,7 +134,7 @@ public final class ActionExecutor {
                             Point loc = target.getLocationOnScreen();
                             int tabW = target.getWidth() / finalCount;
                             locRef.set(new Point(loc.x + index * tabW + tabW / 2,
-                                                 loc.y + target.getHeight() / 2));
+                                    loc.y + target.getHeight() / 2));
                         }
                     });
                     centre = locRef.get();
@@ -142,21 +158,22 @@ public final class ActionExecutor {
     /**
      * Clear the component's current content and type new text.
      *
-     * <p>Sequence:
+     * <p>
+     * Sequence:
      * <ol>
-     *   <li>Focus the component (EDT + Robot fallback)</li>
-     *   <li>Select all existing text (Ctrl+A)</li>
-     *   <li>Type the new text via {@link SafeRobot#typeText(String)}</li>
+     * <li>Focus the component (EDT + Robot fallback)</li>
+     * <li>Select all existing text (Ctrl+A)</li>
+     * <li>Type the new text via {@link SafeRobot#typeText(String)}</li>
      * </ol>
      *
      * @param cmd must include a {@code text} parameter
      */
     public static String executeSetText(AgentCommand cmd) throws Exception {
         Component comp = resolveOrThrow(cmd, "setText");
-        String    text64 = cmd.getParam("text64", "");
-        String    text = text64.isEmpty()
-            ? cmd.getParam("text", "")
-            : new String(Base64.getDecoder().decode(text64), StandardCharsets.UTF_8);
+        String text64 = cmd.getParam("text64", "");
+        String text = text64.isEmpty()
+                ? cmd.getParam("text", "")
+                : new String(Base64.getDecoder().decode(text64), StandardCharsets.UTF_8);
 
         // Focus
         requestFocusBestEffort(comp);
@@ -206,8 +223,9 @@ public final class ActionExecutor {
     /**
      * Press a named key or key combination.
      *
-     * <p>If a {@code locatorPath} (or other locator) is provided, the target
-     * component is focused first.  The {@code key} parameter is required.
+     * <p>
+     * If a {@code locatorPath} (or other locator) is provided, the target
+     * component is focused first. The {@code key} parameter is required.
      *
      * @param cmd must include a {@code key} parameter
      */
@@ -232,8 +250,9 @@ public final class ActionExecutor {
         if (!pressed) {
             return JsonUtil.errorResult("pressKey",
                     "Unrecognised key name: '" + keyName + "'."
-                    + " Supported: TAB, ENTER, ESC, F1-F12, UP, DOWN, LEFT, RIGHT,"
-                    + " CTRL+S, CTRL+A, CTRL+C, CTRL+V, CTRL+Z, etc.", null);
+                            + " Supported: TAB, ENTER, ESC, F1-F12, UP, DOWN, LEFT, RIGHT,"
+                            + " CTRL+S, CTRL+A, CTRL+C, CTRL+V, CTRL+Z, etc.",
+                    null);
         }
 
         StringBuilder sb = new StringBuilder();
@@ -254,8 +273,9 @@ public final class ActionExecutor {
      * Capture a screenshot and write it as PNG to the path given in
      * {@code screenshotOut}.
      *
-     * <p>If a locator resolves to a component, only that component's screen
-     * bounds are captured.  Otherwise the full primary screen is captured.
+     * <p>
+     * If a locator resolves to a component, only that component's screen
+     * bounds are captured. Otherwise the full primary screen is captured.
      *
      * @param cmd must include a {@code screenshotout} parameter (case-insensitive)
      */
@@ -268,11 +288,11 @@ public final class ActionExecutor {
 
         // Robot must be constructed on the EDT to avoid ExceptionInInitializerError
         // when called from the Attach Listener thread (AWT static classes are not
-        // yet initialised in that thread's context).  The capture is also done on
+        // yet initialised in that thread's context). The capture is also done on
         // the EDT so the graphics environment is fully available.
-        final AtomicReference<BufferedImage> imgRef      = new AtomicReference<>();
-        final AtomicReference<String>        modeRef     = new AtomicReference<>("fullscreen");
-        final AtomicReference<String>        compJsonRef = new AtomicReference<>("null");
+        final AtomicReference<BufferedImage> imgRef = new AtomicReference<>();
+        final AtomicReference<String> modeRef = new AtomicReference<>("fullscreen");
+        final AtomicReference<String> compJsonRef = new AtomicReference<>("null");
 
         Component comp = resolveOptional(cmd);
 
@@ -299,14 +319,15 @@ public final class ActionExecutor {
             }
         });
 
-        BufferedImage img      = imgRef.get();
-        String        captureMode = modeRef.get();
-        String        compJson   = compJsonRef.get();
+        BufferedImage img = imgRef.get();
+        String captureMode = modeRef.get();
+        String compJson = compJsonRef.get();
 
         // Write PNG (file I/O off the EDT)
         File pngFile = new File(outPath);
-        File parent  = pngFile.getParentFile();
-        if (parent != null && !parent.exists()) parent.mkdirs();
+        File parent = pngFile.getParentFile();
+        if (parent != null && !parent.exists())
+            parent.mkdirs();
         PngWriter.write(img, pngFile);
 
         StringBuilder sb = new StringBuilder();
@@ -327,7 +348,8 @@ public final class ActionExecutor {
     /**
      * Flash a semi-transparent red overlay over the component for ~500 ms.
      *
-     * <p>If the component is not showing (no screen bounds), or if an
+     * <p>
+     * If the component is not showing (no screen bounds), or if an
      * overlay window cannot be created, just returns the component's bounds
      * in the JSON response without any visual effect.
      */
@@ -336,8 +358,10 @@ public final class ActionExecutor {
 
         Point loc = null;
         try {
-            if (comp.isShowing()) loc = comp.getLocationOnScreen();
-        } catch (Exception ignored) {}
+            if (comp.isShowing())
+                loc = comp.getLocationOnScreen();
+        } catch (Exception ignored) {
+        }
 
         if (loc != null) {
             final int hx = loc.x;
@@ -355,7 +379,10 @@ public final class ActionExecutor {
 
                 // Schedule removal on a daemon thread after 500 ms
                 Thread t = new Thread(() -> {
-                    try { Thread.sleep(500); } catch (InterruptedException ignored2) {}
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ignored2) {
+                    }
                     SwingUtilities.invokeLater(() -> {
                         overlay.setVisible(false);
                         overlay.dispose();
@@ -374,7 +401,8 @@ public final class ActionExecutor {
     /**
      * Return the deepest visible component under absolute screen coordinates.
      *
-     * <p>This lets the Python recorder keep Java DOM matching local and
+     * <p>
+     * This lets the Python recorder keep Java DOM matching local and
      * deterministic: AI sees only screenshots, returns coordinates, and the
      * agent maps those coordinates to a real Forms component inside the JVM.
      */
@@ -407,7 +435,8 @@ public final class ActionExecutor {
     // ── Internal helpers ──────────────────────────────────────────────────
 
     /**
-     * Resolve a component from the command; throw with a clear message if none found.
+     * Resolve a component from the command; throw with a clear message if none
+     * found.
      */
     private static Component resolveOrThrow(AgentCommand cmd, String commandName)
             throws Exception {
@@ -417,7 +446,7 @@ public final class ActionExecutor {
         if (comp == null) {
             throw new IllegalArgumentException(
                     "Component not found for command '" + commandName + "'."
-                    + " Locator params: " + cmd.getParams());
+                            + " Locator params: " + cmd.getParams());
         }
         return comp;
     }
@@ -428,15 +457,66 @@ public final class ActionExecutor {
      */
     private static Component resolveOptional(AgentCommand cmd) throws Exception {
         // Only attempt resolution if at least one locator param is present
-        if (cmd.getParam("locatorpath")          == null
-                && cmd.getParam("locatorname")   == null
+        if (cmd.getParam("locatorpath") == null
+                && cmd.getParam("locatorname") == null
                 && cmd.getParam("locatoraccessiblename") == null
-                && cmd.getParam("locatortext")   == null) {
+                && cmd.getParam("locatortext") == null) {
             return null;
         }
         final AtomicReference<Component> ref = new AtomicReference<>();
         invokeOnEDT(() -> ref.set(ComponentResolver.resolve(cmd)));
         return ref.get();
+    }
+
+    /**
+     * Pure-DOM click for an EWT DTree item: resolve its AccessibleContext by
+     * treePath and invoke its default AccessibleAction. Falls back to selecting
+     * the node through its parent's AccessibleSelection — still coordinate-free.
+     * Returns success JSON, or {@code null} if the item / action could not be
+     * found so the caller falls through to normal component resolution.
+     */
+    private static String clickTreeItemViaAccessibility(String treePath) throws Exception {
+        final AtomicReference<String> done = new AtomicReference<>(null);
+        invokeOnEDT(() -> {
+            try {
+                javax.accessibility.AccessibleContext item = ComponentResolver.resolveTreeItemAccessible(treePath);
+                if (item == null)
+                    return;
+                // 1) Default accessible action on the item itself.
+                javax.accessibility.AccessibleAction action = item.getAccessibleAction();
+                if (action != null && action.getAccessibleActionCount() > 0
+                        && action.doAccessibleAction(0)) {
+                    done.set("action");
+                    return;
+                }
+                // 2) Fallback: select the node via its parent's AccessibleSelection
+                // (no coordinates — still pure DOM).
+                javax.accessibility.Accessible parent = item.getAccessibleParent();
+                int idx = item.getAccessibleIndexInParent();
+                if (parent != null && idx >= 0) {
+                    javax.accessibility.AccessibleContext pac = parent.getAccessibleContext();
+                    if (pac != null) {
+                        javax.accessibility.AccessibleSelection sel = pac.getAccessibleSelection();
+                        if (sel != null) {
+                            sel.addAccessibleSelection(idx);
+                            done.set("selection");
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        });
+        String how = done.get();
+        if (how == null)
+            return null;
+        StringBuilder sb = new StringBuilder();
+        sb.append('{');
+        sb.append("\"status\":\"ok\",");
+        sb.append("\"command\":").append(JsonUtil.quoted("click")).append(',');
+        sb.append("\"via\":").append(JsonUtil.quoted("accessibility:" + how)).append(',');
+        sb.append("\"treePath\":").append(JsonUtil.quoted(treePath));
+        sb.append('}');
+        return sb.toString();
     }
 
     /** Build the standard success JSON with a component descriptor. */
@@ -459,9 +539,10 @@ public final class ActionExecutor {
             if (comp != null && comp.isShowing()) {
                 Point loc = comp.getLocationOnScreen();
                 return new Point(loc.x + comp.getWidth() / 2,
-                                 loc.y + comp.getHeight() / 2);
+                        loc.y + comp.getHeight() / 2);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return null;
     }
 
@@ -471,13 +552,14 @@ public final class ActionExecutor {
         if (p == null) {
             throw new IllegalStateException(
                     "Component for '" + commandName + "' is not showing on screen;"
-                    + " cannot compute click target.");
+                            + " cannot compute click target.");
         }
         return p;
     }
 
     private static void requestFocusBestEffort(Component comp) {
-        if (comp == null) return;
+        if (comp == null)
+            return;
         try {
             invokeOnEDT(() -> {
                 try {
@@ -493,17 +575,21 @@ public final class ActionExecutor {
 
     private static Component componentAtScreenPoint(int screenX, int screenY) {
         for (Window window : AwtContext.getWindows()) {
-            if (window == null || !window.isVisible() || !window.isShowing()) continue;
+            if (window == null || !window.isVisible() || !window.isShowing())
+                continue;
             try {
                 Component candidate = findDeepestRealComponent(window, screenX, screenY);
-                if (candidate != null) return candidate;
-            } catch (Exception ignored) {}
+                if (candidate != null)
+                    return candidate;
+            } catch (Exception ignored) {
+            }
         }
         return null;
     }
 
     private static Component findDeepestRealComponent(Component comp, int screenX, int screenY) {
-        if (comp == null || !comp.isVisible() || !comp.isShowing()) return null;
+        if (comp == null || !comp.isVisible() || !comp.isShowing())
+            return null;
         try {
             Point loc = comp.getLocationOnScreen();
             if (screenX < loc.x || screenY < loc.y
@@ -516,7 +602,8 @@ public final class ActionExecutor {
                 Component[] children = ((Container) comp).getComponents();
                 for (int i = children.length - 1; i >= 0; i--) {
                     Component child = findDeepestRealComponent(children[i], screenX, screenY);
-                    if (child != null) return child;
+                    if (child != null)
+                        return child;
                 }
             }
 
@@ -566,19 +653,24 @@ public final class ActionExecutor {
      */
     private static void invokeOnEDT(Runnable r) throws Exception {
         try {
-        if (SwingUtilities.isEventDispatchThread()) {
-            r.run();
-        } else {
-            final CountDownLatch latch = new CountDownLatch(1);
-            final AtomicReference<Exception> err = new AtomicReference<>();
-            SwingUtilities.invokeLater(() -> {
-                try { r.run(); }
-                catch (Exception e) { err.set(e); }
-                finally { latch.countDown(); }
-            });
-            latch.await();
-            if (err.get() != null) throw err.get();
-        }
+            if (SwingUtilities.isEventDispatchThread()) {
+                r.run();
+            } else {
+                final CountDownLatch latch = new CountDownLatch(1);
+                final AtomicReference<Exception> err = new AtomicReference<>();
+                SwingUtilities.invokeLater(() -> {
+                    try {
+                        r.run();
+                    } catch (Exception e) {
+                        err.set(e);
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+                latch.await();
+                if (err.get() != null)
+                    throw err.get();
+            }
         } catch (NullPointerException appContextMissing) {
             System.err.println("[ebs-dom-agent] AWT AppContext unavailable on attach thread; "
                     + "running action step directly.");
@@ -593,7 +685,8 @@ public final class ActionExecutor {
             return r;
         }
 
-        // 2. Lookup via item/page object (e.g. TabBar.getItem(index) -> TabBarItem.getBounds())
+        // 2. Lookup via item/page object (e.g. TabBar.getItem(index) ->
+        // TabBarItem.getBounds())
         try {
             Object item = null;
             Class<?> clazz = comp.getClass();
@@ -608,11 +701,13 @@ public final class ActionExecutor {
                                 if (item != null) {
                                     break;
                                 }
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         }
                     }
                 }
-                if (item != null) break;
+                if (item != null)
+                    break;
                 clazz = clazz.getSuperclass();
             }
 
@@ -631,7 +726,8 @@ public final class ActionExecutor {
                                         if (rect != null) {
                                             return rect;
                                         }
-                                    } catch (Exception ignored) {}
+                                    } catch (Exception ignored) {
+                                    }
                                 }
                             }
                         }
@@ -639,7 +735,8 @@ public final class ActionExecutor {
                     itemClass = itemClass.getSuperclass();
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         return null;
     }
@@ -651,14 +748,16 @@ public final class ActionExecutor {
                 if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == int.class) {
                     if (Rectangle.class.isAssignableFrom(m.getReturnType())) {
                         String name = m.getName().toLowerCase();
-                        if (name.contains("tab") || name.contains("item") || name.contains("rect") || name.contains("bounds")) {
+                        if (name.contains("tab") || name.contains("item") || name.contains("rect")
+                                || name.contains("bounds")) {
                             try {
                                 m.setAccessible(true);
                                 Rectangle r = (Rectangle) m.invoke(comp, index);
                                 if (r != null) {
                                     return r;
                                 }
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         }
                     }
                 }

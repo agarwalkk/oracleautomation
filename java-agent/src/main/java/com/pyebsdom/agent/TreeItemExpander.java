@@ -68,6 +68,22 @@ public final class TreeItemExpander {
         if (treeNode == null || comp == null)
             return 0;
         try {
+            // An Oracle Forms LOV list (ListView) has no business name of its
+            // own — only a technical "ListView<n>" — so the rendered container
+            // would read as "[e31] ListView147". Borrow the owning popup's
+            // title (e.g. "Order Types") as the container label. We set
+            // accessibleName (not canonicalLabel): IdentityResolver runs after
+            // this and derives canonicalLabel/semanticId from accessibleName,
+            // and the row treePaths built below then nest under the real name.
+            if ("ListView".equals(comp.getClass().getSimpleName())
+                    && (treeNode.accessibleName == null
+                            || treeNode.accessibleName.trim().isEmpty())) {
+                String ownerTitle = ownerWindowTitle(comp);
+                if (ownerTitle != null && !ownerTitle.isEmpty()) {
+                    treeNode.accessibleName = ownerTitle;
+                }
+            }
+
             List<Row> rows = readRows(comp);
             if (rows.isEmpty())
                 return 0;
@@ -100,8 +116,10 @@ public final class TreeItemExpander {
             treeNode.attributes.put("treeRowCount", Integer.toString(rows.size()));
             return added;
         } catch (Throwable t) {
-            treeNode.attributes.put("_treeExpandError",
-                    t.getClass().getName() + ": " + t.getMessage());
+            java.io.StringWriter sw = new java.io.StringWriter();
+            java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+            t.printStackTrace(pw);
+            treeNode.attributes.put("_treeExpandError", sw.toString());
             return 0;
         }
     }
@@ -187,7 +205,12 @@ public final class TreeItemExpander {
                 }
             }
         };
-        if (SwingUtilities.isEventDispatchThread()) {
+        boolean isEdt = false;
+        try {
+            isEdt = SwingUtilities.isEventDispatchThread();
+        } catch (Throwable ignored) {
+        }
+        if (isEdt) {
             work.run();
         } else {
             try {
@@ -387,6 +410,42 @@ public final class TreeItemExpander {
         return null;
     }
 
+    /**
+     * Title of the nearest ancestor window/dialog. Oracle Forms LOV popups
+     * (FWindow / ExtendedFrame) expose it via a reflective {@code getTitle()};
+     * we walk parents and take the first non-empty title — that is the LOV's
+     * own popup (e.g. "Order Types"), not the far-up application JFrame. Falls
+     * back to the nearest ancestor's accessibleName. Returns "" when none.
+     */
+    private static String ownerWindowTitle(Component comp) {
+        for (Component p = comp.getParent(); p != null; p = p.getParent()) {
+            try {
+                Method getTitle = p.getClass().getMethod("getTitle");
+                Object t = getTitle.invoke(p);
+                if (t != null && !t.toString().trim().isEmpty()) {
+                    return t.toString().trim();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        for (Component p = comp.getParent(); p != null; p = p.getParent()) {
+            if (p instanceof javax.accessibility.Accessible) {
+                try {
+                    javax.accessibility.AccessibleContext ac = ((javax.accessibility.Accessible) p)
+                            .getAccessibleContext();
+                    if (ac != null) {
+                        String an = ac.getAccessibleName();
+                        if (an != null && !an.trim().isEmpty()) {
+                            return an.trim();
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return "";
+    }
+
     private static void readListViewRowsOnEdt(Component comp, List<Row> out) throws Exception {
         Class<?> c = comp.getClass();
         Method rowCountMethod = method(c, "getRowCount");
@@ -466,6 +525,7 @@ public final class TreeItemExpander {
 
         for (int r = 0; r < limit; r++) {
             StringBuilder sb = new StringBuilder();
+            boolean anyCell = false;
             for (int col = 0; col < colCount; col++) {
                 Object val = null;
                 try {
@@ -473,6 +533,8 @@ public final class TreeItemExpander {
                 } catch (Exception ignored) {
                 }
                 String cellStr = (val != null) ? val.toString().trim() : "";
+                if (!cellStr.isEmpty())
+                    anyCell = true;
                 if (sb.length() > 0)
                     sb.append(" ");
                 if (headers[col] != null && !headers[col].isEmpty()) {
@@ -481,6 +543,12 @@ public final class TreeItemExpander {
                     sb.append(cellStr);
                 }
             }
+
+            // Oracle Forms ListView reports a fixed row capacity; trailing rows
+            // past the real data come back with every cell blank. Skip them so
+            // the LOV doesn't show empty padding entries.
+            if (!anyCell)
+                continue;
 
             String label = sb.toString().trim();
             if (label.isEmpty()) {
@@ -497,7 +565,10 @@ public final class TreeItemExpander {
             Rectangle bounds = null;
             if (cellsToPixels != null) {
                 try {
-                    bounds = (Rectangle) cellsToPixels.invoke(comp, 0, r, colCount - 1, r);
+                    bounds = (Rectangle) cellsToPixels.invoke(comp, 0, r, colCount, 1);
+                    if (bounds != null) {
+                        bounds.width = Math.min(bounds.width, comp.getWidth());
+                    }
                 } catch (Exception ignored) {
                 }
             }

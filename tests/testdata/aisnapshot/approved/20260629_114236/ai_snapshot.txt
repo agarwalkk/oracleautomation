@@ -1,0 +1,107 @@
+Form: EMR Global Find  Orders/Quotes
+  [e200] Quote/Order Information (Tab, enabled, selected)
+    [e36] Order Number
+    [e37] Quote Number
+    [e38] Order Category (LOV)
+    [e39] Order Type (LOV)
+    [e40] Created By (LOV)
+    [e41] Customer PO (LOV)
+    [e42] Status (LOV)
+    [e43] Customer (LOV)
+    [e44] Ship To Cust (LOV)
+    [e45] Invoice To Cust (LOV)
+    [e49] Salesperson (LOV)
+    [e50] Requisition Number (LOV)
+    [e51] Order Source (LOV)
+    [e53] Entered Date (LOV)
+    [e54] To (LOV)
+    [e55] Invoice Number (LOV)
+    [e57] Agreement (LOV)
+    [e58] Price List (LOV)
+    [e59] Inland Carrier/Ship Method (LOV)
+    [e60] Warehouse (LOV)
+    [e61] On Hold (ComboBox) (read-only) values: ['Yes', 'No']
+    [e64] End User (LOV)
+    [e65] PO Received (LOV)
+    [e66] Order Admin (LOV)
+    [e67] Opportunity No
+    [e68] Rep Order #
+    [e69] KOB (LOV)
+    [e70] Order Tier (LOV)
+    [e71] Tech Contact (LOV)
+    [e72] Ultimate Dest (LOV)
+    [e73] Booked By (LOV)
+    [e74] Ack'd (LOV)
+    [e75] Cust Proj Name/No
+    [e76] Shipment Priority (LOV)
+    [e77] SIC Code (LOV)
+    [e79] End Use
+    [e80] Booked Date From (LOV)
+    [e82] Consolidation Name (LOV)
+    [e83] Intermediate Ship To ID (LOV)
+    [e84] Mail Invoice To Customer (LOV)
+    [e85] Consol Location (LOV)
+  [e202] Line Information (Tab, enabled)
+    [e1022] Internal Item (LOV)
+    [e1024] Ordered Item (LOV)
+    [e1025] Model String
+    [e1026] Line type (LOV)
+    [e1027] Division ID (LOV)
+    [e1028] Credit Division ID (LOV)
+    [e1029] PA Reference ID
+    [e1030] Source Type (LOV)
+    [e1031] Warehouse (LOV)
+    [e1032] Status (LOV)
+    [e1033] Shipment Priority (LOV)
+    [e1034] Admin (LOV)
+    [e1035] PID/Tag
+    [e1036] Serial Number From
+    [e1037] To
+    [e1038] Tech Contact (LOV)
+    [e1039] Ship Set
+    [e1040] Fulfillment Set (LOV)
+    [e1042] Waybill Number
+    [e1043] Lot Number (LOV)
+    [e1045] Inland Carrier/Ship Method (LOV)
+    [e1046] Requested Delivery Date (LOV)
+    [e1048] Bill To (LOV)
+    [e1051] Requested Ship Date (LOV)
+    [e1056] Promise Date (LOV)
+    [e1058] End Customer (LOV)
+    [e1061] Orginal Promise Date (LOV)
+    [e1063] Invoice Number (LOV)
+    [e1065] Schedule Ship Date (LOV)
+    [e1067] Invoice Date (LOV)
+    [e1069] On Hold (ComboBox) (read-only) values: ['Yes', 'No']
+    [e1071] ACK (ComboBox) (read-only) values: ['Yes', 'No']
+    [e1073] Project Number (LOV)
+    [e1074] Task Number (LOV)
+    [e1077] Customer Reference
+    [e1078] Consolidation Name (LOV)
+    [e1079] Intermediate Ship To ID (LOV)
+    [e1080] Consol Location (LOV)
+  [e204] Advanced (Tab, enabled)
+    [e1356] Include Closed Orders (Checkbox, checked)
+    [e1358] Include Closed Lines (Checkbox, checked)
+    [e1360] Include Cancelled Orders (Checkbox, checked)
+    [e1362] Include Cancelled Lines (Checkbox, checked)
+    [e1363] RLM Order By (ComboBox) (read-only) values: ['Sequenced', 'Non Sequenced']
+  [e206] Holds Information (Tab, enabled)
+    [e179] Hold Name (LOV)
+    [e182] Held By (LOV)
+    [e183] Criteria (ComboBox) (read-only) values: ['Bill to Site', 'Creation Date', 'Customer', 'Customer Number', 'Deliver to Site', 'End Customer', 'End Customer Number', 'Item', 'Item Category', 'Order', 'Order Type', 'Payment Type', 'Price List', 'Project Number', 'Sales Agreement Number', 'Sales Channel Code', 'Ship to Site', 'Shipping Method Code', 'Top Model', 'Warehouse']
+    [e185] Value (LOV)
+    [e190] Hold Sources (Button, enabled)
+  [e208] Scheduling (Tab, disabled)
+  [e210] Retrobill Requests (Tab, enabled)
+  [e226] Clear (Button, enabled) , [e227] Find (Button, enabled) , [e228] Open Folder... (Button, enabled)
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    [ ] Show Line Details
+    Book Sales Order
+    [ ] ATO Summary View
+    Copy Sales Order Prgram
+    [ ] Pricing Options
+    [ ] Star Model Status
+    Mass Price Adjustment Tool

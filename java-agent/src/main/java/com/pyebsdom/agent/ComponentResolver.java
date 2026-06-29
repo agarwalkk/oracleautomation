@@ -60,7 +60,6 @@ public final class ComponentResolver {
         String locAccName = cmd.getParam("locatoraccessiblename");
         String locText = cmd.getParam("locatortext");
         String locClass = cmd.getParam("locatorclassname");
-        String locBounds = cmd.getParam("locatorbounds");
         boolean allowFuzzy = "true".equalsIgnoreCase(cmd.getParam("locatorallowfuzzy"));
         int ordinal = parseInt(locOrdinalS, -1);
 
@@ -165,15 +164,18 @@ public final class ComponentResolver {
                 return r;
         }
 
-        // 7) bounds — screen overlap (Robot-click targets: rows, tabs).
-        if (notBlank(locBounds)) {
-            int[] bb = parseBounds(locBounds);
-            if (bb != null) {
-                Component r = findByBounds(all, bb[0], bb[1], bb[2], bb[3]);
-                if (r != null)
-                    return r;
-            }
-        }
+        // 7) bounds — screen overlap (Robot-click targets: rows, tabs) [DISABLED -
+        // purely DOM-based]
+        /*
+         * if (notBlank(locBounds)) {
+         * int[] bb = parseBounds(locBounds);
+         * if (bb != null) {
+         * Component r = findByBounds(all, bb[0], bb[1], bb[2], bb[3]);
+         * if (r != null)
+         * return r;
+         * }
+         * }
+         */
 
         // 8) fuzzy contains — DISABLED unless explicitly allowed (healing only).
         if (allowFuzzy) {
@@ -269,6 +271,99 @@ public final class ComponentResolver {
                 continue;
             if (treeRowForLabel(c, leaf) >= 0)
                 return c;
+            // EWT DTree exposes no JTree row API, so treeRowForLabel returns -1.
+            // Confirm the item exists via the accessibility tree (the same source
+            // the scanner materialised it from) and return the tree component.
+            if (c instanceof Accessible) {
+                AccessibleContext root = ((Accessible) c).getAccessibleContext();
+                if (root != null && findLabeledDescendant(root, stripLevel(leaf)) != null)
+                    return c;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Resolve the {@link AccessibleContext} of a tree item addressed by a
+     * treePath ("Tree Name/Parent/Leaf"). Oracle EWT {@code DTree} items are
+     * accessibility nodes, not AWT components, so this is how the executor
+     * reaches them for a pure-DOM {@code AccessibleAction}. Returns null if not
+     * found. Must be called on the EDT.
+     */
+    public static AccessibleContext resolveTreeItemAccessible(String treePath) {
+        if (treePath == null || treePath.trim().isEmpty())
+            return null;
+        String[] parts = treePath.split("/");
+        if (parts.length == 0)
+            return null;
+        boolean named = parts.length > 1;
+        String treeName = parts[0];
+        List<Component> all = collectAllVisible();
+        for (Component c : all) {
+            if (!isTreeLike(c) || !(c instanceof Accessible))
+                continue;
+            if (named) {
+                String an = accessibleName(c);
+                if (an != null && !an.equals(treeName))
+                    continue;
+            }
+            AccessibleContext cur = ((Accessible) c).getAccessibleContext();
+            if (cur == null)
+                continue;
+            boolean ok = true;
+            for (int i = (named ? 1 : 0); i < parts.length; i++) {
+                cur = findLabeledDescendant(cur, parts[i].trim());
+                if (cur == null) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok && cur != null)
+                return cur;
+        }
+        return null;
+    }
+
+    /**
+     * Nearest descendant (any depth) whose level-stripped accessibleName equals
+     * {@code want}. Tolerates the unlabelled wrapper nodes EWT DTree inserts
+     * between the tree root and its visible items.
+     */
+    private static AccessibleContext findLabeledDescendant(AccessibleContext node, String want) {
+        int n;
+        try {
+            n = node.getAccessibleChildrenCount();
+        } catch (Throwable t) {
+            return null;
+        }
+        for (int i = 0; i < n; i++) {
+            Accessible ch;
+            try {
+                ch = node.getAccessibleChild(i);
+            } catch (Throwable t) {
+                continue;
+            }
+            if (ch == null)
+                continue;
+            AccessibleContext cc;
+            try {
+                cc = ch.getAccessibleContext();
+            } catch (Throwable t) {
+                continue;
+            }
+            if (cc == null)
+                continue;
+            String lbl;
+            try {
+                lbl = stripLevel(String.valueOf(cc.getAccessibleName()).trim());
+            } catch (Throwable t) {
+                lbl = "";
+            }
+            if (want.equals(lbl))
+                return cc;
+            AccessibleContext deep = findLabeledDescendant(cc, want);
+            if (deep != null)
+                return deep;
         }
         return null;
     }
@@ -504,30 +599,6 @@ public final class ComponentResolver {
         return target.toLowerCase(java.util.Locale.ROOT).contains(lowerSubstring);
     }
 
-    private static Component findByBounds(List<Component> all, int x, int y, int w, int h) {
-        Rectangle target = new Rectangle(x, y, w, h);
-        Component best = null;
-        int bestOverlap = 0;
-        for (Component c : all) {
-            try {
-                if (!c.isShowing())
-                    continue;
-                Point loc = c.getLocationOnScreen();
-                Rectangle cr = new Rectangle(loc.x, loc.y, c.getWidth(), c.getHeight());
-                Rectangle inter = cr.intersection(target);
-                if (!inter.isEmpty()) {
-                    int area = inter.width * inter.height;
-                    if (area > bestOverlap) {
-                        bestOverlap = area;
-                        best = c;
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        return best;
-    }
-
     // ── TreePath label helpers ────────────────────────────────────────────
 
     private static String lastPathLabel(Object treePath) {
@@ -589,19 +660,5 @@ public final class ComponentResolver {
         } catch (Exception e) {
             return dflt;
         }
-    }
-
-    private static int[] parseBounds(String boundsStr) {
-        try {
-            String[] parts = boundsStr.split(",", 4);
-            if (parts.length == 4) {
-                return new int[] {
-                        Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()),
-                        Integer.parseInt(parts[2].trim()), Integer.parseInt(parts[3].trim())
-                };
-            }
-        } catch (NumberFormatException ignored) {
-        }
-        return null;
     }
 }
