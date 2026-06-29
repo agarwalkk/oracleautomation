@@ -112,6 +112,14 @@ class JavaAgentDriver:
         command = {"command": "treeaction", "op": op, **locator_params(descriptor)}
         return self._run(command)
 
+    def set_checkbox(self, descriptor: dict, checked: bool) -> dict:
+        command = {
+            "command": "setcheckbox",
+            "checked": "true" if checked else "false",
+            **locator_params(descriptor),
+        }
+        return self._run(command)
+
     def _run(self, command: dict[str, Any], *, text_output: bool = False) -> dict:
         return run_agent_command(
             pid=self.pid,

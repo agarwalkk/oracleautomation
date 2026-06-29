@@ -29,13 +29,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@code sendFinalMessage(boolean)}, {@code sendFocusEvent(boolean,boolean)},
  * {@code isLocked()}.
  *
- * <h3>Checkboxes — interim</h3>
- * The probed {@code oracle.ewt.lwAWT.LWCheckbox} is the inner view; its Forms
- * wrapper {@code oracle.apps.fnd.ui.CheckBox} (the parent) holds the handler.
- * Until that wrapper is probed, {@link #setChecked} drives the inner widget's
- * real event path ({@code simulatePush}), which should propagate to the
- * wrapper.
- * VERIFY on the server before trusting it for items with WHEN-CHECKBOX-CHANGED.
+ * <h3>Checkboxes — confirmed</h3>
+ * The Forms wrapper {@code oracle.apps.fnd.ui.CheckBox} holds {@code mHandler}
+ * →
+ * {@code oracle.forms.handler.CheckboxItem}. That handler has no direct value
+ * setter — it reacts to {@code itemStateChanged(ItemEvent)}. So the faithful
+ * change is to fire the inner {@code LWCheckbox}'s event via
+ * {@code simulatePush()} (which routes through the handler to the server), then
+ * {@code sendFinalMessage(true)} to flush. {@link #setChecked} accepts either
+ * the wrapper or the inner widget and normalises between them.
  *
  * <p>
  * Every action runs on the EDT and self-verifies by reading the value back.
@@ -129,50 +131,55 @@ public final class FieldActuator {
     // ── checkbox (INTERIM — see class doc) ────────────────────────────────
 
     /**
-     * Set a checkbox to {@code checked}. INTERIM: drives the inner
-     * {@code LWCheckbox} through its real event path so the Forms wrapper hears
-     * it. Replace with a handler-routed version once
-     * {@code oracle.apps.fnd.ui.CheckBox} is probed.
+     * Set a checkbox to {@code checked} through the Forms event pipeline.
+     * Accepts the wrapper ({@code oracle.apps.fnd.ui.CheckBox}) or the inner
+     * {@code LWCheckbox}. Toggles via {@code simulatePush()} (fires
+     * {@code itemStateChanged} → server), then flushes with
+     * {@code sendFinalMessage(true)}, and self-verifies the state.
      */
     public static Result setChecked(final Component checkbox, final boolean checked) {
         return onEdt(new EdtCall() {
             public Result run() {
                 if (checkbox == null)
                     return Result.fail("checkbox is null");
-                Object cur = invoke0(checkbox, "getState");
-                boolean state = Boolean.TRUE.equals(cur);
+
+                // Normalise to: inner LWCheckbox (getState/simulatePush) + Forms
+                // wrapper oracle.apps.fnd.ui.CheckBox (mHandler -> CheckboxItem).
+                Component wrapper = checkbox;
+                Object inner = invoke0(checkbox, "getLWCheckBox");
+                if (inner == null && findMethod(checkbox.getClass(), "getState", 0) != null) {
+                    inner = checkbox; // handed the inner widget
+                    wrapper = checkbox.getParent(); // its oracle.apps.fnd.ui.CheckBox
+                }
+                if (inner == null)
+                    return Result.fail("could not locate the checkbox widget "
+                            + "(no getLWCheckBox()/getState() on " + checkbox.getClass().getName() + ")");
+
+                Object handler = (wrapper != null) ? mHandler(wrapper) : null;
+
+                boolean state = Boolean.TRUE.equals(invoke0(inner, "getState"));
                 Result r = new Result();
                 r.before = String.valueOf(state);
-                if (state == checked) {
-                    r.ok = true;
-                    r.after = r.before;
-                    r.message = "already " + checked;
-                    return r;
-                }
-                // Prefer the "as if clicked" path (fires ItemEvent → wrapper → server).
-                Method push = findMethod(checkbox.getClass(), "simulatePush", 0);
-                boolean acted = false;
-                if (push != null) {
-                    try {
-                        push.invoke(checkbox);
-                        acted = true;
-                    } catch (Throwable ignored) {
-                    }
-                }
-                if (!acted) {
-                    // setStateInternal(newState, fireEvent) keeps the event; fall back
-                    // to the visual-only setState as a last resort.
-                    if (!invoke2(checkbox, "setStateInternal", boolean.class, Boolean.valueOf(checked),
+                if (state != checked) {
+                    // Faithful toggle: fires ItemEvent -> CheckboxItem.itemStateChanged -> server.
+                    Method push = findMethod(inner.getClass(), "simulatePush", 0);
+                    if (push != null) {
+                        try {
+                            push.invoke(inner);
+                        } catch (Throwable ignored) {
+                        }
+                    } else if (!invoke2(inner, "setStateInternal", boolean.class, Boolean.valueOf(checked),
                             boolean.class, Boolean.TRUE)) {
-                        invoke1(checkbox, "setState", boolean.class, Boolean.valueOf(checked));
+                        invoke1(inner, "setState", boolean.class, Boolean.valueOf(checked)); // visual-only last resort
                     }
+                    // Flush to the server (no-op if itemStateChanged already sent).
+                    if (handler != null)
+                        invoke1(handler, "sendFinalMessage", boolean.class, Boolean.TRUE);
                 }
-                boolean now = Boolean.TRUE.equals(invoke0(checkbox, "getState"));
+                boolean now = Boolean.TRUE.equals(invoke0(inner, "getState"));
                 r.after = String.valueOf(now);
                 r.ok = (now == checked);
-                r.message = r.ok
-                        ? "setChecked ok (INTERIM widget path — verify server trigger)"
-                        : "state did not change to " + checked;
+                r.message = r.ok ? "setChecked ok" : "state did not change to " + checked;
                 return r;
             }
         });

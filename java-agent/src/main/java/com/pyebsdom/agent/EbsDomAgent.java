@@ -124,13 +124,14 @@ public final class EbsDomAgent {
             case "highlight":  return ActionExecutor.executeHighlight(cmd);
             case "elementat":  return ActionExecutor.executeElementAt(cmd);
             case "treeaction": return ActionExecutor.executeTreeAction(cmd);
+            case "setcheckbox": return ActionExecutor.executeSetCheckbox(cmd);
 
             default:
                 return JsonUtil.errorResult(
                         cmd.getCommand(),
                         "Unknown command: '" + cmd.getCommand() + "'."
                                 + " Supported commands: health, scan, raw, layout, tables,"
-                                + " focus, click, settext, clear, presskey, screenshot, highlight, elementat, treeaction",
+                                + " focus, click, settext, clear, presskey, screenshot, highlight, elementat, treeaction, setcheckbox",
                         null);
         }
     }

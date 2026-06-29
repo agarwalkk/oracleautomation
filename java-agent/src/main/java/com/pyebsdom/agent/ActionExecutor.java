@@ -153,20 +153,13 @@ public final class ActionExecutor {
         return okResult("click", comp);
     }
 
-    // ── setText ───────────────────────────────────────────────────────────
-
     /**
-     * Clear the component's current content and type new text.
+     * Set a text field's value. Preferred path: the Forms item handler
+     * ({@link FieldActuator#setText}) — no Robot, server-routed, fires
+     * validation. Falls back to Robot typing (focus → Ctrl+A → type) only when
+     * the field has no reachable handler or the reflective set didn't take.
      *
-     * <p>
-     * Sequence:
-     * <ol>
-     * <li>Focus the component (EDT + Robot fallback)</li>
-     * <li>Select all existing text (Ctrl+A)</li>
-     * <li>Type the new text via {@link SafeRobot#typeText(String)}</li>
-     * </ol>
-     *
-     * @param cmd must include a {@code text} parameter
+     * @param cmd must include {@code text} (or base64 {@code text64})
      */
     public static String executeSetText(AgentCommand cmd) throws Exception {
         Component comp = resolveOrThrow(cmd, "setText");
@@ -175,7 +168,13 @@ public final class ActionExecutor {
                 ? cmd.getParam("text", "")
                 : new String(Base64.getDecoder().decode(text64), StandardCharsets.UTF_8);
 
-        // Focus
+        // Preferred: handler-routed reflective set.
+        FieldActuator.Result r = FieldActuator.setText(comp, text);
+        if (r.ok) {
+            return fieldResult("setText", r, comp, "reflection:handler");
+        }
+
+        // Fallback: Robot typing (mirrors the previous behaviour).
         requestFocusBestEffort(comp);
         Point centre = screenCentre(comp);
         SafeRobot robot = newSafeRobot();
@@ -183,14 +182,21 @@ public final class ActionExecutor {
             robot.click(centre.x, centre.y);
         }
         robot.delay(SafeRobot.POST_ACTION_DELAY_MS);
-
-        // Select all + type
         robot.pressCombo(KeyEvent.VK_CONTROL, KeyEvent.VK_A);
         robot.delay(SafeRobot.DEFAULT_DELAY_MS);
         robot.typeText(text);
         robot.delay(SafeRobot.POST_ACTION_DELAY_MS);
 
-        return okResult("setText", comp);
+        // Note the fallback in the response so the recorder can see the path used.
+        StringBuilder sb = new StringBuilder();
+        sb.append('{');
+        sb.append("\"status\":\"ok\",");
+        sb.append("\"command\":").append(JsonUtil.quoted("setText")).append(',');
+        sb.append("\"via\":").append(JsonUtil.quoted("robot")).append(',');
+        sb.append("\"detail\":").append(JsonUtil.quoted(r.message)).append(',');
+        sb.append("\"component\":").append(ComponentResolver.componentJson(comp));
+        sb.append('}');
+        return sb.toString();
     }
 
     // ── clear ─────────────────────────────────────────────────────────────
@@ -767,6 +773,16 @@ public final class ActionExecutor {
         return null;
     }
 
+    /**
+     * Drive an EWT {@code DTree} node by its {@code treePath} — coordinate-free,
+     * no Robot click. Resolves the DTree from the treePath (the only required
+     * param besides {@code op}); an optional locator overrides resolution when
+     * more than one tree is on screen.
+     *
+     * <p>
+     * Required params: {@code op} (select|expand|collapse|activate) and
+     * {@code locatorTreePath}.
+     */
     public static String executeTreeAction(AgentCommand cmd) throws Exception {
         String op = cmd.getParam("op", "");
         if (op.trim().isEmpty()) {
@@ -791,15 +807,26 @@ public final class ActionExecutor {
                     "Required parameter 'locatorTreePath' is missing.", null);
         }
 
-        // Resolve the DTree component (or any component inside it) from locators,
-        // then make sure we hand TreeItemActuator the DTree itself.
-        Component resolved = resolveOrThrow(cmd, "treeAction");
-        final Component resolvedFinal = resolved;
-        final AtomicReference<Component> treeRef = new AtomicReference<Component>();
-        invokeOnEDT(() -> treeRef.set(findEnclosingDTree(resolvedFinal)));
-        Component tree = treeRef.get();
+        // 1) If a locator was supplied AND it resolves, use the DTree at/around it.
+        Component tree = null;
+        Component resolved = resolveOptional(cmd); // null if no locator / no match
+        if (resolved != null) {
+            final Component rf = resolved;
+            final AtomicReference<Component> ref = new AtomicReference<Component>();
+            invokeOnEDT(() -> ref.set(findEnclosingDTree(rf)));
+            tree = ref.get();
+        }
+
+        // 2) Otherwise (the normal case) find the DTree on screen — no locator.
         if (tree == null) {
-            tree = resolved; // best-effort; actuator reports if it isn't a tree
+            tree = findSingleDTree();
+        }
+
+        if (tree == null) {
+            return JsonUtil.errorResult("treeAction",
+                    "No DTree found on screen for treePath '" + treePath + "'."
+                            + " Is the tree's tab/window showing?",
+                    null);
         }
 
         TreeItemActuator.Result r = TreeItemActuator.act(tree, treePath, parsedOp);
@@ -824,9 +851,37 @@ public final class ActionExecutor {
     }
 
     /**
-     * Return the DTree at or around {@code comp}: {@code comp} itself, the
-     * nearest DTree ancestor, or the first DTree descendant. {@code null} if
-     * none. Must be called on the EDT.
+     * Find the (first) {@code oracle.ewt.dTree.DTree} showing on screen. Most
+     * EBS forms have one tree per window; if several are visible, pass an
+     * explicit {@code locatorPath} to target a specific one.
+     */
+    private static Component findSingleDTree() throws Exception {
+        final java.util.List<Component> trees = new java.util.ArrayList<Component>();
+        invokeOnEDT(() -> {
+            for (Window w : AwtContext.getWindows()) {
+                if (w != null && w.isShowing()) {
+                    collectDTrees(w, trees);
+                }
+            }
+        });
+        return trees.isEmpty() ? null : trees.get(0);
+    }
+
+    private static void collectDTrees(Component c, java.util.List<Component> out) {
+        if (c == null)
+            return;
+        if (isDTree(c))
+            out.add(c);
+        if (c instanceof Container) {
+            for (Component ch : ((Container) c).getComponents()) {
+                collectDTrees(ch, out);
+            }
+        }
+    }
+
+    /**
+     * Return the DTree at or around {@code comp}: itself, the nearest DTree
+     * ancestor, or the first DTree descendant. {@code null} if none. EDT only.
      */
     private static Component findEnclosingDTree(Component comp) {
         for (Component c = comp; c != null; c = c.getParent()) {
@@ -862,5 +917,49 @@ public final class ActionExecutor {
             }
         }
         return null;
+    }
+
+    /**
+     * Check or uncheck a Forms checkbox through the event pipeline (no Robot).
+     * Resolves the wrapper or inner widget and delegates to
+     * {@link FieldActuator#setChecked}.
+     *
+     * @param cmd must include {@code checked} = {@code true|false} (or {@code 1|0})
+     */
+    public static String executeSetCheckbox(AgentCommand cmd) throws Exception {
+        String checkedStr = cmd.getParam("checked", "");
+        if (checkedStr.trim().isEmpty()) {
+            return JsonUtil.errorResult("setCheckbox",
+                    "Required parameter 'checked' (true|false) is missing.", null);
+        }
+        String v = checkedStr.trim();
+        boolean checked = v.equalsIgnoreCase("true") || v.equals("1");
+
+        Component comp = resolveOrThrow(cmd, "setCheckbox");
+        FieldActuator.Result r = FieldActuator.setChecked(comp, checked);
+        if (!r.ok) {
+            return JsonUtil.errorResult("setCheckbox", r.message, null);
+        }
+        return fieldResult("setCheckbox", r, comp, "reflection:handler");
+    }
+
+    /** Success JSON for a handler-routed field action, with before/after state. */
+    private static String fieldResult(String command, FieldActuator.Result r,
+            Component comp, String via) {
+        StringBuilder sb = new StringBuilder();
+        sb.append('{');
+        sb.append("\"status\":\"ok\",");
+        sb.append("\"command\":").append(JsonUtil.quoted(command)).append(',');
+        sb.append("\"via\":").append(JsonUtil.quoted(via)).append(',');
+        if (r.before != null) {
+            sb.append("\"before\":").append(JsonUtil.quoted(r.before)).append(',');
+        }
+        if (r.after != null) {
+            sb.append("\"after\":").append(JsonUtil.quoted(r.after)).append(',');
+        }
+        sb.append("\"detail\":").append(JsonUtil.quoted(r.message)).append(',');
+        sb.append("\"component\":").append(ComponentResolver.componentJson(comp));
+        sb.append('}');
+        return sb.toString();
     }
 }

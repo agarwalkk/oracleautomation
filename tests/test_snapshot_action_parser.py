@@ -242,3 +242,18 @@ class TestEdgeCases:
     def test_tree_action_invalid_value(self):
         with pytest.raises(SnapshotActionError, match="unknown tree operation"):
             _parse({"action": "tree_action", "element_id": "e11", "value": "dance"})
+
+    def test_set_checkbox_valid_values(self):
+        for val in ("true", "false", "1", "0"):
+            result = _parse({"action": "set_checkbox", "element_id": "e11", "value": val})
+            assert result.action == "set_checkbox"
+            assert result.element_id == "e11"
+            assert result.value == val
+
+    def test_set_checkbox_missing_value(self):
+        with pytest.raises(SnapshotActionError, match="value"):
+            _parse({"action": "set_checkbox", "element_id": "e11"})
+
+    def test_set_checkbox_invalid_value(self):
+        with pytest.raises(SnapshotActionError, match="unknown checked state"):
+            _parse({"action": "set_checkbox", "element_id": "e11", "value": "maybe"})

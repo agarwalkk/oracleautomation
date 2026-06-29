@@ -286,3 +286,35 @@ class TestTreeAction:
         result = execute_resolved_action(driver, element, action)
 
         assert result == {"status": "ok", "expanded": True}
+
+
+class TestSetCheckbox:
+
+    @pytest.mark.parametrize("val,expected_checked", [
+        ("true", "true"),
+        ("1", "true"),
+        ("false", "false"),
+        ("0", "false"),
+    ])
+    def test_dispatches_setcheckbox_command(self, val, expected_checked):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="set_checkbox", element_id="e10", value=val)
+
+        execute_resolved_action(driver, element, action)
+
+        expected_params = locator_params(element)
+        driver._run.assert_called_once_with({
+            "command": "setcheckbox",
+            "checked": expected_checked,
+            **expected_params,
+        })
+
+    def test_returns_driver_run_result(self):
+        element = _make_element()
+        driver = _mock_driver({"status": "ok", "state_changed": True})
+        action = SnapshotAction(action="set_checkbox", element_id="e10", value="true")
+
+        result = execute_resolved_action(driver, element, action)
+
+        assert result == {"status": "ok", "state_changed": True}
