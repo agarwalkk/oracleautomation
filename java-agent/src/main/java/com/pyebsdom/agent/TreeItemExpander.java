@@ -1,6 +1,11 @@
 package com.pyebsdom.agent;
 
 import javax.swing.SwingUtilities;
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleComponent;
+import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
 import java.awt.Component;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -230,8 +235,20 @@ public final class TreeItemExpander {
         Class<?> c = comp.getClass();
         Method rowCount = method(c, "getRowCount");
         Method pathForRow = intMethod(c, "getPathForRow");
-        if (rowCount == null || pathForRow == null)
+        if (rowCount == null || pathForRow == null) {
+            // Fallback to accessibility-based row extraction
+            if (comp instanceof Accessible) {
+                Point treeOrigin = null;
+                try {
+                    if (comp.isShowing()) {
+                        treeOrigin = comp.getLocationOnScreen();
+                    }
+                } catch (Exception ignored) {}
+                AtomicInteger rowIndexGen = new AtomicInteger(0);
+                walkAccessibility(comp.getAccessibleContext(), 0, out, treeOrigin, rowIndexGen);
+            }
             return;
+        }
 
         Method rowBounds = intMethod(c, "getRowBounds");
         Method rowSel = intMethod(c, "isRowSelected");
@@ -586,6 +603,86 @@ public final class TreeItemExpander {
             }
 
             out.add(row);
+        }
+    }
+
+    private static void walkAccessibility(AccessibleContext ac, int depth, List<Row> out, Point treeOrigin, AtomicInteger rowIndexGen) {
+        if (ac == null) return;
+        int childCount = 0;
+        try {
+            childCount = ac.getAccessibleChildrenCount();
+        } catch (Exception ignored) {}
+        
+        for (int i = 0; i < childCount; i++) {
+            Accessible child = null;
+            try {
+                child = ac.getAccessibleChild(i);
+            } catch (Exception ignored) {}
+            if (child == null) continue;
+            
+            AccessibleContext cc = null;
+            try {
+                cc = child.getAccessibleContext();
+            } catch (Exception ignored) {}
+            if (cc == null) continue;
+            
+            String label = "";
+            try {
+                label = cc.getAccessibleName();
+                if (label == null || label.trim().isEmpty()) {
+                    label = cc.getAccessibleDescription();
+                }
+            } catch (Exception ignored) {}
+            
+            if (label != null) {
+                label = stripLevelPrefix(label.trim());
+            }
+            
+            boolean skipItem = (label == null || label.trim().isEmpty());
+            
+            if (!skipItem) {
+                AccessibleStateSet states = null;
+                try {
+                    states = cc.getAccessibleStateSet();
+                } catch (Exception ignored) {}
+                
+                boolean selected = states != null && (states.contains(AccessibleState.SELECTED) || states.contains(AccessibleState.CHECKED));
+                boolean expanded = states != null && states.contains(AccessibleState.EXPANDED);
+                
+                Row r = new Row();
+                r.rowIndex = rowIndexGen.getAndIncrement();
+                r.depth = depth;
+                r.label = label;
+                r.selected = selected;
+                r.expanded = expanded;
+                
+                // Bounds from AccessibleComponent
+                try {
+                    AccessibleComponent acomp = cc.getAccessibleComponent();
+                    if (acomp != null) {
+                        Rectangle b = acomp.getBounds();
+                        if (b != null) {
+                            r.bounds = b;
+                            if (treeOrigin != null) {
+                                try {
+                                    Point sp = acomp.getLocationOnScreen();
+                                    r.screenX = sp.x;
+                                    r.screenY = sp.y;
+                                } catch (Exception e2) {
+                                    r.screenX = treeOrigin.x + b.x;
+                                    r.screenY = treeOrigin.y + b.y;
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+                
+                out.add(r);
+            }
+            
+            // Recurse children ALWAYS, even if this item was skipped!
+            int nextDepth = skipItem ? depth : depth + 1;
+            walkAccessibility(cc, nextDepth, out, treeOrigin, rowIndexGen);
         }
     }
 

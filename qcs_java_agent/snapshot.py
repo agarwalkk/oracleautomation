@@ -678,7 +678,13 @@ def _build_semantic_tree(nodes: list[dict]) -> list[dict]:
         if role == "Tree":
             tree_nodes.append(n)
             continue
-        key = n.get("semanticId") or (_label(n), n.get("ownerTab"), role)
+        # Dedup key: prefer semanticId (globally unique) so merge_scans
+        # duplicates are collapsed. For nodes without a semanticId, include
+        # the Java node id so that per-row items (e.g. "On Hold" checkboxes
+        # that appear once per table row but carry no semanticId) are kept
+        # intact instead of being collapsed to a single instance.
+        sem = n.get("semanticId")
+        key = sem if sem else (_label(n), n.get("ownerTab"), role, n.get("id"))
         if key in seen:
             continue
         seen.add(key)
@@ -789,7 +795,9 @@ def _grid_node(cells: list[dict]) -> dict:
                 out_cells.append({"element_ref": "", "current_value": "", "role": ""})
         table_rows.append({"marker": marker, "cells": out_cells})
 
-    return {"role": "Table", "label": "", "table_columns": columns,
+    first_cell = cells[0] if cells else {}
+    ref = f"{_eid(first_cell)}_table" if first_cell else ""
+    return {"element_ref": ref, "role": "Table", "label": "Table", "table_columns": columns,
             "table_rows": table_rows, "children": []}
 
 

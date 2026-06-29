@@ -67,6 +67,17 @@ type ScanResult = {
   tab_screenshots?: Record<string, string>;
 };
 
+type TableCell = {
+  element_ref: string;
+  current_value?: string;
+  role?: string;
+};
+
+type TableRow = {
+  marker: string;
+  cells: TableCell[];
+};
+
 type TreeNode = {
   element_ref: string;
   label: string;
@@ -75,6 +86,9 @@ type TreeNode = {
   bounds: { x: number; y: number; width: number; height: number };
   children: TreeNode[];
   tab_path?: string;
+  // Table-specific fields (preserved through normalizeTree).
+  table_columns?: string[];
+  table_rows?: TableRow[];
 };
 
 function screenshotUrl(detail: { screenshot?: string | null } | null): string | null {
@@ -1004,10 +1018,57 @@ function normalizeTree(input: TreeElement[] | TreeNode[], fullByRef?: Map<string
   const first = items[0] as Partial<TreeNode>;
   let result: TreeNode[];
   if (Array.isArray(first.children)) {
-    result = (items as TreeNode[]).map((node) => ({
-      ...node,
-      children: normalizeTree(node.children || [], fullByRef),
-    }));
+    result = (items as TreeNode[]).map((node) => {
+      // For Table nodes, convert table_rows into child TreeNodes so the rows
+      // appear as expandable entries in the left panel tree.
+      let children = normalizeTree(node.children || [], fullByRef);
+      if (node.role === "Table" && node.table_rows && node.table_rows.length > 0 && children.length === 0) {
+        const cols = node.table_columns || [];
+        children = node.table_rows.map((row) => {
+          const rowLabel = `Row ${row.marker.replace(/\*\*/g, "")}` +
+            (row.cells[0]?.current_value ? ` — ${row.cells[0].current_value}` : "");
+          const cellChildren: TreeNode[] = row.cells
+            .map((cell, ci) => {
+              if (!cell.element_ref) return null;
+              return {
+                element_ref: cell.element_ref,
+                label: `${cols[ci] ?? `Col ${ci + 1}`}: ${cell.current_value ?? ""}`,
+                role: cell.role || "Field",
+                included: true,
+                bounds: fullByRef?.get(cell.element_ref)?.bounds || { x: 0, y: 0, width: 0, height: 0 },
+                children: [],
+              } as TreeNode;
+            })
+            .filter((c): c is TreeNode => c !== null);
+          // Enclosing bounds = union of all visible cells in the row.
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          let hasBounds = false;
+          for (const c of cellChildren) {
+            if (c.bounds.width > 0 && c.bounds.height > 0) {
+              minX = Math.min(minX, c.bounds.x);
+              minY = Math.min(minY, c.bounds.y);
+              maxX = Math.max(maxX, c.bounds.x + c.bounds.width);
+              maxY = Math.max(maxY, c.bounds.y + c.bounds.height);
+              hasBounds = true;
+            }
+          }
+          return {
+            element_ref: `${node.element_ref}_row_${row.marker.replace(/\*\*/g, "")}`,
+            label: rowLabel,
+            role: "TableRow",
+            included: true,
+            bounds: hasBounds
+              ? { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) }
+              : { x: 0, y: 0, width: 0, height: 0 },
+            children: cellChildren,
+          } as TreeNode;
+        });
+      }
+      return {
+        ...node,
+        children,
+      };
+    });
   } else {
     const byRef = new Map<string, TreeNode>();
     const roots: TreeNode[] = [];
@@ -1087,6 +1148,7 @@ const TYPE_ICONS: Record<string, string> = {
   RadioButton: "⦿",
   Tab: "📑",
   Table: "▦",
+  TableRow: "≡",
   Tree: "🌳",
   Form: "🪟",
   Menu: "≡",

@@ -5,7 +5,11 @@ import java.awt.Container;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * DIAGNOSTIC ONLY. Dumps the full reflective surface of a live Oracle Forms
@@ -16,12 +20,22 @@ import java.util.Locale;
  * <p>
  * For each inspected object it records:
  * <ul>
- * <li>{@code methods} — every 0-arg getter's "{@code ReturnType name()}"
- * (names + types only; cheap, no invocation), so no candidate is missed;</li>
+ * <li>{@code methods} — the <b>complete</b> method surface: every method's
+ * "{@code ReturnType name(ParamTypes)}" signature, collected across the entire
+ * class hierarchy at <b>all access levels</b> (public, protected,
+ * package-private, private) and including {@code void} and parameterised
+ * methods. Names + types only — listing never invokes anything, so
+ * action/mutator methods ({@code select}, {@code expand}, {@code setXxx}, …)
+ * and
+ * indexed accessors ({@code getRowBounds(int)}, {@code isRowSelected(int)}, …)
+ * are now surfaced even though they are never called;</li>
  * <li>{@code fields} — every declared field "{@code Type name}" across the
  * whole class hierarchy (names + types only);</li>
  * <li>{@code methodValues} / {@code fieldValues} — the actual values of any
- * member whose NAME or TYPE matches a tab/canvas/block keyword;</li>
+ * member whose NAME or TYPE matches a tab/canvas/block keyword. Value capture
+ * stays strictly read-only: only zero-argument {@code get*}/{@code is*}/
+ * {@code find*} getters are ever invoked, so the broader listing adds no
+ * invocation risk;</li>
  * <li>{@code nested} — one level of indirection into a keyword-matched member
  * that returns an {@code oracle.*} object (the Forms handler/peer, where
  * block/canvas/tabpage frequently live).</li>
@@ -175,27 +189,59 @@ public final class ReflectionProbe {
         sb.append('{');
         sb.append("\"class\":").append(JsonUtil.quoted(c.getName()));
 
-        // ── method inventory (0-arg getters: names + return types) ────────
+        // ── method inventory (COMPLETE surface: full signatures, all access
+        // levels, all arities, incl. void) ──────────────────────────────
+        // Union of (a) getMethods() — public, incl. inherited + interface
+        // defaults — and (b) a getDeclaredMethods() walk up the hierarchy,
+        // which adds protected/package-private/private methods (Oracle EWT
+        // declares many accessors on NON-PUBLIC base classes, so these are
+        // invisible to getMethods()). Deduped by callable signature
+        // (name + parameter types) so overrides collapse to one entry.
         StringBuilder methods = new StringBuilder();
         StringBuilder methodValues = new StringBuilder();
         StringBuilder nested = new StringBuilder();
+        Set<String> seen = new LinkedHashSet<>();
         try {
-            for (Method m : c.getMethods()) {
-                if (m.getParameterCount() != 0)
+            List<Method> all = new ArrayList<>();
+            try {
+                for (Method m : c.getMethods())
+                    all.add(m);
+            } catch (Throwable ignored) {
+            }
+            for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
+                try {
+                    for (Method m : k.getDeclaredMethods())
+                        all.add(m);
+                } catch (Throwable ignored) {
+                }
+            }
+
+            for (Method m : all) {
+                // Skip compiler-generated and Object-inherited noise.
+                if (m.isBridge() || m.isSynthetic())
+                    continue;
+                if (m.getDeclaringClass() == Object.class)
                     continue;
                 String mn = m.getName();
                 if ("getClass".equals(mn))
                     continue;
-                if (!(mn.startsWith("get") || mn.startsWith("is") || mn.startsWith("find")))
+
+                String params = paramList(m);
+                String key = mn + "(" + params + ")"; // callable identity (dedup)
+                if (!seen.add(key))
                     continue;
-                Class<?> rt = m.getReturnType();
-                if (rt == void.class)
-                    continue;
+
                 if (methods.length() > 0)
                     methods.append(", ");
-                methods.append(rt.getSimpleName()).append(' ').append(mn).append("()");
+                methods.append(m.getReturnType().getSimpleName()).append(' ').append(key);
 
-                if (matches(mn) || matches(rt.getSimpleName())) {
+                // Value capture — strictly read-only: only zero-arg, non-void
+                // get*/is*/find* getters whose name/type matches a keyword are
+                // ever invoked. Parameterised and action methods are listed
+                // above but NEVER called.
+                if (m.getParameterCount() == 0 && m.getReturnType() != void.class
+                        && (mn.startsWith("get") || mn.startsWith("is") || mn.startsWith("find"))
+                        && (matches(mn) || matches(m.getReturnType().getSimpleName()))) {
                     Object v = safeInvoke(m, o);
                     if (v != null) {
                         if (methodValues.length() > 0)
@@ -244,6 +290,25 @@ public final class ReflectionProbe {
         }
         sb.append('}');
         return sb.toString();
+    }
+
+    /** Comma-separated simple names of a method's parameter types ("" if none). */
+    private static String paramList(Method m) {
+        Class<?>[] ps;
+        try {
+            ps = m.getParameterTypes();
+        } catch (Throwable t) {
+            return "";
+        }
+        if (ps.length == 0)
+            return "";
+        StringBuilder p = new StringBuilder();
+        for (int i = 0; i < ps.length; i++) {
+            if (i > 0)
+                p.append(", ");
+            p.append(ps[i].getSimpleName());
+        }
+        return p.toString();
     }
 
     /** Follow one level into a keyword-matched oracle.* (non-Component) value. */

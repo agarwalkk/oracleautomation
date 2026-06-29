@@ -15,3 +15,13 @@ Form: Order Types
       [e39] Order Type:PROJECT_INTL_AFF_RMD_RMT Description:TO BE USED FOR LARGE INTERCO ORDERS Operating Unit:RMT_RMD_OU
       [e40] Order Type:RMA_INTL_AFF_RMD_RMT Description:RMD RETURNED GOODS FROM LOCATIONS OUTSIDE THE U.S. (SUBS/HUBS) Operating Unit:RMT_RMD_OU
       [e41] Order Type:RMA_PROJECT_INTL_AFF_RMD_RMT Description:RMA FOR PROJECT INTL AFFILIATE ORDERS Operating Unit:RMT_RMD_OU
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    [ ] Show Line Details
+    Book Sales Order
+    [ ] ATO Summary View
+    Copy Sales Order Prgram
+    [ ] Pricing Options
+    [ ] Star Model Status
+    Mass Price Adjustment Tool

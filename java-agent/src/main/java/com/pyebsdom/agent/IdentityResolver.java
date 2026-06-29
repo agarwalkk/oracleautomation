@@ -87,7 +87,8 @@ public final class IdentityResolver {
                 n.primaryLocator = new LocatorCandidate(
                         chosen.strategy, chosen.value, 1.0, true, scopeId, n.recordIndex);
                 n.locatorAmbiguous = false;
-                n.semanticId = scopeId + "::" + safe(n.canonicalLabel) + "::0";
+                int ord = n.recordIndex >= 0 ? n.recordIndex : 0;
+                n.semanticId = scopeId + "::" + safe(n.canonicalLabel) + "::" + ord;
             } else {
                 // Not unique by label alone — disambiguate by ordinal within
                 // (scope, label). recordIndex (set by StructureAnnotator) is

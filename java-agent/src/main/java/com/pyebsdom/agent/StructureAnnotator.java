@@ -105,30 +105,50 @@ public final class StructureAnnotator {
 
     private static void annotateGridContainer(DomNode container) {
         List<DomNode> cells = new ArrayList<>();
+        // Pairs of (effective cell node, bounds-provider) — for direct children
+        // the cell is its own bounds-provider; for LWCheckbox grandchildren the
+        // AWT CheckBox wrapper provides the absolute bounds used for row-matching
+        // (the LWCheckbox bounds are relative to the wrapper).
+        List<DomNode[]> cellPairs = new ArrayList<>();
+
         for (DomNode c : container.children) {
-            if (!isCellRole(c.semanticType))
-                continue;
-            if (c.canonicalLabel == null || c.canonicalLabel.isEmpty())
-                continue;
-            if (c.bounds == null)
-                continue;
-            cells.add(c);
+            if ("CheckBox".equals(c.simpleClassName) && c.bounds != null) {
+                // AWT CheckBox wrapper — look for a single LWCheckbox child that
+                // is a real Checkbox (Oracle Forms "On Hold"-style column).
+                // Must be handled before the isCellRole check because the wrapper
+                // also carries semanticType="Checkbox" and would otherwise be
+                // picked up with its meaningless placeholder canonicalLabel.
+                DomNode lw = findSingleLwCheckbox(c);
+                if (lw != null && lw.canonicalLabel != null && !lw.canonicalLabel.isEmpty()) {
+                    cells.add(lw);
+                    cellPairs.add(new DomNode[] { lw, c }); // use wrapper bounds for row-matching
+                }
+            } else if (isCellRole(c.semanticType)) {
+                if (c.canonicalLabel == null || c.canonicalLabel.isEmpty())
+                    continue;
+                if (c.bounds == null)
+                    continue;
+                cells.add(c);
+                cellPairs.add(new DomNode[] { c, c });
+            }
         }
         if (cells.size() < 6)
             return;
 
-        Map<String, List<DomNode>> byLabel = new LinkedHashMap<>();
-        for (DomNode c : cells) {
-            byLabel.computeIfAbsent(c.canonicalLabel, k -> new ArrayList<>()).add(c);
+        Map<String, List<DomNode[]>> byLabel = new LinkedHashMap<>();
+        for (DomNode[] pair : cellPairs) {
+            DomNode cell = pair[0];
+            byLabel.computeIfAbsent(cell.canonicalLabel, k -> new ArrayList<>()).add(pair);
         }
 
-        Map<String, List<DomNode>> gridColumns = new LinkedHashMap<>();
-        for (Map.Entry<String, List<DomNode>> e : byLabel.entrySet()) {
-            List<DomNode> inst = e.getValue();
+        Map<String, List<DomNode[]>> gridColumns = new LinkedHashMap<>();
+        for (Map.Entry<String, List<DomNode[]>> e : byLabel.entrySet()) {
+            List<DomNode[]> inst = e.getValue();
             if (inst.size() < 3)
                 continue;
-            inst.sort((a, b) -> Integer.compare(a.bounds.y, b.bounds.y));
-            if (hasRegularSpacing(inst))
+            // Sort by the bounds-provider's y position.
+            inst.sort((a, b) -> Integer.compare(a[1].bounds.y, b[1].bounds.y));
+            if (hasRegularSpacingPairs(inst))
                 gridColumns.put(e.getKey(), inst);
         }
         // A real grid has at least TWO repeating columns; one repeating field
@@ -138,19 +158,22 @@ public final class StructureAnnotator {
 
         container.containerRole = "Grid";
 
-        List<DomNode> longest = null;
-        for (List<DomNode> col : gridColumns.values()) {
+        // Build row Y array from the longest column (using bounds-provider y).
+        List<DomNode[]> longest = null;
+        for (List<DomNode[]> col : gridColumns.values()) {
             if (longest == null || col.size() > longest.size())
                 longest = col;
         }
         int[] rowYs = new int[longest.size()];
         for (int i = 0; i < longest.size(); i++)
-            rowYs[i] = longest.get(i).bounds.y;
+            rowYs[i] = longest.get(i)[1].bounds.y;
 
         int currentRow = -1;
-        for (List<DomNode> col : gridColumns.values()) {
-            for (DomNode cell : col) {
-                int row = nearestRow(rowYs, cell.bounds.y);
+        for (List<DomNode[]> col : gridColumns.values()) {
+            for (DomNode[] pair : col) {
+                DomNode cell = pair[0];
+                DomNode boundsProvider = pair[1];
+                int row = nearestRow(rowYs, boundsProvider.bounds.y);
                 cell.containerRole = "GridCell";
                 cell.recordIndex = row;
                 cell.columnKey = cell.canonicalLabel;
@@ -159,13 +182,53 @@ public final class StructureAnnotator {
             }
         }
         if (currentRow >= 0) {
-            for (List<DomNode> col : gridColumns.values()) {
-                for (DomNode cell : col) {
+            for (List<DomNode[]> col : gridColumns.values()) {
+                for (DomNode[] pair : col) {
+                    DomNode cell = pair[0];
                     if (cell.recordIndex == currentRow)
                         cell.current = true;
                 }
             }
         }
+    }
+
+    /**
+     * If {@code wrapper} is an AWT CheckBox node with exactly one child that
+     * has {@code semanticType == "Checkbox"}, return that child; else null.
+     * Searches up to two levels deep to handle intermediate wrapper layers.
+     */
+    private static DomNode findSingleLwCheckbox(DomNode wrapper) {
+        if (wrapper.children.size() == 1) {
+            DomNode child = wrapper.children.get(0);
+            if ("Checkbox".equals(child.semanticType))
+                return child;
+            // One more level (e.g. CheckBox → LWComponent → LWCheckbox).
+            if (child.children.size() == 1) {
+                DomNode grandchild = child.children.get(0);
+                if ("Checkbox".equals(grandchild.semanticType))
+                    return grandchild;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasRegularSpacingPairs(List<DomNode[]> sortedByY) {
+        if (sortedByY.size() < 3)
+            return false;
+        int[] gaps = new int[sortedByY.size() - 1];
+        for (int i = 0; i < gaps.length; i++) {
+            gaps[i] = sortedByY.get(i + 1)[1].bounds.y - sortedByY.get(i)[1].bounds.y;
+        }
+        int[] sorted = gaps.clone();
+        Arrays.sort(sorted);
+        int median = sorted[sorted.length / 2];
+        if (median <= 0)
+            return false;
+        int regular = 0;
+        for (int g : gaps)
+            if (Math.abs(g - median) <= median / 2)
+                regular++;
+        return regular >= gaps.length * 0.6;
     }
 
     private static boolean hasRegularSpacing(List<DomNode> sortedByY) {
