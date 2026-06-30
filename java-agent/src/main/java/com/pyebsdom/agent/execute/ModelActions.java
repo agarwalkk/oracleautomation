@@ -350,6 +350,7 @@ public final class ModelActions {
             return null;
         final String[] r = { null };
         Edt.run(() -> {
+            // 1. Direct index setter (Swing JTabbedPane and tab impls that have one).
             for (String name : new String[] {
                     "setSelectedIndex", "selectTab", "setSelectedTab", "setSelectedTabIndex" }) {
                 Method m = Reflect.method(tabContainer.getClass(), name, int.class);
@@ -359,7 +360,35 @@ public final class ModelActions {
                     return;
                 }
             }
-            // EWT TabBar: no index setter — dispatch a click to the tab's rect.
+            // 2. Oracle EWT TabBar: no index setter (confirmed by reflection probe),
+            // but moveSelection(boolean) navigates relatively and fires the
+            // TabBarEvent that switches the Forms canvas. Step to the target,
+            // re-reading the live selection each move (guards against wrap /
+            // disabled tabs by bailing on no-progress).
+            Method move = Reflect.method(tabContainer.getClass(), "moveSelection", boolean.class);
+            if (move != null) {
+                int cur = ewtSelectedIndex(tabContainer);
+                if (cur == index) {
+                    r[0] = "moveSelection(already)";
+                    return;
+                }
+                if (cur >= 0) {
+                    int guard = ewtItemCount(tabContainer) + 2;
+                    while (cur != index && guard-- > 0) {
+                        Reflect.invoke(tabContainer, move, index > cur);
+                        int next = ewtSelectedIndex(tabContainer);
+                        if (next == cur)
+                            break; // no progress — fall through
+                        cur = next;
+                    }
+                    if (cur == index) {
+                        r[0] = "moveSelection";
+                        return;
+                    }
+                }
+            }
+            // 3. Fallback: dispatch a click to the tab's own rectangle (in-JVM,
+            // no Robot) — replicates the user gesture the TabBar listens for.
             Rectangle tab = ewtTabBounds(tabContainer, index);
             if (tab != null) {
                 dispatchClickAt(tabContainer, tab.x + tab.width / 2, tab.y + tab.height / 2);
@@ -367,6 +396,29 @@ public final class ModelActions {
             }
         });
         return r[0];
+    }
+
+    /**
+     * Live selected-tab index of an EWT TabBar via getSelectedItem/getItem
+     * identity.
+     */
+    private static int ewtSelectedIndex(Component tabBar) {
+        Object sel = Reflect.call(tabBar, "getSelectedItem");
+        if (sel == null)
+            return -1;
+        Method getItem = Reflect.method(tabBar.getClass(), "getItem", int.class);
+        if (getItem == null)
+            return -1;
+        int count = ewtItemCount(tabBar);
+        for (int i = 0; i < count; i++) {
+            if (Reflect.invoke(tabBar, getItem, i) == sel)
+                return i;
+        }
+        return -1;
+    }
+
+    private static int ewtItemCount(Component tabBar) {
+        return Reflect.asInt(Reflect.call(tabBar, "getItemCount"), 0);
     }
 
     /**
