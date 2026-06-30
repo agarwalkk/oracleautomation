@@ -1344,3 +1344,57 @@ def merge_scans(scan1: dict, scan2: dict) -> dict:
             w1.append(win2)
     res["windows"] = w1
     return res
+
+def _iter_nodes(dom: dict):
+    stack = list(dom.get("windows") or [])
+    while stack:
+        n = stack.pop()
+        yield n
+        stack.extend(n.get("children") or [])
+
+
+def attribute_unique_tab_fields(merged_dom: dict, tab_doms: dict[str, dict]) -> int:
+    """Stamp ownerTab on merged fields that appear in exactly ONE tab's scan.
+
+    Oracle Forms doesn't always put the " tab page <Title>" marker in a field's
+    accessibleName, so the agent leaves such fields ownerTab=None. But a field
+    that was only present while one tab was active belongs to that tab. Tagging
+    it makes the tree place it under the right Tab node and the overlay pick that
+    tab's screenshot. Keyed on canonicalLabel (stable across scans); a label seen
+    on 2+ tabs is treated as shared and left untouched (conservative — never
+    mis-attributes a shared field).
+
+    Returns the number of fields newly attributed.
+    """
+    def _eligible(n: dict) -> bool:
+        # Only loose tab fields. Skip grid cells (they belong to a grid, which
+        # carries the tab; their same-label repeats are rows, not tabs) and any
+        # field already scoped to a grid/other window.
+        if n.get("semanticType") != "Field":
+            return False
+        if int(n.get("recordIndex", -1)) >= 0:
+            return False
+        sid = str(n.get("semanticId") or "")
+        return not sid.startswith("grid:")
+
+    label_tabs: dict[str, set] = {}
+    for tab_path, dom in tab_doms.items():
+        if tab_path == "default" or not dom:
+            continue
+        for n in _iter_nodes(dom):
+            if _eligible(n) and n.get("canonicalLabel"):
+                label_tabs.setdefault(n["canonicalLabel"], set()).add(tab_path)
+
+    if not label_tabs:
+        return 0
+
+    fixed = 0
+    for n in _iter_nodes(merged_dom):
+        if not _eligible(n) or n.get("ownerTab"):
+            continue
+        tabs = label_tabs.get(n.get("canonicalLabel"))
+        if tabs and len(tabs) == 1:
+            # innermost tab title (matches the tree's Tab-node / tabPath segment)
+            n["ownerTab"] = next(iter(tabs)).split(" -> ")[-1].strip()
+            fixed += 1
+    return fixed

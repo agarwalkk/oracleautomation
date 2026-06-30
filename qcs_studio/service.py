@@ -25,6 +25,7 @@ from qcs_repo import fingerprint as repo_fingerprint
 from qcs_repo import identity as repo_identity
 from qcs_repo import snapshot as repo_snapshot
 from qcs_repo import store as repo_store
+from qcs_java_agent.snapshot import attribute_unique_tab_fields
 
 
 def _restore_foreground() -> None:
@@ -514,6 +515,7 @@ class StudioService:
                 if results:
                     first_path = list(results.keys())[0]
                     merged_dom = results[first_path]["dom"]
+                    
                     for path, res in results.items():
                         if path != first_path:
                             merged_dom = merge_scans(merged_dom, res["dom"])
@@ -521,6 +523,9 @@ class StudioService:
                         tab_screenshots[tab_path_str] = str(res["screenshot_path"])
                         tab_doms[tab_path_str] = res["dom"]
                     temp_screenshot = Path(results[first_path]["screenshot_path"])
+                    # Attribute tab-unique fields the agent left ownerTab=None, so
+                    # the tree + overlay link them to the right tab/screenshot.
+                    attribute_unique_tab_fields(merged_dom, tab_doms)
                 else:
                     # Fallback to standard capture if DFS produced no results
                     temp_screenshot = temp_dir / f"qcs_studio_scan_{ts}_{uuid4().hex[:8]}.png"
@@ -641,14 +646,11 @@ class StudioService:
             with open(target_dir / "ai_snapshot.txt", "w", encoding="utf-8") as f:
                 f.write(bundle.snapshot_text)
             
-            # 5. Per-tab full/raw java scans (when multi-tab scan produced multiple)
+            # 5. Per-tab full/raw java scans  ← DELETE THIS WHOLE BLOCK
             if getattr(bundle, "tab_doms", None):
                 for tab_path, tab_dom in bundle.tab_doms.items():
-                    if tab_path == "default":
-                        continue
-                    safe_name = tab_path.replace(" -> ", "_").replace("/", "_").replace("\\", "_")
-                    with open(target_dir / f"java_scan_dump_{safe_name}.json", "w", encoding="utf-8") as f:
-                        json.dump(tab_dom, f, indent=2, ensure_ascii=False)
+                    ...
+                    json.dump(tab_dom, f, indent=2, ensure_ascii=False)
         except Exception as e:
             import sys
             print(f"Error auto-dumping scan files: {e}", file=sys.stderr)
