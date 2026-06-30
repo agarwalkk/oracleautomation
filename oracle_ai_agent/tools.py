@@ -625,8 +625,16 @@ async def java_form_close(session: RecorderSession) -> str:
 
 # ── Approach B: snapshot-based action schema + parser ─────────────────────────
 
-_VALID_ACTIONS: frozenset[str] = frozenset({"set_text", "click", "press_key", "assert", "done", "tree_action", "set_checkbox", "press_button", "set_poplist", "select_radio", "set_list"})
-_ELEMENT_ID_REQUIRED: frozenset[str] = frozenset({"set_text", "click", "assert", "tree_action", "set_checkbox", "press_button", "set_poplist", "select_radio", "set_list"})
+_VALID_ACTIONS: frozenset[str] = frozenset({
+    "set_text", "click", "press_key", "assert", "done", "tree_action",
+    "set_checkbox", "press_button", "set_poplist", "select_radio", "set_list",
+    "double_click", "select_value", "set_check", "expand_tree", "collapse_tree", "activate_tab"
+})
+_ELEMENT_ID_REQUIRED: frozenset[str] = frozenset({
+    "set_text", "click", "assert", "tree_action", "set_checkbox", "press_button",
+    "set_poplist", "select_radio", "set_list",
+    "double_click", "select_value", "set_check", "expand_tree", "collapse_tree", "activate_tab"
+})
 _TREE_OPS: frozenset[str] = frozenset({"select", "expand", "collapse", "activate"})
 _ASSERTION_KINDS: frozenset[str] = frozenset({"text", "value", "visible", "enabled"})
 
@@ -721,10 +729,10 @@ def parse_snapshot_action(
                 f"Must be one of: {', '.join(sorted(_TREE_OPS))}"
             )
 
-    if action == "set_checkbox":
+    if action in ("set_checkbox", "set_check"):
         if not value:
             raise SnapshotActionError(
-                "record_action: 'value' is required and must be non-empty for action='set_checkbox'"
+                f"record_action: 'value' is required and must be non-empty for action={action!r}"
             )
         if value.strip().lower() not in ("true", "false", "1", "0"):
             raise SnapshotActionError(
@@ -732,14 +740,9 @@ def parse_snapshot_action(
                 "Must be true or false."
             )
 
-    if action == "set_poplist" and not value:
+    if action in ("set_poplist", "set_list", "select_value") and not value:
         raise SnapshotActionError(
-            "record_action: 'value' is required and must be non-empty for action='set_poplist'"
-        )
-
-    if action == "set_list" and not value:
-        raise SnapshotActionError(
-            "record_action: 'value' is required and must be non-empty for action='set_list'"
+            f"record_action: 'value' is required and must be non-empty for action={action!r}"
         )
 
     raw_key = raw_args.get("key")
@@ -840,52 +843,70 @@ def execute_resolved_action(
         return driver._run(cmd)
 
     if act == "tree_action":
-        return driver._run({
-            "command": "treeaction",
-            "op": (action.value or "").strip().lower(),
-            **params
-        })
+        op = (action.value or "").strip().lower()
+        cmd_name = "expandtree" if op == "expand" else "collapsetree"
+        return driver._run({"command": cmd_name, **params})
 
-    if act == "set_checkbox":
+    if act == "expand_tree":
+        return driver._run({"command": "expandtree", **params})
+
+    if act == "collapse_tree":
+        return driver._run({"command": "collapsetree", **params})
+
+    if act in ("set_checkbox", "set_check"):
         is_checked = (action.value or "").strip().lower() in ("true", "1")
         return driver._run({
-            "command": "setcheckbox",
-            "checked": "true" if is_checked else "false",
+            "command": "setcheck",
+            "value": "true" if is_checked else "false",
             **params
         })
 
     if act == "press_button":
         return driver._run({
-            "command": "pressbutton",
+            "command": "click",
             **params
         })
 
-    if act == "set_poplist":
+    if act in ("set_poplist", "set_list", "select_value"):
+        encoded = base64.b64encode(
+            (action.value or "").encode("utf-8")
+        ).decode("ascii")
         return driver._run({
-            "command": "setpoplist",
-            "value": action.value or "",
+            "command": "selectoption",
+            "value64": encoded,
             **params
         })
 
     if act == "select_radio":
         return driver._run({
-            "command": "selectradio",
+            "command": "click",
             **params
         })
 
-    if act == "set_list":
+    if act == "double_click":
         return driver._run({
-            "command": "setlist",
-            "value": action.value or "",
+            "command": "doubleclick",
             **params
         })
+
+    if act == "activate_tab":
+        cmd = {"command": "activatetab", **params}
+        title = element.get("name") or element.get("displayName") if element else ""
+        if action.value:
+            if action.value.isdigit():
+                cmd["tab_index"] = action.value
+            else:
+                cmd["tab_title"] = action.value
+        elif title:
+            cmd["tab_title"] = title
+        return driver._run(cmd)
 
     if act in ("assert", "done"):
         return {}  # recording markers — no Java agent call at record time
 
     raise ValueError(
         f"execute_resolved_action: unsupported action {act!r}; "
-        f"expected one of: click, set_text, press_key, tree_action, set_checkbox, press_button, set_poplist, select_radio, set_list, assert, done"
+        f"expected one of: click, double_click, set_text, select_value, press_key, tree_action, set_checkbox, set_check, press_button, set_poplist, select_radio, set_list, expand_tree, collapse_tree, activate_tab, assert, done"
     )
 
 

@@ -4,10 +4,13 @@ from typing import Any
 
 from qcs_manifest.model import (
     MANIFEST_SURFACES,
+    MANIFEST_ACTIONS,
     SCHEMA_VERSION,
     STEP_REQUIRED_FIELDS,
     TOP_LEVEL_REQUIRED_FIELDS,
 )
+
+
 
 
 class ManifestValidationError(ValueError):
@@ -67,6 +70,7 @@ def validate_manifest_dict(payload: dict[str, Any]) -> None:
         raise ManifestValidationError(errors)
 
     allowed_surfaces = set(MANIFEST_SURFACES)
+    allowed_actions = set(MANIFEST_ACTIONS)
     seen_step_ids: set[str] = set()
 
     for index, step in enumerate(steps):
@@ -98,8 +102,10 @@ def validate_manifest_dict(payload: dict[str, Any]) -> None:
             )
 
         action = step.get("action")
-        if not isinstance(action, str) or not action.strip():
-            errors.append(f"{location}.action must be a non-empty string")
+        if not isinstance(action, str) or action not in allowed_actions:
+            errors.append(
+                f"{location}.action must be one of {sorted(allowed_actions)}"
+            )
 
         form_ref = step.get("form_ref")
         if not isinstance(form_ref, str):

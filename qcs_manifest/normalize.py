@@ -77,7 +77,7 @@ def _element_ref_from_row(row: dict[str, Any]) -> str | None:
 def _input_from_row(row: dict[str, Any]) -> dict[str, Any] | None:
     payload: dict[str, Any] = {}
     for key in ("text", "value", "checked", "key", "url", "user_env", "password_env",
-                "form_name", "locator_params"):
+                "form_name", "locator_params", "tab_index", "tab_title"):
         if key in row:
             payload[key] = row[key]
     return payload or None
@@ -137,6 +137,8 @@ def _intent_from_row(row: dict[str, Any], target_ref: str) -> str:
         return f"Expand {target_ref or 'target'}"
     if op == "java_collapse_tree":
         return f"Collapse {target_ref or 'target'}"
+    if op == "java_activate_tab":
+        return f"Activate tab {target_ref or 'target'}"
     return op.replace("_", " ")
 
 

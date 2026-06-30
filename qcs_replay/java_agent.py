@@ -48,6 +48,9 @@ class JavaAgentElement:
     def collapse_tree(self, tree_row: int | None = None) -> dict:
         return self.driver.collapse_tree(self.descriptor, tree_row=tree_row)
 
+    def activate_tab(self, tab_index: int | None = None, tab_title: str | None = None) -> dict:
+        return self.driver.activate_tab(self.descriptor, tab_index=tab_index, tab_title=tab_title)
+
     def screenshot(self, path: str | Path) -> dict:
         return self.driver.screenshot(path, self.descriptor)
 

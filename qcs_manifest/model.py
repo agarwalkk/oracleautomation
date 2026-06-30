@@ -6,6 +6,29 @@ from typing import Any, Literal
 
 SCHEMA_VERSION = "1.0"
 MANIFEST_SURFACES = ("browser", "java_forms", "system", "assertion")
+MANIFEST_ACTIONS = (
+    "ebs_login",
+    "oracle_form_open",
+    "java_form_launch",
+    "java_send_text",
+    "java_click",
+    "java_double_click",
+    "java_select_value",
+    "java_set_check",
+    "java_expand_tree",
+    "java_collapse_tree",
+    "java_activate_tab",
+    "java_press_key",
+    "assertion",
+    "java_form_close",
+    "step_note",
+    "session_start",
+    "repo_register_element",
+    "repo_invoke_flow",
+    "flow_boundary",
+    "data_placeholder",
+    "java_get_page_snapshot",
+)
 TOP_LEVEL_REQUIRED_FIELDS = (
     "schema_version",
     "run_id",

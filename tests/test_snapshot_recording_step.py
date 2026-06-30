@@ -131,6 +131,12 @@ def _make_driver(scan: dict) -> MagicMock:
     driver.click.return_value = {"status": "ok"}
     driver.set_text.return_value = {"status": "ok"}
     driver.press_key.return_value = {"status": "ok"}
+    driver.double_click.return_value = {"status": "ok"}
+    driver.select_option.return_value = {"status": "ok"}
+    driver.set_check.return_value = {"status": "ok"}
+    driver.expand_tree.return_value = {"status": "ok"}
+    driver.collapse_tree.return_value = {"status": "ok"}
+    driver.activate_tab.return_value = {"status": "ok"}
     return driver
 
 
@@ -457,3 +463,109 @@ class TestAssertAction:
         # assert must not execute any driver action
         driver.click.assert_not_called()
         driver.set_text.assert_not_called()
+
+
+# ── recording of new actions ──────────────────────────────────────────────────
+
+class TestNewActionsRecording:
+
+    @pytest.mark.asyncio
+    async def test_double_click_logs_java_double_click(self, session):
+        driver = _make_driver(_SCAN_TWO_ELEMENTS)
+        canned = SnapshotAction(action="double_click", element_id="e11")
+
+        async def _mock_llm(msgs, tools):
+            return _llm_response(canned)
+
+        with patch("oracle_ai_agent._refresh_current_form_metadata"):
+            with patch("qcs_repo.store.upsert_actioned_element", side_effect=lambda fid, el, **kw: el):
+                await _execute_snapshot_recording_step(session, driver, "Double click Find", _call_llm=_mock_llm)
+
+        driver.double_click.assert_called_once()
+        rows = _recording_rows(session)
+        actions = [r for r in rows if r.get("op") == "java_double_click"]
+        assert len(actions) == 1
+        assert actions[0]["element_id"] == "e11"
+
+    @pytest.mark.asyncio
+    async def test_set_checkbox_logs_java_set_check(self, session):
+        driver = _make_driver(_SCAN_TWO_ELEMENTS)
+        canned = SnapshotAction(action="set_checkbox", element_id="e10", value="true")
+
+        async def _mock_llm(msgs, tools):
+            return _llm_response(canned)
+
+        with patch("oracle_ai_agent._refresh_current_form_metadata"):
+            with patch("qcs_repo.store.upsert_actioned_element", side_effect=lambda fid, el, **kw: el):
+                await _execute_snapshot_recording_step(session, driver, "Check box", _call_llm=_mock_llm)
+
+        driver.set_check.assert_called_once_with(driver.set_check.call_args[0][0], True)
+        rows = _recording_rows(session)
+        actions = [r for r in rows if r.get("op") == "java_set_check"]
+        assert len(actions) == 1
+        assert actions[0]["checked"] is True
+
+    @pytest.mark.asyncio
+    async def test_tree_action_logs_java_expand_tree(self, session):
+        driver = _make_driver(_SCAN_TWO_ELEMENTS)
+        canned = SnapshotAction(action="tree_action", element_id="e10", value="expand")
+
+        async def _mock_llm(msgs, tools):
+            return _llm_response(canned)
+
+        with patch("oracle_ai_agent._refresh_current_form_metadata"):
+            with patch("qcs_repo.store.upsert_actioned_element", side_effect=lambda fid, el, **kw: el):
+                await _execute_snapshot_recording_step(session, driver, "Expand tree", _call_llm=_mock_llm)
+
+        driver.expand_tree.assert_called_once()
+        rows = _recording_rows(session)
+        actions = [r for r in rows if r.get("op") == "java_expand_tree"]
+        assert len(actions) == 1
+
+    @pytest.mark.asyncio
+    async def test_set_poplist_logs_java_select_value(self, session):
+        driver = _make_driver(_SCAN_TWO_ELEMENTS)
+        canned = SnapshotAction(action="set_poplist", element_id="e10", value="Option A")
+
+        async def _mock_llm(msgs, tools):
+            return _llm_response(canned)
+
+        with patch("oracle_ai_agent._refresh_current_form_metadata"):
+            with patch("qcs_repo.store.upsert_actioned_element", side_effect=lambda fid, el, **kw: el):
+                await _execute_snapshot_recording_step(session, driver, "Select option A", _call_llm=_mock_llm)
+
+        driver.select_option.assert_called_once_with(driver.select_option.call_args[0][0], "Option A")
+        rows = _recording_rows(session)
+        actions = [r for r in rows if r.get("op") == "java_select_value"]
+        assert len(actions) == 1
+        assert actions[0]["value"] == "Option A"
+
+    @pytest.mark.asyncio
+    async def test_click_on_tab_logs_java_activate_tab(self, session):
+        # Scan where e11 has role "Tab"
+        scan = _make_scan(
+            {
+                "id": 0, "semanticType": "Window", "displayName": "PO Form",
+                "path": "w0", "parentPath": "",
+                "enabled": True, "visible": True, "showing": True,
+                "children": [
+                    _make_node(10, "Field", "PO Number", enabled=True),
+                    {**_make_node(11, "Tab", "Lines", enabled=True), "role": "Tab"},
+                ],
+            }
+        )
+        driver = _make_driver(scan)
+        canned = SnapshotAction(action="click", element_id="e11")
+
+        async def _mock_llm(msgs, tools):
+            return _llm_response(canned)
+
+        with patch("oracle_ai_agent._refresh_current_form_metadata"):
+            with patch("qcs_repo.store.upsert_actioned_element", side_effect=lambda fid, el, **kw: el):
+                await _execute_snapshot_recording_step(session, driver, "Click Lines tab", _call_llm=_mock_llm)
+
+        driver.activate_tab.assert_called_once()
+        rows = _recording_rows(session)
+        actions = [r for r in rows if r.get("op") == "java_activate_tab"]
+        assert len(actions) == 1
+        assert actions[0]["tab_title"] == "Lines"

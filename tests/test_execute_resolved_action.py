@@ -273,8 +273,7 @@ class TestTreeAction:
 
         expected_params = locator_params(element)
         driver._run.assert_called_once_with({
-            "command": "treeaction",
-            "op": "expand",
+            "command": "expandtree",
             **expected_params,
         })
 
@@ -305,8 +304,8 @@ class TestSetCheckbox:
 
         expected_params = locator_params(element)
         driver._run.assert_called_once_with({
-            "command": "setcheckbox",
-            "checked": expected_checked,
+            "command": "setcheck",
+            "value": expected_checked,
             **expected_params,
         })
 
@@ -331,7 +330,7 @@ class TestPressButton:
 
         expected_params = locator_params(element)
         driver._run.assert_called_once_with({
-            "command": "pressbutton",
+            "command": "click",
             **expected_params,
         })
 
@@ -355,9 +354,10 @@ class TestSetPoplist:
         execute_resolved_action(driver, element, action)
 
         expected_params = locator_params(element)
+        expected_encoded = base64.b64encode(b"Options").decode("ascii")
         driver._run.assert_called_once_with({
-            "command": "setpoplist",
-            "value": "Options",
+            "command": "selectoption",
+            "value64": expected_encoded,
             **expected_params,
         })
 
@@ -382,7 +382,7 @@ class TestSelectRadio:
 
         expected_params = locator_params(element)
         driver._run.assert_called_once_with({
-            "command": "selectradio",
+            "command": "click",
             **expected_params,
         })
 
@@ -406,9 +406,10 @@ class TestSetList:
         execute_resolved_action(driver, element, action)
 
         expected_params = locator_params(element)
+        expected_encoded = base64.b64encode(b"Options").decode("ascii")
         driver._run.assert_called_once_with({
-            "command": "setlist",
-            "value": "Options",
+            "command": "selectoption",
+            "value64": expected_encoded,
             **expected_params,
         })
 
@@ -420,3 +421,70 @@ class TestSetList:
         result = execute_resolved_action(driver, element, action)
 
         assert result == {"status": "ok", "selected": True}
+
+
+class TestNewActions:
+
+    def test_double_click_dispatches_doubleclick(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="double_click", element_id="e10")
+        execute_resolved_action(driver, element, action)
+        driver._run.assert_called_once_with({
+            "command": "doubleclick",
+            **locator_params(element),
+        })
+
+    def test_select_value_dispatches_selectoption(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="select_value", element_id="e10", value="Val")
+        execute_resolved_action(driver, element, action)
+        expected_encoded = base64.b64encode(b"Val").decode("ascii")
+        driver._run.assert_called_once_with({
+            "command": "selectoption",
+            "value64": expected_encoded,
+            **locator_params(element),
+        })
+
+    def test_set_check_dispatches_setcheck(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="set_check", element_id="e10", value="true")
+        execute_resolved_action(driver, element, action)
+        driver._run.assert_called_once_with({
+            "command": "setcheck",
+            "value": "true",
+            **locator_params(element),
+        })
+
+    def test_expand_tree_dispatches_expandtree(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="expand_tree", element_id="e10")
+        execute_resolved_action(driver, element, action)
+        driver._run.assert_called_once_with({
+            "command": "expandtree",
+            **locator_params(element),
+        })
+
+    def test_collapse_tree_dispatches_collapsetree(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="collapse_tree", element_id="e10")
+        execute_resolved_action(driver, element, action)
+        driver._run.assert_called_once_with({
+            "command": "collapsetree",
+            **locator_params(element),
+        })
+
+    def test_activate_tab_dispatches_activatetab(self):
+        element = _make_element(name="MainTab")
+        driver = _mock_driver()
+        action = SnapshotAction(action="activate_tab", element_id="e10")
+        execute_resolved_action(driver, element, action)
+        driver._run.assert_called_once_with({
+            "command": "activatetab",
+            "tab_title": "MainTab",
+            **locator_params(element),
+        })

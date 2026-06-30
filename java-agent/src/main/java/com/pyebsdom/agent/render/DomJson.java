@@ -15,17 +15,31 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Renders the extraction model ({@link DomNode} forests, {@link TableModel}s,
- * scan results) to the JSON the Python clients consume.
+ * Renders the extraction model to the JSON the Python clients consume.
+ *
+ * <h3>Size policy — omit-at-default (lossless)</h3>
+ * Fields are emitted only when they carry information: empty strings, empty
+ * arrays/maps, {@code false} flags that default to false,
+ * {@code recordIndex==-1},
+ * {@code cursorType==0}, {@code confidence==0.0}, and null objects are omitted.
+ * A consumer reading a missing key with {@code .get(key, default)} sees exactly
+ * the value it would have read before — so nothing useful is lost; the dump is
+ * just smaller (measured ~29% on a live Order Organizer scan).
  *
  * <p>
- * This is the single home for DOM serialisation. It was previously scattered
- * across {@code DomNode.toJson}, {@code Bounds.toJson},
- * {@code LocatorCandidate.toJson},
- * {@code TableModel.toJson}, and {@code DomScanner.ScanResult.toJson}. Pulling
- * it here keeps the model package free of output concerns while preserving the
- * exact wire shape (field names, ordering, and number formatting are
- * unchanged).
+ * Two fields are kept deliberately even when "default": {@code visible} /
+ * {@code showing} / {@code enabled} (state a consumer may assume; nearly always
+ * non-default anyway), and the structural ints
+ * {@code id/depth/index/siblingCount}
+ * (0 is a valid value). The {@code path}-strategy entry is dropped from
+ * {@code locators[]} because it duplicates the node's own {@code path} (which
+ * the
+ * locator resolver already uses); every other locator strategy is kept.
+ *
+ * <p>
+ * {@code parentPath} is retained (it is convenient for flat processing) even
+ * though it is derivable from the tree — see JSON-SIZE-REVIEW for the optional
+ * further cut.
  */
 public final class DomJson {
 
@@ -81,103 +95,78 @@ public final class DomJson {
     // ── DomNode ───────────────────────────────────────────────────────────
 
     /**
-     * Serialises one node (and, when requested, its descendants).
-     *
-     * @param includeChildren when {@code false} the {@code "children"} array is
-     *                        omitted (flat list representations).
+     * Serialises one node (and, when requested, its descendants), omitting
+     * fields at their default value.
      */
     public static String node(DomNode n, boolean includeChildren) {
-        StringBuilder sb = new StringBuilder();
-        sb.append('{');
+        Obj o = new Obj();
 
-        // Identity
-        sb.append("\"id\":").append(n.id).append(',');
-        sb.append("\"path\":").append(Json.quoted(n.path)).append(',');
-        sb.append("\"parentPath\":").append(Json.quoted(n.parentPath)).append(',');
-        sb.append("\"depth\":").append(n.depth).append(',');
-        sb.append("\"index\":").append(n.index).append(',');
-        sb.append("\"siblingCount\":").append(n.siblingCount).append(',');
-        sb.append("\"semanticId\":").append(Json.quoted(n.semanticId)).append(',');
-        sb.append("\"primaryLocator\":")
-                .append(n.primaryLocator != null ? locator(n.primaryLocator) : "null").append(',');
-        sb.append("\"locatorAmbiguous\":").append(n.locatorAmbiguous).append(',');
+        // Identity — structural ints always (0 is valid)
+        o.raw("id", Integer.toString(n.id));
+        o.str("path", n.path);
+        o.str("parentPath", n.parentPath);
+        o.raw("depth", Integer.toString(n.depth));
+        o.raw("index", Integer.toString(n.index));
+        o.raw("siblingCount", Integer.toString(n.siblingCount));
+        o.str("semanticId", n.semanticId);
+        o.json("primaryLocator", n.primaryLocator != null ? locator(n.primaryLocator) : null);
+        o.bool("locatorAmbiguous", n.locatorAmbiguous);
 
-        // Type — `className` is the FQN; `type` (== className) and `packageName`
-        // (its prefix) are dropped as derivable duplicates not consumed by
-        // record/replay or overlays.
-        sb.append("\"semanticType\":").append(Json.quoted(n.semanticType)).append(',');
-        sb.append("\"className\":").append(Json.quoted(n.className)).append(',');
-        sb.append("\"simpleClassName\":").append(Json.quoted(n.simpleClassName)).append(',');
+        // Type
+        o.str("semanticType", n.semanticType);
+        o.str("className", n.className);
+        o.str("simpleClassName", n.simpleClassName);
 
         // Structure
-        sb.append("\"containerRole\":").append(Json.quoted(n.containerRole)).append(',');
-        sb.append("\"ownerTab\":").append(Json.quoted(n.ownerTab)).append(',');
-        sb.append("\"recordIndex\":").append(n.recordIndex).append(',');
-        sb.append("\"columnKey\":").append(Json.quoted(n.columnKey)).append(',');
-        sb.append("\"current\":").append(n.current).append(',');
-        sb.append("\"isMirror\":").append(n.isMirror).append(',');
-        sb.append("\"treePath\":").append(Json.quoted(n.treePath)).append(',');
-        sb.append("\"expanded\":").append(n.expanded).append(',');
+        o.str("containerRole", n.containerRole);
+        o.str("ownerTab", n.ownerTab);
+        o.intD("recordIndex", n.recordIndex, -1);
+        o.str("columnKey", n.columnKey);
+        o.bool("current", n.current);
+        o.bool("isMirror", n.isMirror);
+        o.str("treePath", n.treePath);
+        o.bool("expanded", n.expanded);
 
         // Labels
-        sb.append("\"name\":").append(Json.quoted(n.name)).append(',');
-        sb.append("\"title\":").append(Json.quoted(n.title)).append(',');
-        sb.append("\"text\":").append(Json.quoted(n.text)).append(',');
-        sb.append("\"value\":").append(Json.quoted(n.value)).append(',');
-        sb.append("\"accessibleName\":").append(Json.quoted(n.accessibleName)).append(',');
-        sb.append("\"accessibleDescription\":").append(Json.quoted(n.accessibleDescription)).append(',');
-        sb.append("\"accessibleRole\":").append(Json.quoted(n.accessibleRole)).append(',');
-        sb.append("\"tooltip\":").append(Json.quoted(n.tooltip)).append(',');
-        // `displayName` dropped — measured 100% identical to canonicalLabel/name/text.
-        sb.append("\"canonicalLabel\":").append(Json.quoted(n.canonicalLabel)).append(',');
-        sb.append("\"confidence\":").append(Json.decimal2(n.confidence)).append(',');
-        sb.append("\"valueOptions\":").append(stringArray(n.valueOptions)).append(',');
+        o.str("name", n.name);
+        o.str("title", n.title);
+        o.str("text", n.text);
+        o.str("value", n.value);
+        o.str("accessibleName", n.accessibleName);
+        o.str("accessibleDescription", n.accessibleDescription);
+        o.str("accessibleRole", n.accessibleRole);
+        o.str("tooltip", n.tooltip);
+        o.str("canonicalLabel", n.canonicalLabel);
+        o.dec("confidence", n.confidence);
+        o.json("valueOptions", stringArrayOrNull(n.valueOptions));
 
-        // Geometry
-        sb.append("\"bounds\":").append(n.bounds != null ? bounds(n.bounds) : "null").append(',');
-        sb.append("\"screenBounds\":")
-                .append(n.screenBounds != null ? screenBounds(n.screenBounds) : "null").append(',');
+        // Geometry — bounds kept when present; screenBounds only when on-screen
+        o.json("bounds", n.bounds != null ? bounds(n.bounds) : null);
+        o.json("screenBounds",
+                (n.screenBounds != null && n.screenBounds.hasScreen()) ? screenBounds(n.screenBounds) : null);
 
-        // State
-        sb.append("\"visible\":").append(n.visible).append(',');
-        sb.append("\"showing\":").append(n.showing).append(',');
-        sb.append("\"enabled\":").append(n.enabled).append(',');
-        sb.append("\"focusable\":").append(n.focusable).append(',');
-        sb.append("\"focused\":").append(n.focused).append(',');
-        sb.append("\"editable\":").append(n.editable).append(',');
-        sb.append("\"selected\":").append(n.selected).append(',');
-        sb.append("\"cursorType\":").append(n.cursorType).append(',');
-        sb.append("\"cursorName\":").append(Json.quoted(n.cursorName)).append(',');
+        // State — visible/showing/enabled kept; the rest omit-when-false
+        o.raw("visible", Boolean.toString(n.visible));
+        o.raw("showing", Boolean.toString(n.showing));
+        o.raw("enabled", Boolean.toString(n.enabled));
+        o.bool("focusable", n.focusable);
+        o.bool("focused", n.focused);
+        o.bool("editable", n.editable);
+        o.bool("selected", n.selected);
+        o.intD("cursorType", n.cursorType, 0);
+        o.str("cursorName", n.cursorName);
 
-        // Attributes — structural extraction results only. The raw `reflection`
-        // getter dump is omitted entirely: it duplicated typed fields (name,
-        // enabled, text, editable, …) plus colors, and was not consumed by
-        // record/replay or screenshot overlays. Colors and literal "null"/empty
-        // values are filtered from the attributes too.
-        sb.append("\"attributes\":").append(attributes(n.attributes)).append(',');
+        // Attributes (structural; colors + "null"/empty already filtered out)
+        o.json("attributes", attributesOrNull(n.attributes));
 
-        // Locators
-        sb.append("\"locators\":[");
-        for (int i = 0; i < n.locators.size(); i++) {
-            if (i > 0)
-                sb.append(',');
-            sb.append(locator(n.locators.get(i)));
-        }
-        sb.append(']');
+        // Locators (the path-strategy entry duplicates node.path — dropped)
+        o.json("locators", locatorsArrayOrNull(n.locators));
 
         // Children
         if (includeChildren) {
-            sb.append(",\"children\":[");
-            for (int i = 0; i < n.children.size(); i++) {
-                if (i > 0)
-                    sb.append(',');
-                sb.append(node(n.children.get(i), true));
-            }
-            sb.append(']');
+            o.json("children", childrenArrayOrNull(n.children));
         }
-
-        sb.append('}');
-        return sb.toString();
+        return o.done();
     }
 
     // ── Value objects ─────────────────────────────────────────────────────
@@ -235,6 +224,49 @@ public final class DomJson {
         return sb.toString();
     }
 
+    // ── Array/map helpers (return null when empty so the key is omitted) ───
+
+    private static String stringArrayOrNull(List<String> items) {
+        if (items == null || items.isEmpty())
+            return null;
+        return stringArray(items);
+    }
+
+    private static String locatorsArrayOrNull(List<LocatorCandidate> locs) {
+        if (locs == null || locs.isEmpty())
+            return null;
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (LocatorCandidate l : locs) {
+            if (l == null || "path".equals(l.strategy))
+                continue; // path duplicates node.path
+            if (!first)
+                sb.append(',');
+            first = false;
+            sb.append(locator(l));
+        }
+        sb.append(']');
+        return first ? null : sb.toString();
+    }
+
+    private static String childrenArrayOrNull(List<DomNode> children) {
+        if (children == null || children.isEmpty())
+            return null;
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < children.size(); i++) {
+            if (i > 0)
+                sb.append(',');
+            sb.append(node(children.get(i), true));
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+
+    private static String attributesOrNull(Map<String, String> m) {
+        String s = attributes(m);
+        return "{}".equals(s) ? null : s;
+    }
+
     // ── Primitives ────────────────────────────────────────────────────────
 
     private static String stringArray(List<String> items) {
@@ -264,12 +296,7 @@ public final class DomJson {
     /** Colors are never used for automation and were stored redundantly. */
     private static final Set<String> DROP_ATTR_KEYS = new HashSet<>(Arrays.asList("getBackground", "getForeground"));
 
-    /**
-     * Serialises the attributes map, dropping color keys and any value that is
-     * empty or the literal string {@code "null"} (a reflection stringification
-     * artefact). Diagnostic markers added by the extractor (keys starting with
-     * {@code _}) are kept — they are small and aid hardening.
-     */
+    /** Serialises attributes, dropping colors and empty/"null" values. */
     private static String attributes(Map<String, String> m) {
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;
@@ -287,5 +314,50 @@ public final class DomJson {
         }
         sb.append('}');
         return sb.toString();
+    }
+
+    // ── Comma-aware object builder (omits keys whose value is a default) ───
+
+    private static final class Obj {
+        private final StringBuilder sb = new StringBuilder("{");
+        private boolean first = true;
+
+        void raw(String key, String rawVal) {
+            if (!first)
+                sb.append(',');
+            first = false;
+            sb.append('"').append(key).append("\":").append(rawVal);
+        }
+
+        void str(String key, String val) {
+            if (val != null && !val.isEmpty())
+                raw(key, Json.quoted(val));
+        }
+
+        void bool(String key, boolean v) {
+            if (v)
+                raw(key, "true");
+        }
+
+        void intD(String key, int v, int dflt) {
+            if (v != dflt)
+                raw(key, Integer.toString(v));
+        }
+
+        void dec(String key, double v) {
+            if (v != 0.0)
+                raw(key, Json.decimal2(v));
+        }
+
+        /** Emits only when {@code j} is non-null (helpers return null when empty). */
+        void json(String key, String j) {
+            if (j != null)
+                raw(key, j);
+        }
+
+        String done() {
+            sb.append('}');
+            return sb.toString();
+        }
     }
 }

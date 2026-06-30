@@ -19,9 +19,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * Executes UI actions against a resolved {@link Component} — <b>non-robotically</b>.
+ * Executes UI actions against a resolved {@link Component} —
+ * <b>non-robotically</b>.
  *
- * <p>Every action runs inside the target JVM through {@link ModelActions}:
+ * <p>
+ * Every action runs inside the target JVM through {@link ModelActions}:
  * model-method calls where the widget exposes them, otherwise an AWT event
  * dispatched straight to the component. No OS mouse movement, no global key
  * injection, and (by design) <b>no automatic Robot fallback</b>. Two commands
@@ -30,12 +32,14 @@ import java.util.Base64;
  * {@code elementat} (maps a screen coordinate the recorder produced back to a
  * live component).
  *
- * <p>Component resolution and state reads run on the EDT; the technique each
+ * <p>
+ * Component resolution and state reads run on the EDT; the technique each
  * action used is reported back in the JSON for traceability.
  */
 public final class ActionExecutor {
 
-    private ActionExecutor() {}
+    private ActionExecutor() {
+    }
 
     // ── focus ─────────────────────────────────────────────────────────────
 
@@ -64,7 +68,8 @@ public final class ActionExecutor {
                 if (technique == null) {
                     return Results.error("click",
                             "Tab container exposes no selectable model method"
-                            + " (setSelectedIndex/selectTab) for tab_index=" + index, null);
+                                    + " (setSelectedIndex/selectTab) for tab_index=" + index,
+                            null);
                 }
                 return okResult("click", comp, technique + "[tab=" + index + "]");
             }
@@ -75,6 +80,38 @@ public final class ActionExecutor {
             return Results.error("click", "Could not activate the resolved component.", null);
         }
         return okResult("click", comp, technique);
+    }
+
+    // ── activate tab ──────────────────────────────────────────────────────
+
+    /**
+     * First-class tab activation (what a recorder/AI emits for "go to tab X").
+     * Accepts {@code tab_index} or {@code tab_title}; drives the Forms model via
+     * {@link ModelActions#selectTab} ({@code page.setSelected(true)} where
+     * available) — same non-robotic path the studio scan uses, exposed as its own
+     * action rather than folded into {@code click}.
+     */
+    public static String executeActivateTab(AgentCommand cmd) throws Exception {
+        final Component comp = resolveOrThrow(cmd, "activateTab");
+        int index = parseInt(cmd.getParam("tab_index", "-1"), -1);
+        if (index < 0) {
+            final String title = cmd.getParam("tab_title", "");
+            if (!title.isEmpty()) {
+                index = Edt.get(() -> ModelActions.tabIndexForTitle(comp, title));
+            }
+        }
+        if (index < 0) {
+            return Results.error("activateTab",
+                    "Need 'tab_index' or a resolvable 'tab_title'.", null);
+        }
+        Component container = resolveTabContainer(comp);
+        String technique = ModelActions.selectTab(container, index);
+        if (technique == null)
+            technique = ModelActions.selectTab(comp, index);
+        if (technique == null) {
+            return Results.error("activateTab", "Could not activate tab " + index + ".", null);
+        }
+        return okResult("activateTab", comp, technique + "[tab=" + index + "]");
     }
 
     // ── setText ───────────────────────────────────────────────────────────
@@ -90,7 +127,8 @@ public final class ActionExecutor {
         if (technique == null) {
             return Results.error("setText",
                     "Resolved component is not a writable text field"
-                    + " (no setText/setValue).", null);
+                            + " (no setText/setValue).",
+                    null);
         }
         return okResult("setText", comp, technique);
     }
@@ -117,8 +155,7 @@ public final class ActionExecutor {
 
         Component target = resolveOptional(cmd);
         if (target == null) {
-            target = Edt.get(() ->
-                    KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner());
+            target = Edt.get(() -> KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner());
         }
         if (target == null) {
             return Results.error("pressKey",
@@ -129,8 +166,9 @@ public final class ActionExecutor {
         if (technique == null) {
             return Results.error("pressKey",
                     "Unrecognised key name: '" + keyName + "'."
-                    + " Supported: TAB, ENTER, ESC, F1-F12, UP, DOWN, LEFT, RIGHT,"
-                    + " CTRL+S, CTRL+A, CTRL+C, CTRL+V, CTRL+Z, etc.", null);
+                            + " Supported: TAB, ENTER, ESC, F1-F12, UP, DOWN, LEFT, RIGHT,"
+                            + " CTRL+S, CTRL+A, CTRL+C, CTRL+V, CTRL+Z, etc.",
+                    null);
         }
 
         final Component t = target;
@@ -199,7 +237,10 @@ public final class ActionExecutor {
                 overlay.setAlwaysOnTop(true);
                 overlay.setVisible(true);
                 Thread t = new Thread(() -> {
-                    try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ignored) {
+                    }
                     SwingUtilities.invokeLater(() -> {
                         overlay.setVisible(false);
                         overlay.dispose();
@@ -249,13 +290,15 @@ public final class ActionExecutor {
         Component tree = resolveOrThrow(cmd, "expandTree");
         boolean expand = !"collapsetree".equals(cmd.getCommand());
         String expandParam = cmd.getParam("expand");
-        if (expandParam != null) expand = !"false".equalsIgnoreCase(expandParam);
+        if (expandParam != null)
+            expand = !"false".equalsIgnoreCase(expandParam);
 
         int row = resolveTreeRow(cmd, tree);
         if (row < 0) {
             return Results.error(cmd.getCommand(),
                     "Could not resolve a tree row to " + (expand ? "expand" : "collapse")
-                    + " (need tree_row or locatorTreePath).", null);
+                            + " (need tree_row or locatorTreePath).",
+                    null);
         }
         String technique = ModelActions.expandTreeRow(tree, row, expand);
         if (technique == null) {
@@ -278,7 +321,8 @@ public final class ActionExecutor {
         if (technique == null) {
             return Results.error("selectOption",
                     "Resolved component is not a selectable combo/list,"
-                    + " or value '" + value + "' was not found among its options.", null);
+                            + " or value '" + value + "' was not found among its options.",
+                    null);
         }
         return okResult("selectOption", comp, technique);
     }
@@ -306,7 +350,10 @@ public final class ActionExecutor {
 
     // ── Internal helpers ──────────────────────────────────────────────────
 
-    /** Resolve a tree row index from an explicit {@code tree_row} or the leaf of {@code locatorTreePath}. */
+    /**
+     * Resolve a tree row index from an explicit {@code tree_row} or the leaf of
+     * {@code locatorTreePath}.
+     */
     private static int resolveTreeRow(AgentCommand cmd, final Component tree) throws Exception {
         String rowStr = cmd.getParam("tree_row");
         if (rowStr != null && !rowStr.isEmpty()) {
@@ -326,7 +373,7 @@ public final class ActionExecutor {
         if (comp == null) {
             throw new IllegalArgumentException(
                     "Component not found for command '" + commandName + "'."
-                    + " Locator params: " + cmd.getParams());
+                            + " Locator params: " + cmd.getParams());
         }
         return comp;
     }
@@ -345,18 +392,25 @@ public final class ActionExecutor {
         return Edt.get(() -> ComponentResolver.resolve(cmd));
     }
 
-    /** Resolve the tab container for a tab click — the component itself or its {@code getTabBar()}. */
+    /**
+     * Resolve the tab container for a tab click — the component itself or its
+     * {@code getTabBar()}.
+     */
     private static Component resolveTabContainer(final Component comp) throws Exception {
         return Edt.get(() -> {
             try {
                 Object tb = comp.getClass().getMethod("getTabBar").invoke(comp);
-                if (tb instanceof Component) return (Component) tb;
-            } catch (Exception ignored) {}
+                if (tb instanceof Component)
+                    return (Component) tb;
+            } catch (Exception ignored) {
+            }
             return comp;
         });
     }
 
-    /** Success envelope including the technique used and the component descriptor. */
+    /**
+     * Success envelope including the technique used and the component descriptor.
+     */
     private static String okResult(String command, final Component comp, String technique)
             throws Exception {
         String compJson = Edt.get(() -> ComponentResolver.componentJson(comp));
@@ -382,17 +436,21 @@ public final class ActionExecutor {
 
     private static Component componentAtScreenPoint(int screenX, int screenY) {
         for (Window window : AwtContext.getWindows()) {
-            if (window == null || !window.isVisible() || !window.isShowing()) continue;
+            if (window == null || !window.isVisible() || !window.isShowing())
+                continue;
             try {
                 Component candidate = findDeepestRealComponent(window, screenX, screenY);
-                if (candidate != null) return candidate;
-            } catch (Exception ignored) {}
+                if (candidate != null)
+                    return candidate;
+            } catch (Exception ignored) {
+            }
         }
         return null;
     }
 
     private static Component findDeepestRealComponent(Component comp, int screenX, int screenY) {
-        if (comp == null || !comp.isVisible() || !comp.isShowing()) return null;
+        if (comp == null || !comp.isVisible() || !comp.isShowing())
+            return null;
         try {
             Point loc = comp.getLocationOnScreen();
             if (screenX < loc.x || screenY < loc.y
@@ -404,7 +462,8 @@ public final class ActionExecutor {
                 Component[] children = ((Container) comp).getComponents();
                 for (int i = children.length - 1; i >= 0; i--) {
                     Component child = findDeepestRealComponent(children[i], screenX, screenY);
-                    if (child != null) return child;
+                    if (child != null)
+                        return child;
                 }
             }
             return isCoordinateOverlay(comp) ? null : comp;

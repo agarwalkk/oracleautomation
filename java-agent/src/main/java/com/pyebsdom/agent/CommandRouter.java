@@ -56,6 +56,8 @@ final class CommandRouter {
                 return ActionExecutor.executeClick(cmd);
             case "doubleclick":
                 return ActionExecutor.executeDoubleClick(cmd);
+            case "activatetab":
+                return ActionExecutor.executeActivateTab(cmd);
             case "settext":
                 return ActionExecutor.executeSetText(cmd);
             case "clear":
@@ -82,8 +84,8 @@ final class CommandRouter {
                         cmd.getCommand(),
                         "Unknown command: '" + cmd.getCommand() + "'."
                                 + " Supported commands: health, scan, raw, layout, tables,"
-                                + " focus, click, doubleclick, settext, clear, selectoption, setcheck,"
-                                + " expandtree, collapsetree, presskey, screenshot, highlight, elementat",
+                                + " focus, click, doubleclick, activatetab, settext, clear, selectoption,"
+                                + " setcheck, expandtree, collapsetree, presskey, screenshot, highlight, elementat",
                         null);
         }
     }

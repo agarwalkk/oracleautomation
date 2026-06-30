@@ -244,6 +244,10 @@ class ReplayBackend(abc.ABC):
     def collapse_tree(self, ref: str, descriptor: dict) -> None:
         self.click(ref, descriptor)
 
+    def activate_tab(self, ref: str, descriptor: dict, *, tab_index: int | None = None,
+                     tab_title: str | None = None) -> None:
+        self.click(ref, descriptor)
+
 
 # ─── Browser / Playwright backend ─────────────────────────────────────────────
 
@@ -703,6 +707,16 @@ class JavaFormsReplayBackend(ReplayBackend):
             ref=ref, action="collapse_tree", descriptor=descriptor,
         )
 
+    def activate_tab(self, ref: str, descriptor: dict, *, tab_index: int | None = None,
+                     tab_title: str | None = None) -> None:
+        self._no_coordinates_or_raise(ref, descriptor, "activate_tab")
+        self._run_with_retry(
+            lambda: self._element(descriptor).activate_tab(tab_index=tab_index, tab_title=tab_title),
+            ref=ref, action="activate_tab", descriptor=descriptor,
+        )
+
+        
+
 
 # ─── FormReplay ──────────────────────────────────────────────────────────────────────
 
@@ -819,6 +833,10 @@ class FormReplay:
 
     def wait_for(self, element_ref: str) -> None:
         self._run("wait_for", element_ref)
+
+    def activate_tab(self, element_ref: str, *, tab_index: int | None = None,
+                     tab_title: str | None = None) -> None:
+        self._run("activate_tab", element_ref, tab_index=tab_index, tab_title=tab_title)
 
     def assert_visible(self, element_ref: str) -> None:
         self._run("assert_visible", element_ref)

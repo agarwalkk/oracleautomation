@@ -242,6 +242,21 @@ def generate_test(recording_input: Path, out_dir: Path, test_name: str) -> None:
             var = _get_form_var(business_form_ref, technical_ref=tech_form_ref, needs_review=needs_review)
             lines.append(f"    {var}.collapse_tree({business_element_ref!r})")
 
+        elif action == "java_activate_tab" and business_form_ref and business_element_ref:
+            var = _get_form_var(business_form_ref, technical_ref=tech_form_ref, needs_review=needs_review)
+            tab_index = inp.get("tab_index")
+            tab_title = inp.get("tab_title")
+            args = []
+            if tab_index is not None:
+                args.append(f"tab_index={tab_index!r}")
+            if tab_title is not None:
+                args.append(f"tab_title={tab_title!r}")
+            args_str = ", ".join(args)
+            if args_str:
+                lines.append(f"    {var}.activate_tab({business_element_ref!r}, {args_str})")
+            else:
+                lines.append(f"    {var}.activate_tab({business_element_ref!r})")
+
         elif action == "java_press_key":
             key = inp.get("key", "")
             # Use step's form_ref when available; otherwise infer from previous step.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from qcs_manifest.model import (
     MANIFEST_SURFACES,
+    MANIFEST_ACTIONS,
     SCHEMA_VERSION,
     STEP_REQUIRED_FIELDS,
     TOP_LEVEL_REQUIRED_FIELDS,
@@ -33,7 +34,10 @@ MANIFEST_SCHEMA: dict = {
                         "type": "string",
                         "enum": list(MANIFEST_SURFACES),
                     },
-                    "action": {"type": "string", "minLength": 1},
+                    "action": {
+                        "type": "string",
+                        "enum": list(MANIFEST_ACTIONS),
+                    },
                     "form_ref": {"type": "string"},
                     "element_ref": {"type": ["string", "null"]},
                     "input": {"type": ["object", "null"]},

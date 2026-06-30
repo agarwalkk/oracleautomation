@@ -420,6 +420,31 @@ public final class ModelActions {
     }
 
     /**
+     * Resolve a tab index by its title via
+     * {@code FormsTabPanel.getPage(i).getLabel()},
+     * or -1. Lets a recorder/AI activate a tab by name without knowing the index.
+     */
+    public static int tabIndexForTitle(Component container, String title) {
+        Component panel = findTabPanel(container);
+        if (panel == null || title == null)
+            return -1;
+        Method getCount = Reflect.method(panel.getClass(), "getPageCount");
+        Method getPage = Reflect.method(panel.getClass(), "getPage", int.class);
+        if (getCount == null || getPage == null)
+            return -1;
+        int count = Reflect.asInt(Reflect.invoke(panel, getCount), 0);
+        for (int i = 0; i < count; i++) {
+            Object page = Reflect.invoke(panel, getPage, i);
+            if (page == null)
+                continue;
+            Object label = Reflect.call(page, "getLabel");
+            if (label != null && title.equals(String.valueOf(label).trim()))
+                return i;
+        }
+        return -1;
+    }
+
+    /**
      * Find the owning Forms tab panel — the component itself or an ancestor that
      * exposes {@code getPage(int)} + {@code getPageCount()}. The studio targets a
      * {@code TabBar}; its parent is the {@code FormsTabPanel}.

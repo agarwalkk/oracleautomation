@@ -53,7 +53,12 @@ class _MockElement:
         self._click_raises = click_raises
         self._send_text_raises = send_text_raises
         self.click_count: int = 0
+        self.double_click_count: int = 0
         self.sent_texts: list[str] = []
+        self.checked_state: bool | None = None
+        self.tree_expanded: bool | None = None
+        self.tab_index: int | None = None
+        self.tab_title: str | None = None
 
     def click(self, simulate: bool = True) -> dict:
         if self._click_raises:
@@ -65,6 +70,31 @@ class _MockElement:
         if self._send_text_raises:
             raise self._send_text_raises
         self.sent_texts.append(text)
+        return {}
+
+    def double_click(self) -> dict:
+        self.double_click_count += 1
+        return {}
+
+    def select_option(self, value: str) -> dict:
+        self.sent_texts.append(value)
+        return {}
+
+    def set_check(self, checked: bool) -> dict:
+        self.checked_state = checked
+        return {}
+
+    def expand_tree(self, tree_row: int | None = None) -> dict:
+        self.tree_expanded = True
+        return {}
+
+    def collapse_tree(self, tree_row: int | None = None) -> dict:
+        self.tree_expanded = False
+        return {}
+
+    def activate_tab(self, tab_index: int | None = None, tab_title: str | None = None) -> dict:
+        self.tab_index = tab_index
+        self.tab_title = tab_title
         return {}
 
     def get_element_information(self) -> dict:
@@ -163,11 +193,40 @@ def test_select_value_routes_via_send_text() -> None:
     assert "ACTIVE" in elem.sent_texts
 
 
-def test_double_click_calls_click_twice() -> None:
+def test_double_click_routes_to_java_element() -> None:
     elem = _MockElement()
     backend = _backend(_MockDriver(), elem)
     backend.double_click("list_item", {"name": "Item 1"})
-    assert elem.click_count == 2
+    assert elem.double_click_count == 1
+
+
+def test_set_check_routes_to_java_element() -> None:
+    elem = _MockElement()
+    backend = _backend(_MockDriver(), elem)
+    backend.set_check("checkbox_item", {"name": "Checkbox 1"}, True)
+    assert elem.checked_state is True
+
+
+def test_expand_tree_routes_to_java_element() -> None:
+    elem = _MockElement()
+    backend = _backend(_MockDriver(), elem)
+    backend.expand_tree("tree_item", {"name": "Tree 1"})
+    assert elem.tree_expanded is True
+
+
+def test_collapse_tree_routes_to_java_element() -> None:
+    elem = _MockElement()
+    backend = _backend(_MockDriver(), elem)
+    backend.collapse_tree("tree_item", {"name": "Tree 1"})
+    assert elem.tree_expanded is False
+
+
+def test_activate_tab_routes_to_java_element() -> None:
+    elem = _MockElement()
+    backend = _backend(_MockDriver(), elem)
+    backend.activate_tab("tab_item", {"name": "Tab 1"}, tab_index=2, tab_title="Tab 2")
+    assert elem.tab_index == 2
+    assert elem.tab_title == "Tab 2"
 
 
 def test_press_key_routes_to_driver() -> None:

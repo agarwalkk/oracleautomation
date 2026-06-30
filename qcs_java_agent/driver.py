@@ -79,14 +79,10 @@ class JavaAgentDriver:
     def focus(self, descriptor: dict) -> dict:
         return self._run({"command": "focus", **locator_params(descriptor)})
 
-    def click(self, descriptor: dict, tab_index: int | None = None, tab_count: int | None = None) -> dict:
+    def click(self, descriptor: dict, tab_index: int | None = None) -> dict:
         command = {"command": "click", **locator_params(descriptor)}
         if tab_index is not None:
             command["tab_index"] = str(tab_index)
-        # tab_count is no longer required (non-robotic tab select uses the model),
-        # but is still accepted for backward compatibility with older callers.
-        if tab_count is not None:
-            command["tab_count"] = str(tab_count)
         return self._run(command)
 
     def double_click(self, descriptor: dict) -> dict:
@@ -164,3 +160,12 @@ class JavaAgentDriver:
             text_output=text_output,
             debug=self.debug,
         )
+
+    def activate_tab(self, descriptor: dict, *, tab_index: int | None = None,
+                     tab_title: str | None = None) -> dict:
+        command: dict[str, Any] = {"command": "activatetab", **locator_params(descriptor)}
+        if tab_index is not None:
+            command["tab_index"] = str(int(tab_index))
+        if tab_title:
+            command["tab_title"] = str(tab_title)
+        return self._run(command)

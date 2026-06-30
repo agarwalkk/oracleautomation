@@ -632,9 +632,39 @@ def _execute_snapshot_action(
     if act == "set_text" and element is not None:
         driver.set_text(element, action.value or "")
     elif act == "click" and element is not None:
-        driver.click(element)
+        if element.get("role") == "Tab":
+            title = element.get("name") or element.get("displayName")
+            driver.activate_tab(element, tab_title=title)
+        else:
+            driver.click(element)
+    elif act == "double_click" and element is not None:
+        driver.double_click(element)
     elif act == "press_key":
         driver.press_key(action.key or "")
+    elif act == "tree_action" and element is not None:
+        op = (action.value or "").strip().lower()
+        if op == "expand":
+            driver.expand_tree(element)
+        elif op == "collapse":
+            driver.collapse_tree(element)
+        else:
+            driver.click(element)
+    elif act == "expand_tree" and element is not None:
+        driver.expand_tree(element)
+    elif act == "collapse_tree" and element is not None:
+        driver.collapse_tree(element)
+    elif act in ("set_checkbox", "set_check") and element is not None:
+        is_checked = (action.value or "").strip().lower() in ("true", "1")
+        driver.set_check(element, is_checked)
+    elif act == "press_button" and element is not None:
+        driver.click(element)
+    elif act in ("set_poplist", "set_list", "select_value") and element is not None:
+        driver.select_option(element, action.value or "")
+    elif act == "select_radio" and element is not None:
+        driver.click(element)
+    elif act == "activate_tab" and element is not None:
+        title = element.get("name") or element.get("displayName")
+        driver.activate_tab(element, tab_title=title)
     # assert / done: no runtime side-effect at record time
 
 
@@ -820,8 +850,109 @@ async def _execute_snapshot_recording_step(
     _lp: dict = locator_params(element) if element is not None else {}
 
     if action.action == "click":
+        role = (element or {}).get("role") if element is not None else ""
+        if role == "Tab":
+            title = element.get("name") or element.get("displayName") if element else ""
+            session.log_action(
+                "java_activate_tab",
+                form_ref=form_id,
+                element_ref=ref,
+                semantic_ref=ref,
+                target={"form_id": form_id, "friendly_name": ref},
+                element_id=action.element_id,
+                locator_params=_lp,
+                tab_title=title,
+            )
+        else:
+            session.log_action(
+                "java_click",
+                form_ref=form_id,
+                element_ref=ref,
+                semantic_ref=ref,
+                target={"form_id": form_id, "friendly_name": ref},
+                element_id=action.element_id,
+                locator_params=_lp,
+            )
+    elif action.action == "double_click":
+        session.log_action(
+            "java_double_click",
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            element_id=action.element_id,
+            locator_params=_lp,
+        )
+    elif action.action == "activate_tab":
+        title = element.get("name") or element.get("displayName") if element else ""
+        session.log_action(
+            "java_activate_tab",
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            element_id=action.element_id,
+            locator_params=_lp,
+            tab_title=title,
+        )
+    elif action.action in ("press_button", "select_radio"):
         session.log_action(
             "java_click",
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            element_id=action.element_id,
+            locator_params=_lp,
+        )
+    elif action.action in ("set_poplist", "set_list", "select_value"):
+        session.log_action(
+            "java_select_value",
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            value=action.value,
+            element_id=action.element_id,
+            locator_params=_lp,
+        )
+    elif action.action in ("set_checkbox", "set_check"):
+        is_checked = (action.value or "").strip().lower() in ("true", "1")
+        session.log_action(
+            "java_set_check",
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            checked=is_checked,
+            element_id=action.element_id,
+            locator_params=_lp,
+        )
+    elif action.action == "tree_action":
+        op = (action.value or "").strip().lower()
+        op_name = "java_expand_tree" if op == "expand" else "java_collapse_tree"
+        session.log_action(
+            op_name,
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            element_id=action.element_id,
+            locator_params=_lp,
+        )
+    elif action.action == "expand_tree":
+        session.log_action(
+            "java_expand_tree",
+            form_ref=form_id,
+            element_ref=ref,
+            semantic_ref=ref,
+            target={"form_id": form_id, "friendly_name": ref},
+            element_id=action.element_id,
+            locator_params=_lp,
+        )
+    elif action.action == "collapse_tree":
+        session.log_action(
+            "java_collapse_tree",
             form_ref=form_id,
             element_ref=ref,
             semantic_ref=ref,
