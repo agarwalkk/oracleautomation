@@ -625,8 +625,8 @@ async def java_form_close(session: RecorderSession) -> str:
 
 # ── Approach B: snapshot-based action schema + parser ─────────────────────────
 
-_VALID_ACTIONS: frozenset[str] = frozenset({"set_text", "click", "press_key", "assert", "done", "tree_action", "set_checkbox"})
-_ELEMENT_ID_REQUIRED: frozenset[str] = frozenset({"set_text", "click", "assert", "tree_action", "set_checkbox"})
+_VALID_ACTIONS: frozenset[str] = frozenset({"set_text", "click", "press_key", "assert", "done", "tree_action", "set_checkbox", "press_button", "set_poplist"})
+_ELEMENT_ID_REQUIRED: frozenset[str] = frozenset({"set_text", "click", "assert", "tree_action", "set_checkbox", "press_button", "set_poplist"})
 _TREE_OPS: frozenset[str] = frozenset({"select", "expand", "collapse", "activate"})
 _ASSERTION_KINDS: frozenset[str] = frozenset({"text", "value", "visible", "enabled"})
 
@@ -731,6 +731,11 @@ def parse_snapshot_action(
                 f"record_action: unknown checked state {value!r}. "
                 "Must be true or false."
             )
+
+    if action == "set_poplist" and not value:
+        raise SnapshotActionError(
+            "record_action: 'value' is required and must be non-empty for action='set_poplist'"
+        )
 
     raw_key = raw_args.get("key")
     key: str | None = str(raw_key).strip() if raw_key is not None else None
@@ -844,12 +849,25 @@ def execute_resolved_action(
             **params
         })
 
+    if act == "press_button":
+        return driver._run({
+            "command": "pressbutton",
+            **params
+        })
+
+    if act == "set_poplist":
+        return driver._run({
+            "command": "setpoplist",
+            "value": action.value or "",
+            **params
+        })
+
     if act in ("assert", "done"):
         return {}  # recording markers — no Java agent call at record time
 
     raise ValueError(
         f"execute_resolved_action: unsupported action {act!r}; "
-        f"expected one of: click, set_text, press_key, tree_action, set_checkbox, assert, done"
+        f"expected one of: click, set_text, press_key, tree_action, set_checkbox, press_button, set_poplist, assert, done"
     )
 
 
@@ -869,7 +887,7 @@ SNAPSHOT_ACTION_TOOL_SCHEMA: dict = {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["set_text", "click", "press_key", "assert", "done", "tree_action", "set_checkbox"],
+                    "enum": ["set_text", "click", "press_key", "assert", "done", "tree_action", "set_checkbox", "press_button", "set_poplist"],
                     "description": (
                         "set_text — type a value into a field; "
                         "click — click a button/tab/menu item; "
@@ -877,14 +895,16 @@ SNAPSHOT_ACTION_TOOL_SCHEMA: dict = {
                         "assert — verify an element's text, value, or state; "
                         "done — step is already complete or FAIL note; "
                         "tree_action — perform a tree operation (select, expand, collapse, activate) on a tree node; "
-                        "set_checkbox — check or uncheck a checkbox."
+                        "set_checkbox — check or uncheck a checkbox; "
+                        "press_button — press a button; "
+                        "set_poplist — select an option in a poplist/dropdown."
                     ),
                 },
                 "element_id": {
                     "type": "string",
                     "description": (
                         "The element_id from the action snapshot, e.g. 'e12'. "
-                        "Required for set_text, click, assert, tree_action, and set_checkbox. "
+                        "Required for set_text, click, assert, tree_action, set_checkbox, press_button, and set_poplist. "
                         "Must appear verbatim in the snapshot — do NOT invent ids."
                     ),
                 },
@@ -895,7 +915,8 @@ SNAPSHOT_ACTION_TOOL_SCHEMA: dict = {
                         "For assert: the expected text or value. "
                         "For done: optional note; prefix 'FAIL: ' to signal a failure. "
                         "For tree_action: the tree operation, one of: select, expand, collapse, activate (required). "
-                        "For set_checkbox: the target checked state, one of: true, false (required)."
+                        "For set_checkbox: the target checked state, one of: true, false (required). "
+                        "For set_poplist: the option text or numeric index to select (required)."
                     ),
                 },
                 "key": {

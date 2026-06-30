@@ -39,6 +39,20 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@code sendFinalMessage(true)} to flush. {@link #setChecked} accepts either
  * the wrapper or the inner widget and normalises between them.
  *
+ * <h3>Buttons — confirmed</h3>
+ * {@code oracle.apps.fnd.ui.Button} ({@code ButtonItem}) and
+ * {@code oracle.forms.ui.VButton} ({@code IconicButtonItem}) both expose
+ * {@code simulatePush()} on the widget, which fires {@code actionPerformed} →
+ * handler → {@code sendButtonPressedMessage} → server. {@link #press} uses it,
+ * with the handler's {@code sendButtonPressedMessage} as a fallback.
+ *
+ * <h3>Poplists — confirmed</h3>
+ * {@code oracle.forms.ui.VPopList} → {@code mHandler} →
+ * {@code oracle.forms.handler.PopListItem}. {@link #selectValue} sets the value
+ * on the widget ({@code select(String)} / {@code setSelectedIndex(int)}),
+ * flushes via {@code sendFinalMessage(true)}, and verifies via
+ * {@code getSelectedItem()}.
+ *
  * <p>
  * Every action runs on the EDT and self-verifies by reading the value back.
  */
@@ -180,6 +194,127 @@ public final class FieldActuator {
                 r.after = String.valueOf(now);
                 r.ok = (now == checked);
                 r.message = r.ok ? "setChecked ok" : "state did not change to " + checked;
+                return r;
+            }
+        });
+    }
+
+    // ── button ────────────────────────────────────────────────────────────
+
+    /**
+     * Press a Forms button — coordinate-free. Works for both
+     * {@code oracle.apps.fnd.ui.Button} (ButtonItem) and
+     * {@code oracle.forms.ui.VButton} (IconicButtonItem) via the widget's
+     * {@code simulatePush()} (fires actionPerformed → handler → server). Falls
+     * back to the handler's {@code sendButtonPressedMessage(MessageHandler)}.
+     * No read-back to verify (a press triggers server logic, not a value), so
+     * {@code ok} means the press was dispatched.
+     */
+    public static Result press(final Component button) {
+        return onEdt(new EdtCall() {
+            public Result run() {
+                if (button == null)
+                    return Result.fail("button is null");
+                Result r = new Result();
+                r.before = str(invoke0(button, "getLabel"));
+
+                // Primary: the widget's own push event.
+                Object widget = button;
+                Method push = findMethod(button.getClass(), "simulatePush", 0);
+                if (push == null) {
+                    Object inner = invoke0(button, "getLWButton");
+                    if (inner != null) {
+                        Method p = findMethod(inner.getClass(), "simulatePush", 0);
+                        if (p != null) {
+                            widget = inner;
+                            push = p;
+                        }
+                    }
+                }
+                if (push != null) {
+                    try {
+                        push.invoke(widget);
+                        r.ok = true;
+                        r.after = r.before;
+                        r.message = "press ok (simulatePush)";
+                        return r;
+                    } catch (Throwable ignored) {
+                        // fall through to the handler path
+                    }
+                }
+
+                // Fallback: ask the handler to send the button-pressed message.
+                Object h = mHandler(button);
+                if (h != null) {
+                    Object mh = invoke0(h, "getHandler"); // MessageHandler getHandler()
+                    Method spm = findMethod(h.getClass(), "sendButtonPressedMessage", 1);
+                    if (spm != null && mh != null) {
+                        try {
+                            spm.invoke(h, mh);
+                            r.ok = true;
+                            r.after = r.before;
+                            r.message = "press ok (sendButtonPressedMessage)";
+                            return r;
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+                return Result.fail("no simulatePush()/sendButtonPressedMessage path on "
+                        + button.getClass().getName());
+            }
+        });
+    }
+
+    // ── poplist / dropdown ────────────────────────────────────────────────
+
+    /**
+     * Select a value in a Forms poplist ({@code oracle.forms.ui.VPopList}).
+     * Sets the value on the widget ({@code select(String)}, or
+     * {@code setSelectedIndex}/{@code select(int)} when {@code value} is a
+     * number), flushes to the server via {@code sendFinalMessage(true)}, and
+     * verifies via {@code getSelectedItem()}.
+     */
+    public static Result selectValue(final Component poplist, final String value) {
+        return onEdt(new EdtCall() {
+            public Result run() {
+                if (poplist == null)
+                    return Result.fail("poplist is null");
+                Object handler = mHandler(poplist);
+                if (Boolean.TRUE.equals(invoke0(handler, "isLocked")))
+                    return Result.fail("item is locked (read-only at the server)");
+
+                Result r = new Result();
+                r.before = str(invoke0(poplist, "getSelectedItem"));
+                if (value.equals(r.before)) {
+                    r.ok = true;
+                    r.after = r.before;
+                    r.message = "already '" + value + "'";
+                    return r;
+                }
+
+                // Set on the widget: by visible value, then by numeric index.
+                boolean set = invoke1(poplist, "select", String.class, value);
+                if (!set) {
+                    try {
+                        Integer idx = Integer.valueOf(value.trim());
+                        set = invoke1(poplist, "setSelectedIndex", int.class, idx)
+                                || invoke1(poplist, "select", int.class, idx);
+                    } catch (NumberFormatException ignore) {
+                    }
+                }
+                if (!set)
+                    return Result.fail("no select(String)/setSelectedIndex(int) on "
+                            + poplist.getClass().getName());
+
+                // Flush the change to the server (+ validation).
+                if (handler != null)
+                    invoke1(handler, "sendFinalMessage", boolean.class, Boolean.TRUE);
+
+                r.after = str(invoke0(poplist, "getSelectedItem"));
+                r.ok = value.equals(r.after);
+                r.message = r.ok
+                        ? "selectValue ok"
+                        : "value not selected (after='" + r.after + "'); check the exact option text";
                 return r;
             }
         });

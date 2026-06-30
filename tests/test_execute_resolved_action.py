@@ -318,3 +318,54 @@ class TestSetCheckbox:
         result = execute_resolved_action(driver, element, action)
 
         assert result == {"status": "ok", "state_changed": True}
+
+
+class TestPressButton:
+
+    def test_dispatches_pressbutton_command(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="press_button", element_id="e10")
+
+        execute_resolved_action(driver, element, action)
+
+        expected_params = locator_params(element)
+        driver._run.assert_called_once_with({
+            "command": "pressbutton",
+            **expected_params,
+        })
+
+    def test_returns_driver_run_result(self):
+        element = _make_element()
+        driver = _mock_driver({"status": "ok", "pressed": True})
+        action = SnapshotAction(action="press_button", element_id="e10")
+
+        result = execute_resolved_action(driver, element, action)
+
+        assert result == {"status": "ok", "pressed": True}
+
+
+class TestSetPoplist:
+
+    def test_dispatches_setpoplist_command(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="set_poplist", element_id="e10", value="Options")
+
+        execute_resolved_action(driver, element, action)
+
+        expected_params = locator_params(element)
+        driver._run.assert_called_once_with({
+            "command": "setpoplist",
+            "value": "Options",
+            **expected_params,
+        })
+
+    def test_returns_driver_run_result(self):
+        element = _make_element()
+        driver = _mock_driver({"status": "ok", "selected": True})
+        action = SnapshotAction(action="set_poplist", element_id="e10", value="Options")
+
+        result = execute_resolved_action(driver, element, action)
+
+        assert result == {"status": "ok", "selected": True}

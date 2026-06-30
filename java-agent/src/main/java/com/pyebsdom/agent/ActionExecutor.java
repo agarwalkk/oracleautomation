@@ -962,4 +962,42 @@ public final class ActionExecutor {
         sb.append('}');
         return sb.toString();
     }
+
+    /**
+     * Press a Forms button (regular or iconic) through its widget/handler — no
+     * Robot. The button's action fires server logic, so there is no value to
+     * read back; success means the press was dispatched.
+     */
+    public static String executePressButton(AgentCommand cmd) throws Exception {
+        Component comp = resolveOrThrow(cmd, "pressButton");
+        FieldActuator.Result r = FieldActuator.press(comp);
+        if (!r.ok) {
+            return JsonUtil.errorResult("pressButton", r.message, null);
+        }
+        return fieldResult("pressButton", r, comp, "reflection:handler");
+    }
+
+    /**
+     * Select a value in a Forms poplist / dropdown through the handler pipeline.
+     *
+     * @param cmd must include {@code value} (the visible option text, or a
+     *            numeric index)
+     */
+    public static String executeSetPoplist(AgentCommand cmd) throws Exception {
+        String value = cmd.getParam("value");
+        if (value == null) {
+            value = cmd.getParam("text"); // accept either key
+        }
+        if (value == null || value.trim().isEmpty()) {
+            return JsonUtil.errorResult("setPoplist",
+                    "Required parameter 'value' (option text or index) is missing.", null);
+        }
+        Component comp = resolveOrThrow(cmd, "setPoplist");
+        FieldActuator.Result r = FieldActuator.selectValue(comp, value);
+        if (!r.ok) {
+            return JsonUtil.errorResult("setPoplist", r.message, null);
+        }
+        return fieldResult("setPoplist", r, comp, "reflection:handler");
+    }
+
 }

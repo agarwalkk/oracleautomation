@@ -22,6 +22,9 @@ from collections import defaultdict
 COVERED = {
     "TextFieldItem": "setText (FieldActuator)",
     "CheckboxItem": "setCheckbox (FieldActuator)",
+    "ButtonItem": "pressButton (FieldActuator.press)",
+    "IconicButtonItem": "pressButton (FieldActuator.press)",
+    "PopListItem": "setPoplist (FieldActuator.selectValue)",
     # DTree rows are driven by treeAction (TreeItemActuator), not a handler item.
 }
 

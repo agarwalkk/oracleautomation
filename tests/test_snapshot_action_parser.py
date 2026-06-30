@@ -257,3 +257,18 @@ class TestEdgeCases:
     def test_set_checkbox_invalid_value(self):
         with pytest.raises(SnapshotActionError, match="unknown checked state"):
             _parse({"action": "set_checkbox", "element_id": "e11", "value": "maybe"})
+
+    def test_press_button_valid(self):
+        result = _parse({"action": "press_button", "element_id": "e11"})
+        assert result.action == "press_button"
+        assert result.element_id == "e11"
+
+    def test_set_poplist_valid(self):
+        result = _parse({"action": "set_poplist", "element_id": "e11", "value": "Options"})
+        assert result.action == "set_poplist"
+        assert result.element_id == "e11"
+        assert result.value == "Options"
+
+    def test_set_poplist_missing_value(self):
+        with pytest.raises(SnapshotActionError, match="value"):
+            _parse({"action": "set_poplist", "element_id": "e11"})
