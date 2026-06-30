@@ -69,6 +69,16 @@ public final class FormsHandler {
         if (tab != null && !tab.trim().isEmpty()) {
             node.formsTabName = tab.trim();
         }
+
+        // Forms item name (e.g. "DEMAND_CLASS") — the authoritative COLUMN
+        // identity within a multi-record block (every cell of a column shares
+        // it), stable across scans/language, unlike the geometry-derived label.
+        Object nm = readFieldDeep(h, "mName");
+        if (nm != null) {
+            String s = String.valueOf(nm).trim();
+            if (!s.isEmpty())
+                node.formsItemName = s;
+        }
     }
 
     /**

@@ -127,13 +127,15 @@ public final class EbsDomAgent {
             case "setcheckbox": return ActionExecutor.executeSetCheckbox(cmd);
             case "pressbutton": return ActionExecutor.executePressButton(cmd);
             case "setpoplist":  return ActionExecutor.executeSetPoplist(cmd);
+            case "selectradio": return ActionExecutor.executeSelectRadio(cmd);
+            case "setlist":     return ActionExecutor.executeSetList(cmd);
 
             default:
                 return JsonUtil.errorResult(
                         cmd.getCommand(),
                         "Unknown command: '" + cmd.getCommand() + "'."
                                 + " Supported commands: health, scan, raw, layout, tables,"
-                                + " focus, click, settext, clear, presskey, screenshot, highlight, elementat, treeaction, setcheckbox, pressbutton, setpoplist",
+                                + " focus, click, settext, clear, presskey, screenshot, highlight, elementat, treeaction, setcheckbox, pressbutton, setpoplist, selectradio, setlist",
                         null);
         }
     }

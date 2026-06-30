@@ -272,3 +272,18 @@ class TestEdgeCases:
     def test_set_poplist_missing_value(self):
         with pytest.raises(SnapshotActionError, match="value"):
             _parse({"action": "set_poplist", "element_id": "e11"})
+
+    def test_select_radio_valid(self):
+        result = _parse({"action": "select_radio", "element_id": "e11"})
+        assert result.action == "select_radio"
+        assert result.element_id == "e11"
+
+    def test_set_list_valid(self):
+        result = _parse({"action": "set_list", "element_id": "e11", "value": "Options"})
+        assert result.action == "set_list"
+        assert result.element_id == "e11"
+        assert result.value == "Options"
+
+    def test_set_list_missing_value(self):
+        with pytest.raises(SnapshotActionError, match="value"):
+            _parse({"action": "set_list", "element_id": "e11"})

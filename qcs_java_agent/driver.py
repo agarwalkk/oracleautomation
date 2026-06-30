@@ -135,6 +135,21 @@ class JavaAgentDriver:
         }
         return self._run(command)
 
+    def select_radio(self, descriptor: dict) -> dict:
+        command = {
+            "command": "selectradio",
+            **locator_params(descriptor),
+        }
+        return self._run(command)
+
+    def set_list(self, descriptor: dict, value: str) -> dict:
+        command = {
+            "command": "setlist",
+            "value": value,
+            **locator_params(descriptor),
+        }
+        return self._run(command)
+
     def _run(self, command: dict[str, Any], *, text_output: bool = False) -> dict:
         return run_agent_command(
             pid=self.pid,

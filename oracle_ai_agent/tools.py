@@ -625,8 +625,8 @@ async def java_form_close(session: RecorderSession) -> str:
 
 # ── Approach B: snapshot-based action schema + parser ─────────────────────────
 
-_VALID_ACTIONS: frozenset[str] = frozenset({"set_text", "click", "press_key", "assert", "done", "tree_action", "set_checkbox", "press_button", "set_poplist"})
-_ELEMENT_ID_REQUIRED: frozenset[str] = frozenset({"set_text", "click", "assert", "tree_action", "set_checkbox", "press_button", "set_poplist"})
+_VALID_ACTIONS: frozenset[str] = frozenset({"set_text", "click", "press_key", "assert", "done", "tree_action", "set_checkbox", "press_button", "set_poplist", "select_radio", "set_list"})
+_ELEMENT_ID_REQUIRED: frozenset[str] = frozenset({"set_text", "click", "assert", "tree_action", "set_checkbox", "press_button", "set_poplist", "select_radio", "set_list"})
 _TREE_OPS: frozenset[str] = frozenset({"select", "expand", "collapse", "activate"})
 _ASSERTION_KINDS: frozenset[str] = frozenset({"text", "value", "visible", "enabled"})
 
@@ -735,6 +735,11 @@ def parse_snapshot_action(
     if action == "set_poplist" and not value:
         raise SnapshotActionError(
             "record_action: 'value' is required and must be non-empty for action='set_poplist'"
+        )
+
+    if action == "set_list" and not value:
+        raise SnapshotActionError(
+            "record_action: 'value' is required and must be non-empty for action='set_list'"
         )
 
     raw_key = raw_args.get("key")
@@ -862,12 +867,25 @@ def execute_resolved_action(
             **params
         })
 
+    if act == "select_radio":
+        return driver._run({
+            "command": "selectradio",
+            **params
+        })
+
+    if act == "set_list":
+        return driver._run({
+            "command": "setlist",
+            "value": action.value or "",
+            **params
+        })
+
     if act in ("assert", "done"):
         return {}  # recording markers — no Java agent call at record time
 
     raise ValueError(
         f"execute_resolved_action: unsupported action {act!r}; "
-        f"expected one of: click, set_text, press_key, tree_action, set_checkbox, press_button, set_poplist, assert, done"
+        f"expected one of: click, set_text, press_key, tree_action, set_checkbox, press_button, set_poplist, select_radio, set_list, assert, done"
     )
 
 
@@ -887,7 +905,7 @@ SNAPSHOT_ACTION_TOOL_SCHEMA: dict = {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["set_text", "click", "press_key", "assert", "done", "tree_action", "set_checkbox", "press_button", "set_poplist"],
+                    "enum": ["set_text", "click", "press_key", "assert", "done", "tree_action", "set_checkbox", "press_button", "set_poplist", "select_radio", "set_list"],
                     "description": (
                         "set_text — type a value into a field; "
                         "click — click a button/tab/menu item; "
@@ -897,7 +915,9 @@ SNAPSHOT_ACTION_TOOL_SCHEMA: dict = {
                         "tree_action — perform a tree operation (select, expand, collapse, activate) on a tree node; "
                         "set_checkbox — check or uncheck a checkbox; "
                         "press_button — press a button; "
-                        "set_poplist — select an option in a poplist/dropdown."
+                        "set_poplist — select an option in a poplist/dropdown; "
+                        "select_radio — select a radio button option; "
+                        "set_list — select a value in a T-list or other list component."
                     ),
                 },
                 "element_id": {

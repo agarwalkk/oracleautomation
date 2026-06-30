@@ -176,7 +176,6 @@ public final class DomScanner {
             try {
                 DomNode node = buildNode(window, null, 0, 0, windows.length, idGen, raw);
                 // (annotateGridRows is REMOVED — superseded by StructureAnnotator)
-                StructureAnnotator.annotate(node); // tabs/grids/mirrors → explicit
                 windowNodes.add(node);
             } catch (Exception e) {
                 DomNode errNode = new DomNode();
@@ -190,13 +189,24 @@ public final class DomScanner {
             }
         }
 
+        // Focus-proof current item from the Forms engine (survives window
+        // deactivation). MUST run BEFORE StructureAnnotator so the grid's
+        // current-row propagation sees the current cell's focused flag and marks
+        // the whole current RECORD, not just the single current cell.
+        markCurrentFormsItem(windows, windowNodes);
+
+        // Structure (tabs/grids/mirrors) — explicit, now that the current cell
+        // is flagged.
+        for (DomNode node : windowNodes) {
+            try {
+                StructureAnnotator.annotate(node);
+            } catch (Exception ignored) {
+            }
+        }
+
         // Identity is resolved across ALL windows together so uniqueness checks
         // see the whole scan (e.g. a label duplicated across two open frames).
         IdentityResolver.resolve(windowNodes);
-
-        // Focus-proof current item from the Forms engine (survives window
-        // deactivation).
-        markCurrentFormsItem(windows, windowNodes);
 
         int visible = 0;
         for (Window w : windows)

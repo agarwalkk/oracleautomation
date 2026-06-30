@@ -59,6 +59,8 @@ def _walk(node, out):
         out.append(node)
     if "_probeError" in attrs:
         out.append(node)
+    if "_runtime" in attrs:
+        out.append(node)
     for c in node.get("children") or []:
         _walk(c, out)
 
@@ -77,8 +79,9 @@ def main() -> int:
     for w in d.get("windows") or []:
         _walk(w, probed)
     if not probed:
-        print("No _probe attributes found. Did you rebuild the agent with the "
-              "ReflectionProbe wiring and focus a field before scanning?")
+        print("No _probe/_runtime attributes found. Did you rebuild the agent "
+              "with the ReflectionProbe wiring? (For --target runtime the data "
+              "is stored under _runtime on the first Forms item.)")
         return 1
 
     print(f"Found {len(probed)} probed field(s). ★ = strong ownership candidate.\n")
@@ -91,6 +94,14 @@ def main() -> int:
         attrs = node.get("attributes") or {}
         if "_probeError" in attrs:
             print("  PROBE ERROR:", attrs["_probeError"])
+            continue
+        if "_runtime" in attrs:
+            rt = json.loads(attrs["_runtime"])
+            for key in ("dispatcher", "formCanvas", "applet"):
+                obj = rt.get(key)
+                if obj:
+                    _print_obj(obj, "  ", tag=key.upper() + "  ")
+            print()
             continue
         report = json.loads(attrs["_probe"])
         _print_obj(report.get("target") or {}, "  ", tag="TARGET  ")

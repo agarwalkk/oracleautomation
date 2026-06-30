@@ -1000,4 +1000,51 @@ public final class ActionExecutor {
         return fieldResult("setPoplist", r, comp, "reflection:handler");
     }
 
+    /**
+     * Select a Forms radio option through its checkbox/handler — no Robot. The
+     * recorder resolves the specific option; this selects it.
+     */
+    public static String executeSelectRadio(AgentCommand cmd) throws Exception {
+        Component comp = resolveOrThrow(cmd, "selectRadio");
+        FieldActuator.Result r = FieldActuator.selectRadio(comp);
+        if (!r.ok) {
+            return JsonUtil.errorResult("selectRadio", r.message, null);
+        }
+        return fieldResult("selectRadio", r, comp, "reflection:handler");
+    }
+
+    /**
+     * Select a value in a Forms T-list (or poplist) through the handler pipeline.
+     *
+     * @param cmd must include {@code value} (the visible option text, or index)
+     */
+    public static String executeSetList(AgentCommand cmd) throws Exception {
+        String value = cmd.getParam("value");
+        if (value == null) {
+            value = cmd.getParam("text");
+        }
+        if (value == null || value.trim().isEmpty()) {
+            return JsonUtil.errorResult("setList",
+                    "Required parameter 'value' (option text or index) is missing.", null);
+        }
+        Component comp = resolveOrThrow(cmd, "setList");
+        FieldActuator.Result r = FieldActuator.selectValue(comp, value);
+        if (!r.ok) {
+            return JsonUtil.errorResult("setList", r.message, null);
+        }
+        return fieldResult("setList", r, comp, "reflection:handler");
+    }
+
+    /**
+     * Open a field's List-of-Values chooser via the handler (no Robot).
+     */
+    public static String executeOpenLov(AgentCommand cmd) throws Exception {
+        Component comp = resolveOrThrow(cmd, "openLov");
+        FieldActuator.Result r = FieldActuator.openLov(comp);
+        if (!r.ok) {
+            return JsonUtil.errorResult("openLov", r.message, null);
+        }
+        return fieldResult("openLov", r, comp, "reflection:handler");
+    }
+
 }

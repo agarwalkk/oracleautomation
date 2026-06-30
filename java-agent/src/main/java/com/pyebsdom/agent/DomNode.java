@@ -78,6 +78,14 @@ public final class DomNode {
      * heuristic that sets {@link #ownerTab}. {@code null} when unavailable.
      */
     public String formsTabName;
+    /**
+     * Forms item name from the handler ({@code mName}, e.g.
+     * {@code "DEMAND_CLASS"}).
+     * Authoritative COLUMN identity inside a multi-record block — every cell of a
+     * column shares it — and a stable technical id for any item. {@code null} for
+     * non-Forms-item components.
+     */
+    public String formsItemName;
 
     // ── Type ──────────────────────────────────────────────────────────────
     /** Fully-qualified Java class name. */
@@ -196,6 +204,7 @@ public final class DomNode {
         sb.append("\"locked\":").append(locked).append(',');
         sb.append("\"formsType\":").append(JsonUtil.quoted(formsType)).append(',');
         sb.append("\"formsTabName\":").append(JsonUtil.quoted(formsTabName)).append(',');
+        sb.append("\"formsItemName\":").append(JsonUtil.quoted(formsItemName)).append(',');
 
         // Type
         sb.append("\"type\":").append(JsonUtil.quoted(type)).append(',');

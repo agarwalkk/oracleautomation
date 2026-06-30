@@ -369,3 +369,54 @@ class TestSetPoplist:
         result = execute_resolved_action(driver, element, action)
 
         assert result == {"status": "ok", "selected": True}
+
+
+class TestSelectRadio:
+
+    def test_dispatches_selectradio_command(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="select_radio", element_id="e10")
+
+        execute_resolved_action(driver, element, action)
+
+        expected_params = locator_params(element)
+        driver._run.assert_called_once_with({
+            "command": "selectradio",
+            **expected_params,
+        })
+
+    def test_returns_driver_run_result(self):
+        element = _make_element()
+        driver = _mock_driver({"status": "ok", "selected": True})
+        action = SnapshotAction(action="select_radio", element_id="e10")
+
+        result = execute_resolved_action(driver, element, action)
+
+        assert result == {"status": "ok", "selected": True}
+
+
+class TestSetList:
+
+    def test_dispatches_setlist_command(self):
+        element = _make_element()
+        driver = _mock_driver()
+        action = SnapshotAction(action="set_list", element_id="e10", value="Options")
+
+        execute_resolved_action(driver, element, action)
+
+        expected_params = locator_params(element)
+        driver._run.assert_called_once_with({
+            "command": "setlist",
+            "value": "Options",
+            **expected_params,
+        })
+
+    def test_returns_driver_run_result(self):
+        element = _make_element()
+        driver = _mock_driver({"status": "ok", "selected": True})
+        action = SnapshotAction(action="set_list", element_id="e10", value="Options")
+
+        result = execute_resolved_action(driver, element, action)
+
+        assert result == {"status": "ok", "selected": True}
