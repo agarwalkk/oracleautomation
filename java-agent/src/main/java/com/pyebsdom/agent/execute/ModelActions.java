@@ -338,18 +338,39 @@ public final class ModelActions {
     }
 
     /**
-     * Select a tab by index. Prefers a model method
-     * ({@code setSelectedIndex}/{@code selectTab}/…); Oracle EWT {@code TabBar}
-     * exposes none, so the fallback computes the tab's own rectangle and
-     * dispatches a targeted {@link MouseEvent} to the tab bar at that rect —
-     * component-local coordinates, in-JVM, no Robot and no screen cursor. This
-     * is the same spot the old pixel Robot-click hit, just delivered as an event.
+     * Select / activate a tab by index, in-JVM and non-robotically, in order of
+     * preference:
+     * <ol>
+     * <li><b>Oracle Forms</b> —
+     * {@code FormsTabPanel.getPage(index).setSelected(true)}
+     * (confirmed by reflection probe). The cleanest path: it fires the same
+     * events activation would, which also forces the page's lazy fields to
+     * build — important for per-tab capture.</li>
+     * <li>a direct index setter ({@code setSelectedIndex}/… — Swing
+     * JTabbedPane);</li>
+     * <li>EWT {@code TabBar.moveSelection(boolean)} stepped to the target;</li>
+     * <li>a targeted {@link MouseEvent} to the tab's rectangle (last resort).</li>
+     * </ol>
      */
     public static String selectTab(final Component tabContainer, final int index) throws Exception {
         if (tabContainer == null)
             return null;
         final String[] r = { null };
         Edt.run(() -> {
+            // 0. Forms page setter — also activates the page so its lazy fields build.
+            Component panel = findTabPanel(tabContainer);
+            if (panel != null) {
+                Method getPage = Reflect.method(panel.getClass(), "getPage", int.class);
+                Object page = getPage != null ? Reflect.invoke(panel, getPage, index) : null;
+                Method setSel = page != null
+                        ? Reflect.method(page.getClass(), "setSelected", boolean.class)
+                        : null;
+                if (setSel != null) {
+                    Reflect.invoke(page, setSel, Boolean.TRUE);
+                    r[0] = "page.setSelected";
+                    return;
+                }
+            }
             // 1. Direct index setter (Swing JTabbedPane and tab impls that have one).
             for (String name : new String[] {
                     "setSelectedIndex", "selectTab", "setSelectedTab", "setSelectedTabIndex" }) {
@@ -396,6 +417,21 @@ public final class ModelActions {
             }
         });
         return r[0];
+    }
+
+    /**
+     * Find the owning Forms tab panel — the component itself or an ancestor that
+     * exposes {@code getPage(int)} + {@code getPageCount()}. The studio targets a
+     * {@code TabBar}; its parent is the {@code FormsTabPanel}.
+     */
+    private static Component findTabPanel(Component c) {
+        for (Component cur = c; cur != null; cur = cur.getParent()) {
+            if (Reflect.method(cur.getClass(), "getPage", int.class) != null
+                    && Reflect.method(cur.getClass(), "getPageCount") != null) {
+                return cur;
+            }
+        }
+        return null;
     }
 
     /**

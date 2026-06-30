@@ -546,21 +546,28 @@ public final class DomScanner {
                 node.attributes.put("_tabPagesExpanded", "0/0");
                 return;
             }
-            int added = 0, withContent = 0;
+            int inactive = 0, attached = 0, fieldsRecovered = 0;
             for (TabPageExpander.Page p : pages) {
                 if (p.selected || p.component == null)
                     continue;
+                inactive++;
                 DomNode pageNode = buildNode(p.component, node.path, node.depth + 1,
                         node.children.size(), pages.size(), idGen,
                         true /* force raw — inactive pages are invisible */);
-                forceOwnerTab(pageNode, p.title);
-                node.children.add(pageNode);
-                added++;
-                if (!pageNode.children.isEmpty())
-                    withContent++;
+                // Oracle Forms builds a page's fields lazily on first activation,
+                // so an inactive page's getContent() is usually an empty shell.
+                // Only attach pages that actually yielded fields (eager content);
+                // the marker reports how many did, so eager-vs-lazy is explicit.
+                int fc = countFields(pageNode);
+                if (fc > 0) {
+                    forceOwnerTab(pageNode, p.title);
+                    node.children.add(pageNode);
+                    attached++;
+                    fieldsRecovered += fc;
+                }
             }
-            node.attributes.put("_tabPagesExpanded", added + "/" + pages.size());
-            node.attributes.put("_tabPagesWithContent", Integer.toString(withContent));
+            node.attributes.put("_tabPagesExpanded", attached + "/" + inactive);
+            node.attributes.put("_tabPageFieldsRecovered", Integer.toString(fieldsRecovered));
         } catch (Throwable t) {
             node.attributes.put("_tabPageExpandError",
                     t.getClass().getName() + ": " + t.getMessage());
@@ -577,6 +584,14 @@ public final class DomScanner {
             n.ownerTab = title;
         for (DomNode c : n.children)
             forceOwnerTab(c, title);
+    }
+
+    /** Count Field nodes in a subtree (to tell real eager content from a shell). */
+    private static int countFields(DomNode n) {
+        int c = "Field".equals(n.semanticType) ? 1 : 0;
+        for (DomNode ch : n.children)
+            c += countFields(ch);
+        return c;
     }
 
     // ── Logical child expansion (menu / toolbar) ─────────────────────────
