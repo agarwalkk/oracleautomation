@@ -55,8 +55,17 @@ class JavaAgentDriver:
     def health(self) -> dict:
         return self._run({"command": "health"})
 
-    def scan(self) -> dict:
-        return self._run({"command": "scan"})
+    def scan(self, *, probe: bool = False, target: str | None = None) -> dict:
+        """Run a scan. With probe=True, matched elements (per `target`, or the
+        default first-field-per-region) carry an `attributes._probe` reflection
+        inventory — used by scripts/probe_scan.py + probe_report.py to discover
+        which non-robotic methods a widget actually exposes."""
+        command: dict[str, Any] = {"command": "scan"}
+        if probe:
+            command["probe"] = "true"
+        if target:
+            command["target"] = str(target)
+        return self._run(command)
 
     def raw(self) -> dict:
         return self._run({"command": "raw"})

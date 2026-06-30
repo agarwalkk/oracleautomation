@@ -54,7 +54,7 @@ def run_agent_command(
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip() if not debug else ""
         raise AttachError(
-            f"AttachAgentByPid exited with code {proc.returncode}"
+            f"AttachLauncher exited with code {proc.returncode}"
             + (f"\nstderr:\n{stderr}" if stderr else "")
         )
 

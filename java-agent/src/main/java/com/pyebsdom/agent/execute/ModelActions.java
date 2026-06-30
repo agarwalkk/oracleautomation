@@ -9,14 +9,17 @@ import javax.swing.JList;
 import javax.swing.JRadioButton;
 import javax.swing.text.JTextComponent;
 import java.awt.Component;
+import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.lang.reflect.Method;
+import java.util.Locale;
 
 /**
  * Non-robotic action primitives — the core of the new execution model.
  *
- * <p>Every action drives the target component <b>inside the JVM</b>: it calls
+ * <p>
+ * Every action drives the target component <b>inside the JVM</b>: it calls
  * the component's own model methods ({@code doClick}, {@code setText},
  * {@code setSelectedIndex}, {@code setSelectionRow}) or, when a Forms-custom
  * widget exposes no such method, dispatches a synthetic AWT event straight to
@@ -24,23 +27,27 @@ import java.lang.reflect.Method;
  * keystrokes, so actions are deterministic, headless-friendly, and immune to
  * focus stealing by other windows.
  *
- * <p>There is deliberately <b>no automatic Robot fallback</b>. If a primitive
+ * <p>
+ * There is deliberately <b>no automatic Robot fallback</b>. If a primitive
  * cannot drive a widget it returns {@code false} and the caller surfaces a
  * clear error; the old Robot implementation is retained only as reference code
  * under {@code backup-reference/RobotFallback.java} and is never invoked at
  * runtime.
  *
- * <p>All methods marshal to the EDT themselves and may be called from the
+ * <p>
+ * All methods marshal to the EDT themselves and may be called from the
  * agent thread. Each returns a short <em>technique</em> string (or {@code null}
  * on failure) so the action layer can report how the action was performed.
  */
 public final class ModelActions {
 
-    private ModelActions() { /* static utility */ }
+    private ModelActions() {
+        /* static utility */ }
 
     /** Request keyboard focus. Returns the technique or {@code null}. */
     public static String focus(final Component c) throws Exception {
-        if (c == null) return null;
+        if (c == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             if (c.requestFocusInWindow()) {
@@ -60,7 +67,8 @@ public final class ModelActions {
      * coordinates — no screen cursor movement).
      */
     public static String click(final Component c) throws Exception {
-        if (c == null) return null;
+        if (c == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             if (c instanceof AbstractButton) {
@@ -97,7 +105,8 @@ public final class ModelActions {
      * {@code clickCount = 2} — to the component, not the OS pointer.
      */
     public static String doubleClick(final Component c) throws Exception {
-        if (c == null) return null;
+        if (c == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             int x = Math.max(0, c.getWidth() / 2);
@@ -122,7 +131,8 @@ public final class ModelActions {
      * {@code doClick()} for the flip so the control's listeners fire.
      */
     public static String setChecked(final Component c, final boolean desired) throws Exception {
-        if (c == null) return null;
+        if (c == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             Boolean current = selectedState(c);
@@ -131,7 +141,7 @@ public final class ModelActions {
                 return;
             }
             if (c instanceof AbstractButton) {
-                ((AbstractButton) c).doClick();   // fires listeners; we know it differs
+                ((AbstractButton) c).doClick(); // fires listeners; we know it differs
                 r[0] = "doClick(toggle)";
                 return;
             }
@@ -150,7 +160,8 @@ public final class ModelActions {
      * index match) — never by typing or pixel-clicking the dropdown.
      */
     public static String selectOption(final Component c, final String value) throws Exception {
-        if (c == null) return null;
+        if (c == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             if (c instanceof JComboBox) {
@@ -188,7 +199,8 @@ public final class ModelActions {
      */
     public static String expandTreeRow(final Component tree, final int row, final boolean expand)
             throws Exception {
-        if (tree == null || row < 0) return null;
+        if (tree == null || row < 0)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             String name = expand ? "expandRow" : "collapseRow";
@@ -219,23 +231,31 @@ public final class ModelActions {
 
     /** Current selected state of a toggle, or {@code null} if not determinable. */
     private static Boolean selectedState(Component c) {
-        if (c instanceof AbstractButton) return ((AbstractButton) c).isSelected();
+        if (c instanceof AbstractButton)
+            return ((AbstractButton) c).isSelected();
         Object v = Reflect.call(c, "isSelected");
-        if (v instanceof Boolean) return (Boolean) v;
+        if (v instanceof Boolean)
+            return (Boolean) v;
         Object s = Reflect.call(c, "getState");
-        if (s instanceof Boolean) return (Boolean) s;
+        if (s instanceof Boolean)
+            return (Boolean) s;
         return null;
     }
 
-    /** Match {@code value} against an item-bearing control's options, returning its index or -1. */
+    /**
+     * Match {@code value} against an item-bearing control's options, returning its
+     * index or -1.
+     */
     private static int indexOfOption(Component c, String value) {
         Object countObj = Reflect.call(c, "getItemCount");
         int count = Reflect.asInt(countObj, -1);
         Method getItemAt = Reflect.method(c.getClass(), "getItemAt", int.class);
-        if (count < 0 || getItemAt == null) return -1;
+        if (count < 0 || getItemAt == null)
+            return -1;
         for (int i = 0; i < count; i++) {
             Object item = Reflect.invoke(c, getItemAt, i);
-            if (item != null && value != null && value.equals(item.toString())) return i;
+            if (item != null && value != null && value.equals(item.toString()))
+                return i;
         }
         return -1;
     }
@@ -247,7 +267,8 @@ public final class ModelActions {
      * fires on the correct item.
      */
     public static String setText(final Component c, final String text) throws Exception {
-        if (c == null) return null;
+        if (c == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             c.requestFocusInWindow();
@@ -273,7 +294,8 @@ public final class ModelActions {
 
     /** Clear a field's contents via the model (no select-all keystrokes). */
     public static String clear(final Component c) throws Exception {
-        if (c == null) return null;
+        if (c == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             c.requestFocusInWindow();
@@ -299,7 +321,8 @@ public final class ModelActions {
      */
     public static String pressKey(final Component target, final String keyName) throws Exception {
         final KeyMap.Stroke stroke = KeyMap.resolve(keyName);
-        if (stroke == null || target == null) return null;
+        if (stroke == null || target == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             long when = System.currentTimeMillis();
@@ -314,12 +337,21 @@ public final class ModelActions {
         return r[0];
     }
 
-    /** Select a tab by index via the tab container's model method. */
+    /**
+     * Select a tab by index. Prefers a model method
+     * ({@code setSelectedIndex}/{@code selectTab}/…); Oracle EWT {@code TabBar}
+     * exposes none, so the fallback computes the tab's own rectangle and
+     * dispatches a targeted {@link MouseEvent} to the tab bar at that rect —
+     * component-local coordinates, in-JVM, no Robot and no screen cursor. This
+     * is the same spot the old pixel Robot-click hit, just delivered as an event.
+     */
     public static String selectTab(final Component tabContainer, final int index) throws Exception {
-        if (tabContainer == null) return null;
+        if (tabContainer == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
-            for (String name : new String[] { "setSelectedIndex", "selectTab", "setSelectedTab" }) {
+            for (String name : new String[] {
+                    "setSelectedIndex", "selectTab", "setSelectedTab", "setSelectedTabIndex" }) {
                 Method m = Reflect.method(tabContainer.getClass(), name, int.class);
                 if (m != null) {
                     Reflect.invoke(tabContainer, m, index);
@@ -327,13 +359,22 @@ public final class ModelActions {
                     return;
                 }
             }
+            // EWT TabBar: no index setter — dispatch a click to the tab's rect.
+            Rectangle tab = ewtTabBounds(tabContainer, index);
+            if (tab != null) {
+                dispatchClickAt(tabContainer, tab.x + tab.width / 2, tab.y + tab.height / 2);
+                r[0] = "dispatchTabEvent";
+            }
         });
         return r[0];
     }
 
-    /** Select a tree row by model index ({@code setSelectionRow}/{@code selectRow}). */
+    /**
+     * Select a tree row by model index ({@code setSelectionRow}/{@code selectRow}).
+     */
     public static String selectTreeRow(final Component tree, final int row) throws Exception {
-        if (tree == null) return null;
+        if (tree == null)
+            return null;
         final String[] r = { null };
         Edt.run(() -> {
             for (String name : new String[] { "setSelectionRow", "selectRow" }) {
@@ -352,14 +393,97 @@ public final class ModelActions {
 
     /** Dispatch press/release/click to the component centre (local coords). */
     private static void dispatchClick(Component c) {
+        dispatchClickAt(c, Math.max(0, c.getWidth() / 2), Math.max(0, c.getHeight() / 2));
+    }
+
+    /**
+     * Dispatch press/release/click to a component-local point (no Robot, no
+     * cursor).
+     */
+    private static void dispatchClickAt(Component c, int x, int y) {
         long when = System.currentTimeMillis();
-        int x = Math.max(0, c.getWidth() / 2);
-        int y = Math.max(0, c.getHeight() / 2);
         c.dispatchEvent(new MouseEvent(c, MouseEvent.MOUSE_PRESSED, when, 0,
                 x, y, 1, false, MouseEvent.BUTTON1));
         c.dispatchEvent(new MouseEvent(c, MouseEvent.MOUSE_RELEASED, when, 0,
                 x, y, 1, false, MouseEvent.BUTTON1));
         c.dispatchEvent(new MouseEvent(c, MouseEvent.MOUSE_CLICKED, when, 0,
                 x, y, 1, false, MouseEvent.BUTTON1));
+    }
+
+    // ── EWT tab geometry (component-local; for event dispatch, not Robot) ──
+
+    /**
+     * Local rectangle of tab {@code index} within an EWT tab bar, or {@code null}.
+     */
+    private static Rectangle ewtTabBounds(Component comp, int index) {
+        Rectangle r = queryTabRect(comp, index);
+        if (r != null)
+            return r;
+        // Via getItem(index)/getPage(index) -> getBounds() on the tab item.
+        for (Class<?> k = comp.getClass(); k != null && k != Object.class; k = k.getSuperclass()) {
+            for (Method m : k.getDeclaredMethods()) {
+                Class<?>[] pt = m.getParameterTypes();
+                if (pt.length == 1 && pt[0] == int.class) {
+                    String name = m.getName().toLowerCase(Locale.ROOT);
+                    if (name.equals("getitem") || name.equals("getpage")) {
+                        try {
+                            m.setAccessible(true);
+                            Object item = m.invoke(comp, index);
+                            if (item != null) {
+                                Rectangle ir = queryNoArgRect(item);
+                                if (ir != null)
+                                    return ir;
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Rectangle queryTabRect(Component comp, int index) {
+        for (Class<?> k = comp.getClass(); k != null && k != Object.class; k = k.getSuperclass()) {
+            for (Method m : k.getDeclaredMethods()) {
+                Class<?>[] pt = m.getParameterTypes();
+                if (pt.length == 1 && pt[0] == int.class
+                        && Rectangle.class.isAssignableFrom(m.getReturnType())) {
+                    String name = m.getName().toLowerCase(Locale.ROOT);
+                    if (name.contains("tab") || name.contains("item")
+                            || name.contains("rect") || name.contains("bounds")) {
+                        try {
+                            m.setAccessible(true);
+                            Rectangle r = (Rectangle) m.invoke(comp, index);
+                            if (r != null)
+                                return r;
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Rectangle queryNoArgRect(Object item) {
+        for (Class<?> k = item.getClass(); k != null && k != Object.class; k = k.getSuperclass()) {
+            for (Method m : k.getDeclaredMethods()) {
+                if (m.getParameterTypes().length == 0
+                        && Rectangle.class.isAssignableFrom(m.getReturnType())) {
+                    String name = m.getName().toLowerCase(Locale.ROOT);
+                    if (name.equals("getbounds") || name.equals("getrect") || name.contains("bounds")) {
+                        try {
+                            m.setAccessible(true);
+                            Rectangle r = (Rectangle) m.invoke(item);
+                            if (r != null)
+                                return r;
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 }

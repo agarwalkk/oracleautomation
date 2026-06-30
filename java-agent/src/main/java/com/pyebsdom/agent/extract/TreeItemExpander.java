@@ -68,16 +68,40 @@ public final class TreeItemExpander {
     public static int expand(DomNode treeNode, Component comp, AtomicInteger idGen) {
         if (treeNode == null || comp == null)
             return 0;
-        try {
-            List<Row> rows = readRows(comp);
-            if (rows.isEmpty())
-                return 0;
+        if (idGen == null)
+            idGen = new AtomicInteger(0);
 
-            // Maintain a running path stack keyed by depth so each row can
-            // build its full root→leaf chain (treePath) deterministically.
-            String[] chain = new String[64];
-            int added = 0;
-            for (Row r : rows) {
+        // Primary path: read rows (with bounds) reflectively. Some Oracle EWT
+        // DTree builds NPE inside this geometry API — never let that abort the
+        // whole expansion.
+        List<Row> rows;
+        try {
+            rows = readRows(comp);
+        } catch (Throwable t) {
+            rows = new ArrayList<>();
+            treeNode.attributes.put("_treeReadError",
+                    t.getClass().getName() + ": " + t.getMessage());
+        }
+
+        // Fallback: materialise rows from the flat `treeRows` attribute that
+        // DomScanner already populated via ComponentReader (a different,
+        // working extraction path that runs before this expander). This keeps
+        // every row's identity + treePath even when the geometry API fails —
+        // bounds are simply absent, which is strictly better than zero rows.
+        if (rows.isEmpty()) {
+            rows = rowsFromTreeRowsAttribute(treeNode);
+            if (!rows.isEmpty())
+                treeNode.attributes.put("_treeRowsSource", "treeRows-attribute");
+        }
+        if (rows.isEmpty())
+            return 0;
+
+        // Maintain a running path stack keyed by depth so each row can build its
+        // full root→leaf chain (treePath) deterministically.
+        String[] chain = new String[64];
+        int added = 0;
+        for (Row r : rows) {
+            try {
                 int d = Math.max(0, Math.min(r.depth, chain.length - 1));
                 chain[d] = r.label;
                 StringBuilder tp = new StringBuilder();
@@ -94,15 +118,50 @@ public final class TreeItemExpander {
                 DomNode item = buildRowNode(treeNode, r, tp.toString(), idGen);
                 treeNode.children.add(item);
                 added++;
+            } catch (Throwable rowErr) {
+                // One malformed row must not lose the rest.
+                treeNode.attributes.put("_treeRowError",
+                        rowErr.getClass().getName() + ": " + rowErr.getMessage());
             }
+        }
 
-            // Keep the flat string for back-compat consumers, but the children
-            // are now the source of truth.
-            treeNode.attributes.put("treeRowCount", Integer.toString(rows.size()));
-            return added;
-        } catch (Throwable t) {
-            treeNode.attributes.put("_treeExpandError",
-                    t.getClass().getName() + ": " + t.getMessage());
+        treeNode.attributes.put("treeRowCount", Integer.toString(rows.size()));
+        return added;
+    }
+
+    /**
+     * Builds rows from the flat {@code treeRows} attribute that
+     * {@code DomScanner} populates via {@code ComponentReader.extractTreeRows}.
+     * Format: {@code depth\tselected\texpanded\tlabel} entries joined by
+     * {@code " || "}. {@code depth} is already 0-based (path-count − 1), so it
+     * is used as-is. Rows built this way carry no bounds.
+     */
+    private static List<Row> rowsFromTreeRowsAttribute(DomNode tree) {
+        List<Row> out = new ArrayList<>();
+        String packed = tree.attributes.get("treeRows");
+        if (packed == null || packed.isEmpty())
+            return out;
+        String[] entries = packed.split(" \\|\\| ");
+        for (int i = 0; i < entries.length; i++) {
+            String[] f = entries[i].split("\t", 4);
+            if (f.length < 4)
+                continue;
+            Row r = new Row();
+            r.rowIndex = i;
+            r.depth = Math.max(0, parseIntSafe(f[0]));
+            r.selected = "1".equals(f[1]);
+            r.expanded = "1".equals(f[2]);
+            r.label = stripLevelPrefix(f[3]);
+            if (!r.label.isEmpty())
+                out.add(r);
+        }
+        return out;
+    }
+
+    private static int parseIntSafe(String s) {
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (Exception e) {
             return 0;
         }
     }

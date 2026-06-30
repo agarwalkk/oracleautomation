@@ -105,7 +105,7 @@ class _MockDriver:
             raise self._health_raises
         return {"status": "ok"}
 
-    def scan(self) -> dict:
+    def scan(self, *args, **kwargs) -> dict:
         return self._scan_result
 
     def press_key(self, key: str, descriptor: dict | None = None) -> dict:
@@ -396,7 +396,7 @@ def test_snapshot_safe_on_driver_failure() -> None:
         def health(self) -> dict:
             return {}
 
-        def scan(self) -> dict:
+        def scan(self, *args, **kwargs) -> dict:
             raise RuntimeError("agent died")
 
         def press_key(self, k: str, d: dict | None = None) -> dict:

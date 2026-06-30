@@ -8,22 +8,29 @@ import com.pyebsdom.agent.model.DomNode;
 import com.pyebsdom.agent.model.LocatorCandidate;
 import com.pyebsdom.agent.model.TableModel;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Renders the extraction model ({@link DomNode} forests, {@link TableModel}s,
  * scan results) to the JSON the Python clients consume.
  *
- * <p>This is the single home for DOM serialisation. It was previously scattered
- * across {@code DomNode.toJson}, {@code Bounds.toJson}, {@code LocatorCandidate.toJson},
+ * <p>
+ * This is the single home for DOM serialisation. It was previously scattered
+ * across {@code DomNode.toJson}, {@code Bounds.toJson},
+ * {@code LocatorCandidate.toJson},
  * {@code TableModel.toJson}, and {@code DomScanner.ScanResult.toJson}. Pulling
  * it here keeps the model package free of output concerns while preserving the
- * exact wire shape (field names, ordering, and number formatting are unchanged).
+ * exact wire shape (field names, ordering, and number formatting are
+ * unchanged).
  */
 public final class DomJson {
 
-    private DomJson() { /* static utility */ }
+    private DomJson() {
+        /* static utility */ }
 
     // ── Top-level envelopes ───────────────────────────────────────────────
 
@@ -46,7 +53,8 @@ public final class DomJson {
                 .append("},");
         sb.append("\"windows\":[");
         for (int i = 0; i < result.windows.size(); i++) {
-            if (i > 0) sb.append(',');
+            if (i > 0)
+                sb.append(',');
             sb.append(node(result.windows.get(i), true));
         }
         sb.append("]}");
@@ -62,7 +70,8 @@ public final class DomJson {
         sb.append("\"tableCount\":").append(tables.size()).append(',');
         sb.append("\"tables\":[");
         for (int i = 0; i < tables.size(); i++) {
-            if (i > 0) sb.append(',');
+            if (i > 0)
+                sb.append(',');
             sb.append(table(tables.get(i)));
         }
         sb.append("]}");
@@ -93,12 +102,12 @@ public final class DomJson {
                 .append(n.primaryLocator != null ? locator(n.primaryLocator) : "null").append(',');
         sb.append("\"locatorAmbiguous\":").append(n.locatorAmbiguous).append(',');
 
-        // Type
-        sb.append("\"type\":").append(Json.quoted(n.type)).append(',');
+        // Type — `className` is the FQN; `type` (== className) and `packageName`
+        // (its prefix) are dropped as derivable duplicates not consumed by
+        // record/replay or overlays.
         sb.append("\"semanticType\":").append(Json.quoted(n.semanticType)).append(',');
         sb.append("\"className\":").append(Json.quoted(n.className)).append(',');
         sb.append("\"simpleClassName\":").append(Json.quoted(n.simpleClassName)).append(',');
-        sb.append("\"packageName\":").append(Json.quoted(n.packageName)).append(',');
 
         // Structure
         sb.append("\"containerRole\":").append(Json.quoted(n.containerRole)).append(',');
@@ -119,7 +128,7 @@ public final class DomJson {
         sb.append("\"accessibleDescription\":").append(Json.quoted(n.accessibleDescription)).append(',');
         sb.append("\"accessibleRole\":").append(Json.quoted(n.accessibleRole)).append(',');
         sb.append("\"tooltip\":").append(Json.quoted(n.tooltip)).append(',');
-        sb.append("\"displayName\":").append(Json.quoted(n.displayName)).append(',');
+        // `displayName` dropped — measured 100% identical to canonicalLabel/name/text.
         sb.append("\"canonicalLabel\":").append(Json.quoted(n.canonicalLabel)).append(',');
         sb.append("\"confidence\":").append(Json.decimal2(n.confidence)).append(',');
         sb.append("\"valueOptions\":").append(stringArray(n.valueOptions)).append(',');
@@ -140,14 +149,18 @@ public final class DomJson {
         sb.append("\"cursorType\":").append(n.cursorType).append(',');
         sb.append("\"cursorName\":").append(Json.quoted(n.cursorName)).append(',');
 
-        // Maps
-        sb.append("\"attributes\":").append(map(n.attributes)).append(',');
-        sb.append("\"reflection\":").append(map(n.reflection)).append(',');
+        // Attributes — structural extraction results only. The raw `reflection`
+        // getter dump is omitted entirely: it duplicated typed fields (name,
+        // enabled, text, editable, …) plus colors, and was not consumed by
+        // record/replay or screenshot overlays. Colors and literal "null"/empty
+        // values are filtered from the attributes too.
+        sb.append("\"attributes\":").append(attributes(n.attributes)).append(',');
 
         // Locators
         sb.append("\"locators\":[");
         for (int i = 0; i < n.locators.size(); i++) {
-            if (i > 0) sb.append(',');
+            if (i > 0)
+                sb.append(',');
             sb.append(locator(n.locators.get(i)));
         }
         sb.append(']');
@@ -156,7 +169,8 @@ public final class DomJson {
         if (includeChildren) {
             sb.append(",\"children\":[");
             for (int i = 0; i < n.children.size(); i++) {
-                if (i > 0) sb.append(',');
+                if (i > 0)
+                    sb.append(',');
                 sb.append(node(n.children.get(i), true));
             }
             sb.append(']');
@@ -170,13 +184,14 @@ public final class DomJson {
 
     public static String bounds(Bounds b) {
         return "{\"x\":" + b.x + ",\"y\":" + b.y
-             + ",\"width\":" + b.width + ",\"height\":" + b.height + "}";
+                + ",\"width\":" + b.width + ",\"height\":" + b.height + "}";
     }
 
     public static String screenBounds(Bounds b) {
-        if (!b.hasScreen()) return "null";
+        if (!b.hasScreen())
+            return "null";
         return "{\"x\":" + b.screenX + ",\"y\":" + b.screenY
-             + ",\"width\":" + b.screenWidth + ",\"height\":" + b.screenHeight + "}";
+                + ",\"width\":" + b.screenWidth + ",\"height\":" + b.screenHeight + "}";
     }
 
     public static String locator(LocatorCandidate l) {
@@ -209,7 +224,8 @@ public final class DomJson {
 
         sb.append("\"visibleRows\":[");
         for (int r = 0; r < t.visibleRows.size(); r++) {
-            if (r > 0) sb.append(',');
+            if (r > 0)
+                sb.append(',');
             sb.append(map(t.visibleRows.get(r)));
         }
         sb.append("],");
@@ -224,7 +240,8 @@ public final class DomJson {
     private static String stringArray(List<String> items) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < items.size(); i++) {
-            if (i > 0) sb.append(',');
+            if (i > 0)
+                sb.append(',');
             sb.append(Json.quoted(items.get(i)));
         }
         sb.append(']');
@@ -235,9 +252,38 @@ public final class DomJson {
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;
         for (Map.Entry<String, String> e : m.entrySet()) {
-            if (!first) sb.append(',');
+            if (!first)
+                sb.append(',');
             first = false;
             sb.append(Json.quoted(e.getKey())).append(':').append(Json.quoted(e.getValue()));
+        }
+        sb.append('}');
+        return sb.toString();
+    }
+
+    /** Colors are never used for automation and were stored redundantly. */
+    private static final Set<String> DROP_ATTR_KEYS = new HashSet<>(Arrays.asList("getBackground", "getForeground"));
+
+    /**
+     * Serialises the attributes map, dropping color keys and any value that is
+     * empty or the literal string {@code "null"} (a reflection stringification
+     * artefact). Diagnostic markers added by the extractor (keys starting with
+     * {@code _}) are kept — they are small and aid hardening.
+     */
+    private static String attributes(Map<String, String> m) {
+        StringBuilder sb = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, String> e : m.entrySet()) {
+            String k = e.getKey();
+            String v = e.getValue();
+            if (k == null || DROP_ATTR_KEYS.contains(k))
+                continue;
+            if (v == null || v.isEmpty() || "null".equals(v))
+                continue;
+            if (!first)
+                sb.append(',');
+            first = false;
+            sb.append(Json.quoted(k)).append(':').append(Json.quoted(v));
         }
         sb.append('}');
         return sb.toString();

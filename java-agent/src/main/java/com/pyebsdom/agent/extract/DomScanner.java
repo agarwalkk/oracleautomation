@@ -62,6 +62,26 @@ public final class DomScanner {
      * @param raw {@code true} to include invisible/empty components
      */
     public static ScanResult scan(final boolean raw) throws Exception {
+        return scan(raw, false, null);
+    }
+
+    /**
+     * Scan with optional reflection probe. When {@code probe} is true, nodes
+     * matching {@code probeTarget} (or the default first-field-per-region when
+     * it is null) get an {@code attributes._probe} method/field inventory via
+     * {@link ReflectionProbe}.
+     */
+    public static ScanResult scan(final boolean raw, final boolean probe, final String probeTarget)
+            throws Exception {
+        ReflectionProbe.begin(probe, probeTarget);
+        try {
+            return scanInternal(raw);
+        } finally {
+            ReflectionProbe.end();
+        }
+    }
+
+    private static ScanResult scanInternal(final boolean raw) throws Exception {
         final ScanResult[] holder = { null };
         final Exception[] error = { null };
 
@@ -497,6 +517,8 @@ public final class DomScanner {
             }
         }
 
+        // Diagnostic reflection probe (no-op unless armed via scan(probe=true)).
+        ReflectionProbe.maybe(node, comp);
         return node;
     }
 

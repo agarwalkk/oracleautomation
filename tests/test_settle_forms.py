@@ -60,7 +60,7 @@ class FakeDriver:
         self._scans = list(scans)
         self._idx = 0
 
-    def scan(self) -> dict:
+    def scan(self, *args, **kwargs) -> dict:
         if self._idx < len(self._scans):
             item = self._scans[self._idx]
             self._idx += 1
