@@ -621,9 +621,8 @@ def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str
 
     # Tools menu lives on the menu bar, OUTSIDE the scoped frame — read from
     # the full scan and append as a group.
-    tools = _tools_menu_group(flatten_nodes(scan))
-    if tools:
-        tree.append(tools)
+    for grp in _menu_groups(flatten_nodes(scan)):
+        tree.append(grp)
 
     id_map: dict[str, dict] = {}
     for n in nodes:
@@ -735,13 +734,23 @@ def _build_semantic_tree(nodes: list[dict]) -> list[dict]:
     return children
 
 
-def _tools_menu_group(all_nodes: list[dict]) -> dict | None:
-    """Build the Tools-menu group from the LWMenu's accessibleMenuItems."""
+# Top-level menus to surface in the snapshot, by name (without the "ALT x"
+# suffix). To add more — e.g. New/Save/Print via File, Find via View — just add
+# the menu name here; the items come from each menu's accessibleMenuItems.
+_SURFACED_MENUS = ("Tools",)
+
+
+def _menu_groups(all_nodes: list[dict]) -> list[dict]:
+    """Build a Group per surfaced top-level menu from its accessibleMenuItems."""
+    found: dict[str, dict] = {}
     for n in all_nodes:
         if str(n.get("simpleClassName") or "") != "LWMenu":
             continue
         nm = str(n.get("accessibleName") or n.get("name") or "")
-        if not nm.startswith("Tools"):
+        # Menu-bar entries look like "Tools ALT T"; submenus carry "mnemonic x".
+        m = re.match(r"^(.*?)\s+ALT\s+\S+$", nm)
+        title = (m.group(1).strip() if m else nm.strip())
+        if title not in _SURFACED_MENUS or title in found:
             continue
         items: list[dict] = []
         raw = str((n.get("attributes") or {}).get("accessibleMenuItems") or "")
@@ -757,9 +766,9 @@ def _tools_menu_group(all_nodes: list[dict]) -> dict | None:
                 item["checked"] = (parts[2] == "1")
             items.append(item)
         if items:
-            return {"label": "Tools Menu", "role": "Group", "children": items}
-        return None
-    return None
+            found[title] = {"label": f"{title} Menu", "role": "Group", "children": items}
+    # Preserve _SURFACED_MENUS order.
+    return [found[t] for t in _SURFACED_MENUS if t in found]
 
 
 def _tab_ref(nodes: list[dict], title: str) -> str:

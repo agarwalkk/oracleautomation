@@ -362,6 +362,17 @@ public final class DomScanner {
             // Promote common reflection values to first-class fields
             node.text = firstNonNull(refMap.get("getText"), node.text);
             node.tooltip = firstNonNull(refMap.get("getToolTipText"), node.tooltip);
+            // EWT tooltip (getToolTipValue) — distinct from Swing getToolTipText,
+            // and the label source for chrome buttons (toolbar icons) that expose
+            // no name/accessibleName. Read only when nothing better is present.
+            if (node.tooltip == null || node.tooltip.isEmpty()) {
+                try {
+                    Object ttv = comp.getClass().getMethod("getToolTipValue").invoke(comp);
+                    if (ttv instanceof String && !((String) ttv).trim().isEmpty())
+                        node.tooltip = ((String) ttv).trim();
+                } catch (Throwable ignored) {
+                }
+            }
             node.value = firstNonNull(
                     refMap.get("getValue"),
                     refMap.get("getSelectedItem"),
