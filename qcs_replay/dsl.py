@@ -232,6 +232,18 @@ class ReplayBackend(abc.ABC):
     @abc.abstractmethod
     def get_value(self, ref: str, descriptor: dict) -> str: ...
 
+    # Optional fine-grained actions. Surfaces that have a precise model call
+    # (e.g. Java Forms) override these; the default keeps older surfaces working
+    # by falling back to a plain click.
+    def set_check(self, ref: str, descriptor: dict, checked: bool) -> None:
+        self.click(ref, descriptor)
+
+    def expand_tree(self, ref: str, descriptor: dict) -> None:
+        self.click(ref, descriptor)
+
+    def collapse_tree(self, ref: str, descriptor: dict) -> None:
+        self.click(ref, descriptor)
+
 
 # ─── Browser / Playwright backend ─────────────────────────────────────────────
 
@@ -559,12 +571,10 @@ class JavaFormsReplayBackend(ReplayBackend):
 
     def double_click(self, ref: str, descriptor: dict) -> None:
         self._no_coordinates_or_raise(ref, descriptor, "double_click")
-        # Oracle Forms has no dedicated double-click; issue two consecutive clicks.
-        def _two_clicks() -> None:
-            elem = self._element(descriptor)
-            elem.click(simulate=True)
-            elem.click(simulate=True)
-        self._run_with_retry(_two_clicks, ref=ref, action="double_click", descriptor=descriptor)
+        self._run_with_retry(
+            lambda: self._element(descriptor).double_click(),
+            ref=ref, action="double_click", descriptor=descriptor,
+        )
 
     def set_text(self, ref: str, descriptor: dict, value: str) -> None:
         self._no_coordinates_or_raise(ref, descriptor, "set_text")
@@ -574,10 +584,10 @@ class JavaFormsReplayBackend(ReplayBackend):
         )
 
     def select_value(self, ref: str, descriptor: dict, value: str) -> None:
-        # Oracle Forms LOV/ComboBox: selection is performed by typing the value.
+        # Combo / poplist / list: model-level select, not typing.
         self._no_coordinates_or_raise(ref, descriptor, "select_value")
         self._run_with_retry(
-            lambda: self._element(descriptor).send_text(str(value), simulate=True),
+            lambda: self._element(descriptor).select_option(str(value)),
             ref=ref, action="select_value", descriptor=descriptor,
         )
 
@@ -672,6 +682,27 @@ class JavaFormsReplayBackend(ReplayBackend):
         info = self._element(descriptor).get_element_information()
         return str(info.get("text") or info.get("value") or "")
 
+    def set_check(self, ref: str, descriptor: dict, checked: bool) -> None:
+        self._no_coordinates_or_raise(ref, descriptor, "set_check")
+        self._run_with_retry(
+            lambda: self._element(descriptor).set_check(bool(checked)),
+            ref=ref, action="set_check", descriptor=descriptor,
+        )
+
+    def expand_tree(self, ref: str, descriptor: dict) -> None:
+        self._no_coordinates_or_raise(ref, descriptor, "expand_tree")
+        self._run_with_retry(
+            lambda: self._element(descriptor).expand_tree(),
+            ref=ref, action="expand_tree", descriptor=descriptor,
+        )
+
+    def collapse_tree(self, ref: str, descriptor: dict) -> None:
+        self._no_coordinates_or_raise(ref, descriptor, "collapse_tree")
+        self._run_with_retry(
+            lambda: self._element(descriptor).collapse_tree(),
+            ref=ref, action="collapse_tree", descriptor=descriptor,
+        )
+
 
 # ─── FormReplay ──────────────────────────────────────────────────────────────────────
 
@@ -761,6 +792,15 @@ class FormReplay:
 
     def select_value(self, element_ref: str, value: str) -> None:
         self._run("select_value", element_ref, value)
+
+    def set_check(self, element_ref: str, checked: bool = True) -> None:
+        self._run("set_check", element_ref, checked)
+
+    def expand_tree(self, element_ref: str) -> None:
+        self._run("expand_tree", element_ref)
+
+    def collapse_tree(self, element_ref: str) -> None:
+        self._run("collapse_tree", element_ref)
 
     def press_key(self, key: str) -> None:
         ref_str = f"{self.form_ref}.(key)"

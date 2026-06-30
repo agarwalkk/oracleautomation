@@ -55,13 +55,8 @@ class JavaAgentDriver:
     def health(self) -> dict:
         return self._run({"command": "health"})
 
-    def scan(self, probe: bool = False, target: str | None = None) -> dict:
-        command = {"command": "scan"}
-        if probe:
-            command["probe"] = "true"
-        if target:
-            command["probetarget"] = target
-        return self._run(command)
+    def scan(self) -> dict:
+        return self._run({"command": "scan"})
 
     def raw(self) -> dict:
         return self._run({"command": "raw"})
@@ -79,9 +74,15 @@ class JavaAgentDriver:
         command = {"command": "click", **locator_params(descriptor)}
         if tab_index is not None:
             command["tab_index"] = str(tab_index)
+        # tab_count is no longer required (non-robotic tab select uses the model),
+        # but is still accepted for backward compatibility with older callers.
         if tab_count is not None:
             command["tab_count"] = str(tab_count)
         return self._run(command)
+
+    def double_click(self, descriptor: dict) -> dict:
+        """Non-robotic double-click (e.g. open a record from a grid/list)."""
+        return self._run({"command": "doubleclick", **locator_params(descriptor)})
 
     def set_text(self, descriptor: dict, text: str) -> dict:
         encoded_text = base64.b64encode(text.encode("utf-8")).decode("ascii")
@@ -89,6 +90,42 @@ class JavaAgentDriver:
 
     def clear(self, descriptor: dict) -> dict:
         return self._run({"command": "clear", **locator_params(descriptor)})
+
+    def select_option(self, descriptor: dict, value: str) -> dict:
+        """Select a combo / poplist / list option by value (model-level)."""
+        encoded = base64.b64encode(str(value).encode("utf-8")).decode("ascii")
+        return self._run(
+            {"command": "selectoption", "value64": encoded, **locator_params(descriptor)}
+        )
+
+    def set_check(self, descriptor: dict, checked: bool) -> dict:
+        """Drive a checkbox / toggle to a specific state, idempotently."""
+        return self._run(
+            {
+                "command": "setcheck",
+                "value": "true" if checked else "false",
+                **locator_params(descriptor),
+            }
+        )
+
+    def expand_tree(
+        self, descriptor: dict, *, expand: bool = True, tree_row: int | None = None
+    ) -> dict:
+        """Expand (or collapse) a tree node by model row.
+
+        The row is taken from ``tree_row`` when given, otherwise the agent
+        derives it from the leaf of the descriptor's ``locatorTreePath``.
+        """
+        command = {
+            "command": "expandtree" if expand else "collapsetree",
+            **locator_params(descriptor),
+        }
+        if tree_row is not None:
+            command["tree_row"] = str(int(tree_row))
+        return self._run(command)
+
+    def collapse_tree(self, descriptor: dict, *, tree_row: int | None = None) -> dict:
+        return self.expand_tree(descriptor, expand=False, tree_row=tree_row)
 
     def press_key(self, key: str, descriptor: dict | None = None) -> dict:
         command: dict[str, Any] = {"command": "presskey", "key": key}
@@ -107,48 +144,6 @@ class JavaAgentDriver:
 
     def element_at(self, x: int, y: int) -> dict:
         return self._run({"command": "elementat", "x": int(x), "y": int(y)})
-
-    def tree_action(self, descriptor: dict, op: str) -> dict:
-        command = {"command": "treeaction", "op": op, **locator_params(descriptor)}
-        return self._run(command)
-
-    def set_checkbox(self, descriptor: dict, checked: bool) -> dict:
-        command = {
-            "command": "setcheckbox",
-            "checked": "true" if checked else "false",
-            **locator_params(descriptor),
-        }
-        return self._run(command)
-
-    def press_button(self, descriptor: dict) -> dict:
-        command = {
-            "command": "pressbutton",
-            **locator_params(descriptor),
-        }
-        return self._run(command)
-
-    def set_poplist(self, descriptor: dict, value: str) -> dict:
-        command = {
-            "command": "setpoplist",
-            "value": value,
-            **locator_params(descriptor),
-        }
-        return self._run(command)
-
-    def select_radio(self, descriptor: dict) -> dict:
-        command = {
-            "command": "selectradio",
-            **locator_params(descriptor),
-        }
-        return self._run(command)
-
-    def set_list(self, descriptor: dict, value: str) -> dict:
-        command = {
-            "command": "setlist",
-            "value": value,
-            **locator_params(descriptor),
-        }
-        return self._run(command)
 
     def _run(self, command: dict[str, Any], *, text_output: bool = False) -> dict:
         return run_agent_command(

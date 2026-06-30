@@ -33,6 +33,21 @@ class JavaAgentElement:
     def press_key(self, key: str) -> dict:
         return self.driver.press_key(key, self.descriptor)
 
+    def double_click(self) -> dict:
+        return self.driver.double_click(self.descriptor)
+
+    def select_option(self, value: str) -> dict:
+        return self.driver.select_option(self.descriptor, value)
+
+    def set_check(self, checked: bool) -> dict:
+        return self.driver.set_check(self.descriptor, checked)
+
+    def expand_tree(self, tree_row: int | None = None) -> dict:
+        return self.driver.expand_tree(self.descriptor, expand=True, tree_row=tree_row)
+
+    def collapse_tree(self, tree_row: int | None = None) -> dict:
+        return self.driver.collapse_tree(self.descriptor, tree_row=tree_row)
+
     def screenshot(self, path: str | Path) -> dict:
         return self.driver.screenshot(path, self.descriptor)
 

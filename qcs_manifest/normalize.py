@@ -76,8 +76,8 @@ def _element_ref_from_row(row: dict[str, Any]) -> str | None:
 
 def _input_from_row(row: dict[str, Any]) -> dict[str, Any] | None:
     payload: dict[str, Any] = {}
-    for key in ("text", "value", "key", "url", "user_env", "password_env", "form_name",
-                "locator_params"):
+    for key in ("text", "value", "checked", "key", "url", "user_env", "password_env",
+                "form_name", "locator_params"):
         if key in row:
             payload[key] = row[key]
     return payload or None
@@ -127,6 +127,16 @@ def _intent_from_row(row: dict[str, Any], target_ref: str) -> str:
         return "Open Oracle form"
     if op == "java_form_launch":
         return "Launch Oracle Java form"
+    if op == "java_double_click":
+        return f"Double-click {target_ref or 'target'}"
+    if op == "java_select_value":
+        return f"Select a value in {target_ref or 'target'}"
+    if op == "java_set_check":
+        return f"Set checkbox {target_ref or 'target'}"
+    if op == "java_expand_tree":
+        return f"Expand {target_ref or 'target'}"
+    if op == "java_collapse_tree":
+        return f"Collapse {target_ref or 'target'}"
     return op.replace("_", " ")
 
 

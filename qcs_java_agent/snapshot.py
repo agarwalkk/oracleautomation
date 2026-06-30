@@ -291,10 +291,10 @@ _ROLE_ACTIONS: dict[str, list[str]] = {
     "ComboBox": ["select"],
     "Checkbox": ["toggle"],
     "RadioButton": ["select"],
-    "List": ["select"],
-    "Tree": ["select", "expand"],
-    "TreeItem": ["select"],
-    "Table": ["select"],
+    "List": ["select", "double_click"],
+    "Tree": ["select", "expand", "collapse"],
+    "TreeItem": ["select", "expand", "collapse", "double_click"],
+    "Table": ["select", "double_click"],
     "Menu": ["open"],
     "MenuItem": ["click"],
     "Tab": ["activate"],
@@ -346,7 +346,10 @@ def _element_actions(el: dict) -> list[str]:
     java = el.get("java") or {}
     states: list[str] = el.get("states") or []
     if java.get("treePath") or role == "TreeItem":
-        return ["click", "select"]
+        # Tree nodes are selectable, openable, and (when they hold children)
+        # expandable. expand/collapse are safe to advertise on any tree node —
+        # the agent no-ops them on a leaf.
+        return ["click", "select", "expand", "collapse", "double_click"]
     if bool(java.get("isMirror")) or bool(java.get("locked")):
         return ["inspect"]  # read-only echo / runtime-locked
     # LOV field — ground truth from isLOVButtonDisplayed(): supports opening the

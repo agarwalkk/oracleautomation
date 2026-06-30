@@ -220,6 +220,28 @@ def generate_test(recording_input: Path, out_dir: Path, test_name: str) -> None:
             )
             lines.append(f"    {var}.click({business_element_ref!r})")
 
+        elif action == "java_double_click" and business_form_ref and business_element_ref:
+            var = _get_form_var(business_form_ref, technical_ref=tech_form_ref, needs_review=needs_review)
+            lines.append(f"    {var}.double_click({business_element_ref!r})")
+
+        elif action == "java_select_value" and business_form_ref and business_element_ref:
+            var = _get_form_var(business_form_ref, technical_ref=tech_form_ref, needs_review=needs_review)
+            value = inp.get("value", inp.get("text", ""))
+            lines.append(f"    {var}.select_value({business_element_ref!r}, {value!r})")
+
+        elif action == "java_set_check" and business_form_ref and business_element_ref:
+            var = _get_form_var(business_form_ref, technical_ref=tech_form_ref, needs_review=needs_review)
+            checked = bool(inp.get("checked", True))
+            lines.append(f"    {var}.set_check({business_element_ref!r}, {checked!r})")
+
+        elif action == "java_expand_tree" and business_form_ref and business_element_ref:
+            var = _get_form_var(business_form_ref, technical_ref=tech_form_ref, needs_review=needs_review)
+            lines.append(f"    {var}.expand_tree({business_element_ref!r})")
+
+        elif action == "java_collapse_tree" and business_form_ref and business_element_ref:
+            var = _get_form_var(business_form_ref, technical_ref=tech_form_ref, needs_review=needs_review)
+            lines.append(f"    {var}.collapse_tree({business_element_ref!r})")
+
         elif action == "java_press_key":
             key = inp.get("key", "")
             # Use step's form_ref when available; otherwise infer from previous step.
