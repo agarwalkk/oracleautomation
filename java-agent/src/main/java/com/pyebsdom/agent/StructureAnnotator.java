@@ -62,6 +62,52 @@ public final class StructureAnnotator {
         annotateGrids(all);
         annotateTabs(all, parent);
         annotateMirrors(all);
+        annotateActions(all);
+    }
+
+    // ── 5. Authoritative action verbs (Forms item type + state) ───────────
+
+    /**
+     * Stamp {@link DomNode#formsActions} — the exact actuator verb(s) the agent
+     * supports for this element — derived from the handler type and live state.
+     * Lets the recorder dispatch without re-deriving from role. {@code null} for
+     * non-Forms items, where the renderer keeps its role heuristic.
+     */
+    private static void annotateActions(List<DomNode> all) {
+        for (DomNode n : all) {
+            String a = actionsFor(n);
+            if (a != null)
+                n.formsActions = a;
+        }
+    }
+
+    private static String actionsFor(DomNode n) {
+        if (n.treePath != null && !n.treePath.isEmpty())
+            return "treeAction"; // tree / LOV-list row
+        if (n.locked || n.isMirror)
+            return "inspect";
+        String ft = n.formsType;
+        if (ft == null)
+            return null;
+        switch (ft) {
+            case "TextFieldItem":
+                if (!n.editable)
+                    return "inspect";
+                return n.hasLov ? "setText,openLov" : "setText";
+            case "CheckboxItem":
+                return "setCheckbox";
+            case "ButtonItem":
+            case "IconicButtonItem":
+                return "pressButton";
+            case "PopListItem":
+                return "setPoplist";
+            case "TListItem":
+                return "setList";
+            case "RadioButtonItem":
+                return "selectRadio";
+            default:
+                return null;
+        }
     }
 
     // ── 1. LOV reclassification ───────────────────────────────────────────
@@ -138,7 +184,14 @@ public final class StructureAnnotator {
         Map<String, List<DomNode[]>> byLabel = new LinkedHashMap<>();
         for (DomNode[] pair : cellPairs) {
             DomNode cell = pair[0];
-            byLabel.computeIfAbsent(cell.canonicalLabel, k -> new ArrayList<>()).add(pair);
+            // Authoritative column identity: the Forms item name (mName) when
+            // present, else the display label. Distinguishes columns that share a
+            // header and is stable across scans/language; the display header stays
+            // canonicalLabel (set as columnKey below).
+            String colKey = (cell.formsItemName != null && !cell.formsItemName.isEmpty())
+                    ? cell.formsItemName
+                    : cell.canonicalLabel;
+            byLabel.computeIfAbsent(colKey, k -> new ArrayList<>()).add(pair);
         }
 
         Map<String, List<DomNode[]>> gridColumns = new LinkedHashMap<>();

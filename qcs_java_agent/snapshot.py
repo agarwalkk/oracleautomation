@@ -272,6 +272,9 @@ def java_nodes_to_repo_elements(scan: dict) -> list[dict]:
                 "locked": node.get("locked", False),
                 "formsType": node.get("formsType"),
                 "formsTabName": node.get("formsTabName"),
+                "formsItemName": node.get("formsItemName"),
+                "formsActions": node.get("formsActions"),
+                "dirty": node.get("dirty", False),
                 "containerRole": node.get("containerRole"),
                 "ownerTab": node.get("ownerTab"),
                 "recordIndex": node.get("recordIndex", -1),
@@ -326,6 +329,7 @@ def build_full_overlay_elements(elements: list[dict]) -> list[dict]:
             "role": str(el.get("role") or ""),
             "type": str(java.get("simpleClassName") or el.get("role") or ""),
             "actions": _element_actions(el),
+            "forms_action": str(java.get("formsActions") or ""),
             "value": str(java.get("value") or el.get("text") or ""),
             "enabled": "enabled" in states,
             "bounds": {"x": x, "y": y, "width": w, "height": h},
@@ -770,7 +774,7 @@ def _render_tab_content(tab_nodes: list[dict]) -> list[dict]:
     grid_cells = [n for n in tab_nodes if n.get("containerRole") == "GridCell"]
     # A real grid needs >=2 distinct columns; a lone repeating column is not a
     # table (guards against a stray single-column GridCell annotation).
-    distinct_cols = {(c.get("columnKey") or _label(c)) for c in grid_cells}
+    distinct_cols = {(c.get("formsItemName") or c.get("columnKey") or _label(c)) for c in grid_cells}
     if len(distinct_cols) < 2:
         return list(_field_rows(tab_nodes))
     loose = [n for n in tab_nodes if n.get("containerRole") != "GridCell"]
@@ -780,18 +784,31 @@ def _render_tab_content(tab_nodes: list[dict]) -> list[dict]:
 
 
 def _grid_node(cells: list[dict]) -> dict:
-    """Assemble a Table node purely from recordIndex + columnKey (no geometry)."""
-    columns: list[str] = []
+    """Assemble a Table node from recordIndex + column identity (no geometry).
+
+    Columns are grouped by the authoritative Forms item name (``formsItemName``)
+    when present, so two columns that share a header stay distinct; the friendly
+    label (``columnKey``) is kept for display.
+    """
+    def gkey(c: dict) -> str:
+        return str(c.get("formsItemName") or c.get("columnKey") or _label(c))
+
+    def glabel(c: dict) -> str:
+        return str(c.get("columnKey") or _label(c))
+
+    columns: list[str] = []          # ordered group keys
+    col_label: dict[str, str] = {}   # group key -> display header
     seen: set[str] = set()
     for c in sorted(cells, key=lambda n: int(n.get("recordIndex", 0))):
-        col = c.get("columnKey") or _label(c)
-        if col not in seen:
-            seen.add(col)
-            columns.append(col)
+        k = gkey(c)
+        if k not in seen:
+            seen.add(k)
+            columns.append(k)
+            col_label[k] = glabel(c)
 
     rows: dict[int, dict[str, dict]] = {}
     for c in cells:
-        rows.setdefault(int(c.get("recordIndex", 0)), {})[c.get("columnKey") or _label(c)] = c
+        rows.setdefault(int(c.get("recordIndex", 0)), {})[gkey(c)] = c
 
     table_rows: list[dict] = []
     for ridx in sorted(rows):
@@ -804,7 +821,7 @@ def _grid_node(cells: list[dict]) -> dict:
             if cell:
                 out_cells.append({
                     "element_ref": _eid(cell),
-                    "current_value": str(cell.get("text") or ""),
+                    "current_value": str(cell.get("text") or cell.get("value") or ""),
                     "role": cell.get("semanticType"),
                 })
             else:
@@ -813,7 +830,8 @@ def _grid_node(cells: list[dict]) -> dict:
 
     first_cell = cells[0] if cells else {}
     ref = f"{_eid(first_cell)}_table" if first_cell else ""
-    return {"element_ref": ref, "role": "Table", "label": "Table", "table_columns": columns,
+    return {"element_ref": ref, "role": "Table", "label": "Table",
+            "table_columns": [col_label[k] for k in columns],
             "table_rows": table_rows, "children": []}
 
 
@@ -845,6 +863,8 @@ def _field_rows(nodes: list[dict]) -> list[dict]:
             node["required"] = True
         if n.get("locked"):
             node["locked"] = True
+        if n.get("dirty"):
+            node["dirty"] = True
         cur = str(n.get("text") or "").strip()
         if cur and cur != node["label"]:
             node["current_value"] = cur
@@ -914,6 +934,8 @@ def _render_text(tree: list[dict], form_title: str,
             suffix += " (required)"
         if n.get("locked"):
             suffix += " (locked)"
+        if n.get("dirty"):
+            suffix += " (modified)"
         cv = n.get("current_value")
         if cv:
             suffix += f" = {cv}"

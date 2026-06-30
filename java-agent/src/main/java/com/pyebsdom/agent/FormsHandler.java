@@ -79,6 +79,53 @@ public final class FormsHandler {
             if (!s.isEmpty())
                 node.formsItemName = s;
         }
+
+        // Dirty (unsaved edit) — handler ground truth.
+        if (Boolean.TRUE.equals(boolGetterOrField(h, "isDirty", "mDirty")))
+            node.dirty = true;
+
+        // Confirmed current value for list/poplist when the scan's getText path
+        // didn't capture it (these expose getSelectedItem(), not getText()).
+        if ((node.value == null || node.value.isEmpty())
+                && ("PopListItem".equals(node.formsType) || "TListItem".equals(node.formsType))) {
+            Object sel = call0(comp, "getSelectedItem");
+            if (sel != null) {
+                String sv = String.valueOf(sel).trim();
+                if (!sv.isEmpty())
+                    node.value = sv;
+            }
+        }
+
+        // Authoritative semantic role from the Forms item type — overrides the
+        // widget-class heuristic where it is clearly better (e.g. the
+        // LWCheckbox-vs-CheckBox wrapper). TextFieldItem is intentionally left to
+        // the classifier + LOV reclassification (Field/TextArea/LOV nuance).
+        String role = roleForHandler(node.formsType);
+        if (role != null)
+            node.semanticType = role;
+    }
+
+    /** Authoritative semantic role for a Forms item handler class, or null. */
+    private static String roleForHandler(String formsType) {
+        if (formsType == null)
+            return null;
+        switch (formsType) {
+            case "CheckboxItem":
+                return "Checkbox";
+            case "ButtonItem":
+            case "IconicButtonItem":
+                return "Button";
+            case "PopListItem":
+                return "ComboBox";
+            case "TListItem":
+                return "List";
+            case "RadioButtonItem":
+                return "RadioButton";
+            case "FormWindow":
+                return "Window";
+            default:
+                return null;
+        }
     }
 
     /**

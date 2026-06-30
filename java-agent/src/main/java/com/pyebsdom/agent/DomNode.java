@@ -86,6 +86,17 @@ public final class DomNode {
      * non-Forms-item components.
      */
     public String formsItemName;
+    /**
+     * Authoritative actuator verb(s) for this element (comma-separated), derived
+     * from the Forms item type + state — e.g. {@code "setText,openLov"},
+     * {@code "setCheckbox"}, {@code "pressButton"}, {@code "setPoplist"},
+     * {@code "setList"}, {@code "selectRadio"}, {@code "treeAction"}, or
+     * {@code "inspect"} for read-only items. {@code null} for non-Forms items
+     * (the renderer falls back to its role heuristic).
+     */
+    public String formsActions;
+    /** True when the item has an unsaved edit (handler {@code isDirty()}). */
+    public boolean dirty;
 
     // ── Type ──────────────────────────────────────────────────────────────
     /** Fully-qualified Java class name. */
@@ -205,6 +216,8 @@ public final class DomNode {
         sb.append("\"formsType\":").append(JsonUtil.quoted(formsType)).append(',');
         sb.append("\"formsTabName\":").append(JsonUtil.quoted(formsTabName)).append(',');
         sb.append("\"formsItemName\":").append(JsonUtil.quoted(formsItemName)).append(',');
+        sb.append("\"formsActions\":").append(JsonUtil.quoted(formsActions)).append(',');
+        sb.append("\"dirty\":").append(dirty).append(',');
 
         // Type
         sb.append("\"type\":").append(JsonUtil.quoted(type)).append(',');
