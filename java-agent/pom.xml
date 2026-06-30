@@ -8,7 +8,7 @@
 
     <groupId>com.pyebsdom</groupId>
     <artifactId>ebs-dom-agent</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <packaging>jar</packaging>
 
     <name>EBS DOM Agent</name>
@@ -48,26 +48,6 @@
             </plugin>
 
             <!--
-                exec:java — launch SampleSwingApp without an explicit
-                classpath argument.  Bound to the 'test' phase so it
-                is NOT executed during a normal 'mvn clean package'.
-
-                Usage:
-                  mvn exec:java
-                or, from the repo root:
-                  java -cp java-agent\target\ebs-dom-agent.jar \
-                       com.pyebsdom.testapp.SampleSwingApp
-            -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.1.0</version>
-                <configuration>
-                    <mainClass>com.pyebsdom.testapp.SampleSwingApp</mainClass>
-                </configuration>
-            </plugin>
-
-            <!--
                 Package as an agent JAR.
                 Manifest entries required by java.lang.instrument:
                   Premain-Class     – loaded via -javaagent:
@@ -81,8 +61,8 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Premain-Class>com.pyebsdom.agent.EbsDomBootstrapAgent</Premain-Class>
-                            <Agent-Class>com.pyebsdom.agent.EbsDomBootstrapAgent</Agent-Class>
+                            <Premain-Class>com.pyebsdom.agent.AgentBootstrap</Premain-Class>
+                            <Agent-Class>com.pyebsdom.agent.AgentBootstrap</Agent-Class>
                             <Boot-Class-Path>ebs-dom-agent.jar</Boot-Class-Path>
                             <Can-Redefine-Classes>false</Can-Redefine-Classes>
                             <Can-Retransform-Classes>false</Can-Retransform-Classes>

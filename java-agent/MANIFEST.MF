@@ -1,6 +1,6 @@
 Manifest-Version: 1.0
-Premain-Class: com.pyebsdom.agent.EbsDomBootstrapAgent
-Agent-Class: com.pyebsdom.agent.EbsDomBootstrapAgent
+Premain-Class: com.pyebsdom.agent.AgentBootstrap
+Agent-Class: com.pyebsdom.agent.AgentBootstrap
 Boot-Class-Path: ebs-dom-agent.jar
 Can-Redefine-Classes: false
 Can-Retransform-Classes: false
