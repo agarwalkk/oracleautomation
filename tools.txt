@@ -1,0 +1,263 @@
+Attached to pid 18892
+
+===================== MENUS (LWMenu) =====================
+
+  MENU: 'TitleBar$SystemMenu84'  (SystemMenu)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'TitleBar$SystemMenu1'  (SystemMenu)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'File ALT F'  (LWMenu)
+      - 'New mnemonic N'                         menu_item 0
+      - 'Open mnemonic O'                        menu_item 0
+      - 'Save mnemonic S'                        menu_item 0
+      - 'Save and Proceed mnemonic v'            menu_item 0
+      - 'Next Step mnemonic t'                   menu_item 0
+      - 'Export mnemonic E'                      menu_item 0
+      - 'Place on Navigator mnemonic g'          menu_item 0
+      - 'Log on as a Different User... mnemonic L' menu_item 0
+      - 'Switch Responsibility... mnemonic w'    menu_item 0
+      - 'Print... mnemonic P'                    menu_item 0
+      - 'Close Form mnemonic C'                  menu_item 0
+      - 'Exit Oracle Applications mnemonic x'    menu_item 0
+
+  MENU: 'LWMenuSeparator111'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator112'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator113'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator114'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Edit ALT E'  (LWMenu)
+      - 'Undo Typing mnemonic U'                 menu_item 0
+      - 'Cut mnemonic t'                         menu_item 0
+      - 'Copy mnemonic C'                        menu_item 0
+      - 'Paste mnemonic P'                       menu_item 0
+      - 'Duplicate mnemonic l'                   menu_item 0
+      - 'Clear mnemonic r'                       menu_item 0
+      - 'Delete mnemonic D'                      menu_item 0
+      - 'Select All mnemonic S'                  menu_item 0
+      - 'Deselect All mnemonic A'                menu_item 0
+      - 'Edit Field... mnemonic E'               menu_item 0
+      - 'Preferences mnemonic f'                 menu_item 0
+
+  MENU: 'LWMenuSeparator115'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Duplicate mnemonic l'  (LWMenu)
+      - 'Record Above mnemonic R'                menu_item 0
+      - 'Field Above mnemonic F'                 menu_item 0
+
+  MENU: 'LWMenuSeparator116'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Clear mnemonic r'  (LWMenu)
+      - 'Record mnemonic R'                      menu_item 0
+      - 'Field mnemonic F'                       menu_item 0
+      - 'Block mnemonic B'                       menu_item 0
+      - 'Form mnemonic m'                        menu_item 0
+
+  MENU: 'LWMenuSeparator117'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator118'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Preferences mnemonic f'  (LWMenu)
+      - 'Change Password... mnemonic C'          menu_item 0
+      - 'Profiles mnemonic P'                    menu_item 0
+
+  MENU: 'View ALT V'  (LWMenu)
+      - 'Show Navigator mnemonic N'              menu_item 0
+      - 'Zoom mnemonic Z'                        menu_item 0
+      - 'Find... mnemonic F'                     menu_item 0
+      - 'Find All mnemonic i'                    menu_item 0
+      - 'Query By Example mnemonic Q'            menu_item 0
+      - 'Record mnemonic d'                      menu_item 0
+      - 'Translations... mnemonic T'             menu_item 0
+      - 'Attachments... mnemonic A'              menu_item 0
+      - 'Summary/Detail mnemonic S'              menu_item 0
+      - 'Requests mnemonic R'                    menu_item 0
+
+  MENU: 'LWMenuSeparator119'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Query By Example mnemonic Q'  (LWMenu)
+      - 'Enter mnemonic E'                       menu_item 0
+      - 'Run mnemonic R'                         menu_item 0
+      - 'Cancel mnemonic C'                      menu_item 0
+      - 'Show Last Criteria mnemonic S'          menu_item 0
+      - 'Count Matching Records mnemonic M'      menu_item 0
+
+  MENU: 'LWMenuSeparator120'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator121'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Record mnemonic d'  (LWMenu)
+      - 'First mnemonic F'                       menu_item 0
+      - 'Last mnemonic L'                        menu_item 0
+
+  MENU: 'LWMenuSeparator122'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator123'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator124'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Folder ALT l'  (LWMenu)
+      - 'New... mnemonic N'                      menu_item 0
+      - 'Open... mnemonic O'                     menu_item 0
+      - 'Save mnemonic S'                        menu_item 0
+      - 'Save As... mnemonic A'                  menu_item 0
+      - 'Delete... mnemonic D'                   menu_item 0
+      - 'Show Field... mnemonic F'               menu_item 0
+      - 'Hide Field mnemonic H'                  menu_item 0
+      - 'Move Right mnemonic R'                  menu_item 0
+      - 'Move Left mnemonic L'                   menu_item 0
+      - 'Move Up mnemonic U'                     menu_item 0
+      - 'Move Down mnemonic M'                   menu_item 0
+      - 'Widen Field mnemonic W'                 menu_item 0
+      - 'Shrink Field mnemonic k'                menu_item 0
+      - 'Change Prompt... mnemonic C'            menu_item 0
+      - 'Autosize All... mnemonic z'             menu_item 0
+      - 'Sort Data...'                           menu_item 0
+      - 'View Query... mnemonic V'               menu_item 0
+      - 'Reset Query mnemonic Q'                 menu_item 0
+      - 'Folder Tools mnemonic T'                menu_item 0
+
+  MENU: 'LWMenuSeparator125'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator126'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator127'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator128'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'LWMenuSeparator129'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Tools ALT T'  (LWMenu)
+      - 'Work Dates mnemonic D'                  menu_item 0
+      - 'Week Start Dates mnemonic W'            menu_item 0
+      - 'Period Start Dates mnemonic P'          menu_item 0
+      - 'Repetitive Period Start Dates mnemonic R' menu_item 0
+
+  MENU: 'Window ALT W'  (LWMenu)
+      - 'Cascade mnemonic C'                     menu_item 0
+      - 'Tile Horizontally mnemonic H'           menu_item 0
+      - 'Tile Vertically mnemonic V'             menu_item 0
+
+  MENU: 'LWMenuSeparator133'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'MDIWindowMenu650'  (MDIWindowMenu)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Help ALT H'  (LWMenu)
+      - 'Window Help mnemonic W'                 menu_item 0
+      - 'Oracle Applications Library mnemonic L' menu_item 0
+      - 'Keyboard Help... mnemonic K'            menu_item 0
+      - 'Diagnostics mnemonic D'                 menu_item 0
+      - 'Record History mnemonic R'              menu_item 0
+      - 'About Oracle Applications... mnemonic O' menu_item 0
+
+  MENU: 'LWMenuSeparator134'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Diagnostics mnemonic D'  (LWMenu)
+      - 'Display Database Error... mnemonic D'   menu_item 0
+      - 'Examine... mnemonic E'                  menu_item 0
+      - 'Logging'                                menu_item 0
+      - 'Test Web Agent... mnemonic W'           menu_item 0
+      - 'Trace mnemonic T'                       menu_item 0
+      - 'Debug mnemonic b'                       menu_item 0
+      - 'Properties mnemonic P'                  menu_item 0
+      - 'Custom Code mnemonic C'                 menu_item 0
+
+  MENU: 'Logging'  (LWMenu)
+      - 'Preferences...'                         menu_item 0
+      - 'View...'                                menu_item 0
+
+  MENU: 'Trace mnemonic T'  (LWMenu)
+      - 'No Trace mnemonic N'                    menu_item 1
+      - 'Regular Trace mnemonic R'               menu_item 0
+      - 'Trace with Binds mnemonic B'            menu_item 0
+      - 'Trace with Waits mnemonic W'            menu_item 0
+      - 'Trace with Binds and Waits mnemonic T'  menu_item 0
+      - 'PL/SQL Profiling'                       check_box 0
+
+  MENU: 'LWMenuSeparator135'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+  MENU: 'Properties mnemonic P'  (LWMenu)
+      - 'Item mnemonic I'                        menu_item 0
+      - 'Folder mnemonic F'                      menu_item 0
+
+  MENU: 'Custom Code mnemonic C'  (LWMenu)
+      - 'Normal mnemonic N'                      menu_item 1
+      - 'Off mnemonic O'                         menu_item 0
+      - 'Core Code Only mnemonic C'              menu_item 0
+      - 'Show Custom Events mnemonic E'          menu_item 0
+      - 'Personalize mnemonic z'                 menu_item 0
+
+  MENU: 'LWMenuSeparator136'  (LWMenuSeparator)
+      (no accessibleMenuItems captured — may need the menu opened once)
+
+================= TOOLBAR / ICONIC BUTTONS =================
+  label                          formsType         action       hId    class
+  ------------------------------------------------------------------------------
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  Copy/Merge Forecast alt M      ButtonItem                     1911   Button
+  Consume alt C                  ButtonItem                     1912   Button
+  Forecast  Set Items alt I      ButtonItem                     1913   Button
+  Forecast Items alt r           ButtonItem                     1914   Button
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  Remove from List               IconicButtonItem               77     VButton
+  Add to List                    IconicButtonItem               79     VButton
+  Collapse                       IconicButtonItem               81     VButton
+  Collapse All                   IconicButtonItem               83     VButton
+  Expand All                     IconicButtonItem               85     VButton
+  Expand                         IconicButtonItem               87     VButton
+  Expand Branch                  IconicButtonItem               89     VButton
+  Open alt O                     ButtonItem                     74     Button
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+  ToolBarButton                                                        ToolBarButton
+
+Tell me which menus (and which of their items) + which toolbar buttons to surface (by label), and I'll wire snapshot to read them from the full scan as named groups.

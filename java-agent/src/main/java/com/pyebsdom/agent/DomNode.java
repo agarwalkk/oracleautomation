@@ -175,10 +175,10 @@ public final class DomNode {
     public String cursorName;
 
     // ── Extended attributes (reflection results) ──────────────────────────
-    /** Key-value pairs from safe reflection methods, e.g. getItemCount. */
+    /**
+     * Key-value pairs from safe reflection methods (e.g. tab titles, menu items).
+     */
     public final Map<String, String> attributes = new LinkedHashMap<>();
-    /** Raw map from every reflection method that returned a value. */
-    public final Map<String, String> reflection = new LinkedHashMap<>();
 
     // ── Locators ──────────────────────────────────────────────────────────
     public final List<LocatorCandidate> locators = new ArrayList<>();
@@ -274,9 +274,6 @@ public final class DomNode {
 
         // Attributes map
         sb.append("\"attributes\":").append(mapToJson(attributes)).append(',');
-
-        // Reflection map
-        sb.append("\"reflection\":").append(mapToJson(reflection)).append(',');
 
         // Locators array
         sb.append("\"locators\":[");

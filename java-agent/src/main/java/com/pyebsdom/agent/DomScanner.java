@@ -354,8 +354,10 @@ public final class DomScanner {
 
         // ── Reflection extraction ─────────────────────────────────────────
         try {
+            // Reflection results are mined for the first-class fields below
+            // (text/value/editable/selected); the raw map is intentionally NOT
+            // stored on the node — it was a legacy dump nothing consumes.
             Map<String, String> refMap = ReflectionExtractor.extract(comp);
-            node.reflection.putAll(refMap);
 
             // Promote common reflection values to first-class fields
             node.text = firstNonNull(refMap.get("getText"), node.text);
@@ -384,20 +386,9 @@ public final class DomScanner {
                         || "on".equalsIgnoreCase(state);
             }
 
-            // Extra attributes worth surfacing
-            for (String key : new String[] {
-                    "getItemCount", "getRowCount", "getColumnCount", "getSelectedIndex",
-                    "getSelectedRow", "getSelectedRows", "getLeadSelectionIndex",
-                    "getBackground", "getForeground" }) {
-                if (refMap.containsKey(key)) {
-                    node.attributes.put(key, refMap.get(key));
-                }
-            }
-
             List<String> options = ReflectionExtractor.extractOptions(comp, 100);
             if (!options.isEmpty()) {
                 node.valueOptions.addAll(options);
-                node.attributes.put("valueOptionCount", Integer.toString(options.size()));
             }
 
             List<String> treeRows = null;
@@ -424,34 +415,6 @@ public final class DomScanner {
             if (treeRows != null && !treeRows.isEmpty()) {
                 node.attributes.put("treeRowCount", Integer.toString(treeRows.size()));
                 node.attributes.put("treeRows", String.join(" || ", treeRows));
-            }
-
-            // Probe ListView-style components for available accessor methods
-            if (node.simpleClassName != null
-                    && (node.simpleClassName.equals("ListView")
-                            || node.simpleClassName.contains("List"))
-                    && (treeRows == null || treeRows.isEmpty())
-                    && node.valueOptions.isEmpty()) {
-                StringBuilder methodProbe = new StringBuilder();
-                for (Method m : comp.getClass().getMethods()) {
-                    String mn = m.getName();
-                    if ((mn.startsWith("get") || mn.startsWith("is"))
-                            && m.getParameterCount() <= 2
-                            && !mn.equals("getClass")) {
-                        Class<?>[] pts = m.getParameterTypes();
-                        StringBuilder sig = new StringBuilder(mn).append("(");
-                        for (int pi = 0; pi < pts.length; pi++) {
-                            if (pi > 0)
-                                sig.append(",");
-                            sig.append(pts[pi].getSimpleName());
-                        }
-                        sig.append(")");
-                        if (methodProbe.length() > 0)
-                            methodProbe.append(" | ");
-                        methodProbe.append(sig);
-                    }
-                }
-                node.attributes.put("_listMethodProbe", methodProbe.toString());
             }
 
             // Tab captions (Main / Shipping / Financials / ...), if available.
@@ -509,7 +472,6 @@ public final class DomScanner {
                 node.text = prompt;
                 node.displayName = prompt;
                 node.confidence = 0.70;
-                node.reflection.put("drawnPanelPrompt", prompt);
             }
         }
 

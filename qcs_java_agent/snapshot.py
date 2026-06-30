@@ -261,7 +261,6 @@ def java_nodes_to_repo_elements(scan: dict) -> list[dict]:
                 "value": node.get("value"),
                 "valueOptions": node.get("valueOptions") or [],
                 "locators": node.get("locators") or [],
-                "reflection": node.get("reflection") or {},
                 "attributes": node.get("attributes") or {},
                 # schema-2.0 structure + identity
                 "semanticId": node.get("semanticId"),
