@@ -226,6 +226,10 @@ public final class StructureAnnotator {
         if (dedicated.isEmpty() && tabRegion.isEmpty())
             return;
 
+        // Pass 1: attribute owners and remember which labels actually belong to
+        // a tab. Also remember whether each node sits inside a tab region.
+        Map<DomNode, Boolean> inRegionMap = new HashMap<>();
+        Set<String> attributedLabels = new HashSet<>();
         for (DomNode n : all) {
             DomNode cur = parent.get(n);
             String owner = null;
@@ -237,11 +241,27 @@ public final class StructureAnnotator {
                     inRegion = true;
                 cur = parent.get(cur);
             }
+            inRegionMap.put(n, inRegion);
             if (owner != null) {
                 n.ownerTab = owner;
-            } else if (inRegion && n.containerRole == null && isDataField(n.semanticType)) {
-                // data field inside the tab area but matching no tab → background
-                // view (e.g. a non-selected record block). Renderer drops it.
+                if (n.canonicalLabel != null)
+                    attributedLabels.add(n.canonicalLabel);
+            }
+        }
+
+        // Pass 2: only orphan a field when it DUPLICATES a tab-attributed field —
+        // i.e. it is the background (non-selected record) copy the renderer should
+        // drop. A field with no tab marker and a label that appears on no tab is a
+        // real header/query field (e.g. "Ship To", "Order Status") and is KEPT
+        // (ownerTab stays null) rather than dropped, so it is never lost.
+        for (DomNode n : all) {
+            if (n.ownerTab != null || n.containerRole != null)
+                continue;
+            if (!isDataField(n.semanticType))
+                continue;
+            if (!Boolean.TRUE.equals(inRegionMap.get(n)))
+                continue;
+            if (n.canonicalLabel != null && attributedLabels.contains(n.canonicalLabel)) {
                 n.containerRole = "OrphanTabContent";
             }
         }

@@ -1,0 +1,7 @@
+{
+  "status": "ok",
+  "command": "health",
+  "agent": "ebs-dom-agent",
+  "version": "0.2.0",
+  "message": "Agent command executed successfully"
+}

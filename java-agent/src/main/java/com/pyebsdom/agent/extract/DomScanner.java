@@ -517,9 +517,66 @@ public final class DomScanner {
             }
         }
 
+        // Materialise INACTIVE tab pages from the model (FormsTabPanel.getPage(i))
+        // so one scan captures every tab's fields without navigating/clicking
+        // tabs. The active page is already in the Container loop above; inactive
+        // pages are not in getComponents() (EWT swaps them), so we page through
+        // them here and attribute each to its tab title.
+        if (TabPageExpander.isTabPanel(node)) {
+            expandTabPages(node, comp, idGen);
+        }
+
         // Diagnostic reflection probe (no-op unless armed via scan(probe=true)).
         ReflectionProbe.maybe(node, comp);
         return node;
+    }
+
+    /**
+     * Scan the panel's inactive pages and attach them as children. Records
+     * {@code _tabPagesExpanded} (added/total) and {@code _tabPagesWithContent}
+     * so a single test scan reveals whether inactive pages are eager (populated)
+     * or lazy (empty until first activated).
+     */
+    private static void expandTabPages(DomNode node, Component comp, AtomicInteger idGen) {
+        try {
+            List<TabPageExpander.Page> pages = TabPageExpander.enumerate(comp);
+            if (pages.isEmpty()) {
+                // Always leave a marker so "ran but found no pages/method" is
+                // distinguishable from "expander not in this build" (no marker).
+                node.attributes.put("_tabPagesExpanded", "0/0");
+                return;
+            }
+            int added = 0, withContent = 0;
+            for (TabPageExpander.Page p : pages) {
+                if (p.selected || p.component == null)
+                    continue;
+                DomNode pageNode = buildNode(p.component, node.path, node.depth + 1,
+                        node.children.size(), pages.size(), idGen,
+                        true /* force raw — inactive pages are invisible */);
+                forceOwnerTab(pageNode, p.title);
+                node.children.add(pageNode);
+                added++;
+                if (!pageNode.children.isEmpty())
+                    withContent++;
+            }
+            node.attributes.put("_tabPagesExpanded", added + "/" + pages.size());
+            node.attributes.put("_tabPagesWithContent", Integer.toString(withContent));
+        } catch (Throwable t) {
+            node.attributes.put("_tabPageExpandError",
+                    t.getClass().getName() + ": " + t.getMessage());
+        }
+    }
+
+    /**
+     * Attribute an expanded page subtree to its tab (only where not already set).
+     */
+    private static void forceOwnerTab(DomNode n, String title) {
+        if (title == null || title.isEmpty())
+            return;
+        if (n.ownerTab == null)
+            n.ownerTab = title;
+        for (DomNode c : n.children)
+            forceOwnerTab(c, title);
     }
 
     // ── Logical child expansion (menu / toolbar) ─────────────────────────

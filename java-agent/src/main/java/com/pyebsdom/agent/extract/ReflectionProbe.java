@@ -151,7 +151,7 @@ public final class ReflectionProbe {
         sb.append("\"nested\":[");
         if (withNested) {
             String[] getters = {
-                    "getCanvas", "getTabPage", "getPage", "getModel",
+                    "getCanvas", "getTabPage", "getModel",
                     "getSelectionModel", "getBlock", "getSheet", "getModule" };
             int n = 0;
             for (String g : getters) {
@@ -163,6 +163,16 @@ public final class ReflectionProbe {
                             .append(",\"obj\":").append(objJson(child, false)).append('}');
                     n++;
                 }
+            }
+            // Follow getPage(0) (int-arg) so probing a FormsTabPanel reveals the
+            // TabPanelPage surface — i.e. which method returns its component.
+            Object page0 = callInt0(o, "getPage", 0);
+            if (page0 != null) {
+                if (n > 0)
+                    sb.append(',');
+                sb.append("{\"via\":\"getPage(0)\",\"obj\":")
+                        .append(objJson(page0, false)).append('}');
+                n++;
             }
         }
         sb.append("]}");
@@ -252,6 +262,16 @@ public final class ReflectionProbe {
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
+
+    private static Object callInt0(Object o, String name, int arg) {
+        try {
+            Method m = o.getClass().getMethod(name, int.class);
+            m.setAccessible(true);
+            return m.invoke(o, arg);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
 
     private static Object call0(Object o, String name) {
         try {
