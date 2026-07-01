@@ -65,6 +65,11 @@ public final class ComponentClassifier {
         // Oracle EWT/Forms classes (which all extend java.awt.Container) are
         // given precise types rather than falling through to "Panel".
         String fqn = component.getClass().getName();
+        // ExtendedCheckbox backs BOTH Forms checkboxes and radio buttons;
+        // accessible role is the only reliable discriminator.
+        if ("oracle.forms.ui.ExtendedCheckbox".equals(fqn) && isRadioRole(component)) {
+            return "RadioButton";
+        }
         String fqnResult = classifyByExactFqn(fqn);
         if (fqnResult != null) return fqnResult;
 
@@ -300,4 +305,18 @@ public final class ComponentClassifier {
         if (role.contains("canvas"))       return "Canvas";
         return "Unknown";
     }
+
+    private static boolean isRadioRole(Component c) {
+        if (c instanceof Accessible) {
+            try {
+                AccessibleContext ac = ((Accessible) c).getAccessibleContext();
+                if (ac != null && ac.getAccessibleRole() != null) {
+                    String r = ac.getAccessibleRole().toDisplayString();
+                    return r != null && r.toLowerCase().contains("radio");
+                }
+            } catch (Throwable ignored) {}
+        }
+        return false;
+    }
+
 }

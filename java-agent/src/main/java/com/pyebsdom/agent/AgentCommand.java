@@ -63,6 +63,19 @@ public final class AgentCommand {
         return v != null ? v : defaultValue;
     }
 
+    /** Integer value for {@code key}, or {@code defaultValue} if absent/invalid. */
+    public int getIntParam(String key, int defaultValue) {
+        String raw = params.get(key);
+        if (raw == null || raw.trim().isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (Exception ignored) {
+            return defaultValue;
+        }
+    }
+
     @Override
     public String toString() {
         return "AgentCommand{command='" + command + "', out='" + outputFile + "', params=" + params + '}';

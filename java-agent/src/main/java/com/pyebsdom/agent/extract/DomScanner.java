@@ -454,6 +454,14 @@ public final class DomScanner {
             }
             TreeItemExpander.expand(node, comp, idGen);
         }
+        else if (ListViewExpander.isListView(node) && node.children.isEmpty()) {
+            if (node.path == null) {
+                String pseg = node.simpleClassName + "[" + index + "]";
+                node.path = (parentPath != null && !parentPath.isEmpty())
+                        ? parentPath + "/" + pseg : pseg;
+            }
+            ListViewExpander.expand(node, comp, idGen);
+        }
 
         // ── Build path ────────────────────────────────────────────────────
         String pathSegment = node.simpleClassName + "[" + index + "]";

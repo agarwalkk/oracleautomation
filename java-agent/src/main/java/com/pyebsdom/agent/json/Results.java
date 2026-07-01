@@ -19,9 +19,20 @@ import java.io.StringWriter;
 public final class Results {
 
     public static final String AGENT_NAME    = "ebs-dom-agent";
-    public static final String AGENT_VERSION = "0.2.0";
+    public static final String AGENT_VERSION = resolveAgentVersion();
 
     private Results() { /* static utility */ }
+
+    private static String resolveAgentVersion() {
+        Package pkg = Results.class.getPackage();
+        if (pkg != null) {
+            String version = pkg.getImplementationVersion();
+            if (version != null && !version.trim().isEmpty()) {
+                return version.trim();
+            }
+        }
+        return "dev";
+    }
 
     /** The {@code health} command success response. */
     public static String health() {

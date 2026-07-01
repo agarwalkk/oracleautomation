@@ -480,4 +480,26 @@ public final class ActionExecutor {
                 || text.equals("proxy")
                 || text.contains("glasspane");
     }
+
+    public static String executeSelectRow(AgentCommand cmd) throws Exception {
+        Component comp = resolveOrThrow(cmd, "selectRow");   // resolves the ListView (row locator carries recordIndex)
+        int row = cmd.getIntParam("locatorRecordIndex", -1);
+        if (row < 0) throw new IllegalArgumentException("selectRow requires a row index");
+        invokeIntOnEdt(comp, "setSelectedRow", row);         // reflection: setSelectedRow(int)
+        invokeIntOnEdt(comp, "setFocusedRow", row);          // best-effort focus
+        // commit the LOV: double-click the row / press Enter so Forms accepts it
+        return okResult("selectRow", comp, "model:setSelectedRow/setFocusedRow");
+    }
+
+    /** Best-effort invoke of a single-int instance method on the EDT. */
+    private static void invokeIntOnEdt(final Component comp, final String methodName, final int value)
+            throws Exception {
+        Edt.run(() -> {
+            try {
+                comp.getClass().getMethod(methodName, int.class).invoke(comp, value);
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
 }
