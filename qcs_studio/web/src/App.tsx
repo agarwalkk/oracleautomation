@@ -118,7 +118,7 @@ export function App() {
   // Hover mode: "tree" = only tree elements highlight (default),
   // "all" = every scanned element from raw DOM highlights.
   const [hoverMode, setHoverMode] = useState<"tree" | "all">("tree");
-  // Tree node hover tooltip: tracks which element's full details to show and where.
+  // Tree node details popup: opens only from explicit info-button clicks.
   const [treeTooltip, setTreeTooltip] = useState<{ fe: FullElement; x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -130,6 +130,28 @@ export function App() {
     const res = await fetch("/api/v1/containers");
     const json = await res.json();
     setContainers(json.items || []);
+  }
+
+  async function parseApiError(res: Response, fallback: string): Promise<string> {
+    try {
+      const data = await res.json();
+      const detail = data?.detail;
+      if (typeof detail === "string" && detail.trim()) {
+        return detail;
+      }
+      if (Array.isArray(detail)) {
+        return detail
+          .map((item) => {
+            const loc = Array.isArray(item?.loc) ? item.loc.join(".") : "request";
+            const msg = typeof item?.msg === "string" ? item.msg : "Invalid value";
+            return `${loc}: ${msg}`;
+          })
+          .join("; ");
+      }
+    } catch {
+      // Ignore JSON parse errors and use fallback.
+    }
+    return fallback;
   }
 
   async function refreshTargets() {
@@ -159,8 +181,15 @@ export function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
+      if (!res.ok) {
+        const msg = await parseApiError(res, `Scan failed (${res.status})`);
+        throw new Error(msg);
+      }
       const phase1 = await res.json();
       const scanId = phase1.scan_id;
+      if (!scanId) {
+        throw new Error("Scan failed: missing scan_id in response");
+      }
       // Show the screenshot immediately so the user sees instant feedback.
       setScan(phase1);
       setEditTitle(phase1.title || "");
@@ -176,13 +205,22 @@ export function App() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ scan_id: scanId })
         });
+        if (!recalcRes.ok) {
+          const msg = await parseApiError(recalcRes, `Recalculate failed (${recalcRes.status})`);
+          throw new Error(msg);
+        }
         const phase2 = await recalcRes.json();
         setScan(phase2);
-      } catch {
+      } catch (err) {
         // Phase 2 failed — screenshot still shows, user can retry later.
+        const msg = err instanceof Error ? err.message : String(err);
+        window.alert(`Scan captured, but tree calculation failed: ${msg}`);
       }
 
       await refreshContainers();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      window.alert(msg);
     } finally {
       setBusy(false);
     }
@@ -222,6 +260,10 @@ export function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scan_id: scanId })
       });
+      if (!res.ok) {
+        const msg = await parseApiError(res, `Recalculate failed (${res.status})`);
+        throw new Error(msg);
+      }
       const json = await res.json();
       // If this draft is currently the active scan, refresh the view.
       if (scan?.scan_id === scanId) {
@@ -229,6 +271,9 @@ export function App() {
         setEditTitle(json.title || "");
       }
       await refreshContainers();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      window.alert(msg);
     } finally {
       setBusy(false);
     }
@@ -412,7 +457,7 @@ export function App() {
   }
 
   return (
-    <div className="studio-shell">
+    <div className="studio-shell" onClick={() => setTreeTooltip(null)}>
       <header className="topbar">
         <div>
           <h1>QCS Studio</h1>
@@ -511,7 +556,17 @@ export function App() {
                   </div>
                 ) : null}
                 <div className="tree-list">
-                  {renderTreeRows(displayTree, hoveredRef, setHoveredRef, expanded, toggleNode, addElementToNode, fullByRef, (fe, x, y) => setTreeTooltip(fe ? { fe, x, y } : null))}
+                  {renderTreeRows(
+                    displayTree,
+                    hoveredRef,
+                    setHoveredRef,
+                    expanded,
+                    toggleNode,
+                    addElementToNode,
+                    fullByRef,
+                    treeTooltip?.fe.element_ref ?? "",
+                    (fe, x, y) => setTreeTooltip(fe ? { fe, x, y } : null)
+                  )}
                 </div>
               </div>
             )}
@@ -861,6 +916,7 @@ function renderTreeRows(
   toggleNode: (ref: string) => void,
   onDropElement: (targetRef: string, elementRef: string) => void,
   fullByRef: Map<string, FullElement>,
+  activeTooltipRef: string,
   showTooltip: (fe: FullElement | null, x: number, y: number) => void,
   depth = 0,
   keyPrefix = ""
@@ -882,20 +938,11 @@ function renderTreeRows(
         key={nodeKey}
         className={`tree-item${hoveredRef === node.element_ref ? " hovered" : ""}${isRoot ? " tree-root" : ""}`}
         style={{ paddingLeft: `${6 + depth * 14}px` }}
-        onMouseEnter={(e) => {
+        onMouseEnter={() => {
           setHoveredRef(node.element_ref);
-          if (!isRoot && fe) {
-            showTooltip(fe, e.clientX, e.clientY);
-          }
-        }}
-        onMouseMove={(e) => {
-          if (!isRoot && fe) {
-            showTooltip(fe, e.clientX, e.clientY);
-          }
         }}
         onMouseLeave={() => {
           setHoveredRef("");
-          showTooltip(null, 0, 0);
         }}
         onDragOver={(e) => {
           e.preventDefault();
@@ -933,10 +980,29 @@ function renderTreeRows(
         <span className="tree-label">
           {isRoot ? `📁 ${meta.text}` : meta.text}
         </span>
+        {!isRoot && fe ? (
+          <button
+            type="button"
+            className={activeTooltipRef === fe.element_ref ? "tree-info-btn active" : "tree-info-btn"}
+            title="Show element details"
+            aria-label={`Show details for ${meta.text}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (activeTooltipRef === fe.element_ref) {
+                showTooltip(null, 0, 0);
+              } else {
+                setHoveredRef(node.element_ref);
+                showTooltip(fe, e.clientX, e.clientY);
+              }
+            }}
+          >
+            i
+          </button>
+        ) : null}
       </div>
     );
     if (hasChildren && isExpanded) {
-      rows.push(...renderTreeRows(node.children, hoveredRef, setHoveredRef, expanded, toggleNode, onDropElement, fullByRef, showTooltip, depth + 1, `${nodeKey}/`));
+      rows.push(...renderTreeRows(node.children, hoveredRef, setHoveredRef, expanded, toggleNode, onDropElement, fullByRef, activeTooltipRef, showTooltip, depth + 1, `${nodeKey}/`));
     }
   }
   return rows;

@@ -1,0 +1,63 @@
+Form: Find Purchase Orders
+  [e119] Line (Tab, enabled)
+    [e101] Item number (LOV)
+    [e103] Category (LOV)
+    [e104] Description
+    [e105] Supplier Item (LOV)
+    [e106] VMI (ComboBox) (read-only) values: ['Yes', 'No']
+    [e108] Consigned (ComboBox) (read-only) values: ['Yes', 'No']
+  [e121] Date Ranges (Tab, enabled)
+    [e88] Order Creation Date : From (LOV)
+    [e89] Order Creation Date : To (LOV)
+    [e90] Approved Date : From (LOV)
+    [e91] Approved Date : To (LOV)
+    [e92] Promised Date : From (LOV)
+    [e93] Promised Date : To (LOV)
+    [e94] Need-by Date : From (LOV)
+    [e95] Need-by Date : To (LOV)
+    [e96] Closed Date : From (LOV)
+    [e97] Closed Date : To (LOV)
+  [e123] Status (Tab, enabled)
+    [e75] Order Approval (ComboBox) (read-only) values: ['Approved', 'In Process', 'Incomplete', 'Pre-Approved', 'Rejected', 'Requires Reapproval']
+    [e77] Control (ComboBox) (read-only) values: ['Open', 'Closed', 'Finally Closed', 'Closed for Invoice', 'Closed for Receiving', 'Cancelled']
+    [e79] Hold (ComboBox) (read-only) values: ['Yes', 'No']
+    [e81] Frozen (ComboBox) (read-only) values: ['Yes', 'No']
+    [e83] Firmed (ComboBox) (read-only) values: ['Yes', 'No']
+  [e125] Related Documents (Tab, enabled)
+    [e63] Contract (LOV)
+    [e64] Receipt (LOV)
+    [e65] Invoice (LOV)
+    [e66] Requisition (LOV)
+    [e67] Paper Requisition (LOV)
+    [e68] Source Document: Type (LOV)
+    [e71] Supplier Quote (LOV)
+  [e127] Deliver To (Tab, enabled)
+    [e52] Destination Type (ComboBox) (read-only) values: ['Expense', 'Inventory', 'Shop Floor']
+    [e54] Requester (LOV)
+    [e55] Organization (LOV)
+    [e57] Show External Locations (Checkbox, unchecked)
+    [e58] Location (LOV)
+    [e59] Subinventory (LOV)
+  [e129] Accounting (Tab, enabled)
+    [e41] Period Name : From (LOV)
+    [e42] Period Name : To (LOV)
+    [e43] GL Date : From (LOV)
+    [e44] GL Date : To (LOV)
+    [e45] Charge Account (LOV)
+    [e46] Budget Account (LOV)
+    [e47] Active Encumbrances (ComboBox) (read-only) values: ['Yes', 'No']
+  [e131] Projects (Tab, enabled, selected)
+    [e36] Project (LOV)
+    [e113] Job
+    [e114] Line
+    [e115] Assembly
+    [e116] Operation Department
+    [e117] Resource Name
+    [e166] Item: Item (LOV) = RMT_RMD_OU
+    [e167] Number (LOV)
+    [e170] Currency (LOV)
+    [e171] Supplier (LOV)
+    [e173] Ship-To Org (LOV)
+    [e176] Bill-To (LOV)
+    [e177] Ship-To (LOV)
+  [e196] Clear (Button, enabled) , [e199] Find (Button, enabled)

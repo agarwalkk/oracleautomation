@@ -20,7 +20,12 @@ class ScanSaveRequest(BaseModel):
 
 class RecalculateTreeRequest(BaseModel):
     """Request to rebuild the AI snapshot tree from a previously captured raw DOM."""
-    scan_id: str
+    scan_id: str | None = None
+    scanId: str | None = None
+
+    def resolved_scan_id(self) -> str:
+        scan_id = (self.scan_id or self.scanId or "").strip()
+        return scan_id
 
 
 class ContainerTreeUpdateRequest(BaseModel):

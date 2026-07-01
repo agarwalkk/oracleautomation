@@ -434,7 +434,7 @@ class StudioService:
                             selected = str(attrs.get("tabSelectedTitle", "")).strip()
                             if selected != tab_title and tab_title in titles:
                                 idx = titles.index(tab_title)
-                                driver.click(tb, tab_index=idx, tab_count=len(titles))
+                                driver.click(tb, tab_index=idx)
                                 settle_forms(driver, timeout_s=3.0)
 
                     # 2. Scan the current fully selected tab state
@@ -508,7 +508,7 @@ class StudioService:
                         selected = str(attrs.get("tabSelectedTitle", "")).strip()
                         if selected != tab_title and tab_title in titles:
                             idx = titles.index(tab_title)
-                            driver.click(tb, tab_index=idx, tab_count=len(titles))
+                            driver.click(tb, tab_index=idx)
                             settle_forms(driver, timeout_s=3.0)
 
                 # Merge all raw DOMs and collect screenshots mapping

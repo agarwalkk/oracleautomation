@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 
 from qcs_repo import store as repo_store
@@ -59,8 +59,15 @@ def recalculate_tree(request: RecalculateTreeRequest) -> dict:
     Does NOT require a live Oracle window — works from the persisted raw DOM
     captured in Phase 1. Can be called repeatedly (e.g. after prompt tuning).
     """
+    scan_id = request.resolved_scan_id()
+    if not scan_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing required field: scan_id",
+        )
+
     try:
-        bundle = _service.compute_tree(request.scan_id)
+        bundle = _service.compute_tree(scan_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover

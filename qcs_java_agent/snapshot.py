@@ -565,6 +565,75 @@ def _assign_owner_tabs(scan: dict) -> None:
         if len(acc) == 1:
             dedicated[id(n)] = next(iter(acc))
 
+    # WHY: Some Oracle Forms pages expose selected-tab controls in a sibling
+    # scrollbox with no "<Tab> tab page" prefixes. The old logic marked those
+    # controls as OrphanTabContent, which hid real fields (e.g., Supplier,
+    # Currency) and left the selected tab empty. We now use the nearest tab
+    # strip's selected title as a fallback owner for such unlabeled data items.
+    def _node_screen_box(n: dict) -> tuple[int, int, int, int]:
+        sb = n.get("screenBounds") or {}
+        b = n.get("bounds") or {}
+        x = _screen_x(sb)
+        y = _screen_y(sb)
+        w = _int(sb.get("width"), 0)
+        h = _int(sb.get("height"), 0)
+        if x < 0:
+            x = _int(b.get("x"), -1)
+        if y < 0:
+            y = _int(b.get("y"), -1)
+        if w <= 0:
+            w = _int(b.get("width"), 0)
+        if h <= 0:
+            h = _int(b.get("height"), 0)
+        return x, y, w, h
+
+    tab_folders: list[tuple[int, int, int, int, str]] = []  # x, y, w, h, selected
+    for n in nodes:
+        if n.get("containerRole") != "TabFolder":
+            continue
+        attrs = n.get("attributes") or {}
+        titles = [t.strip() for t in str(attrs.get("tabTitles", "")).split("|") if t.strip()]
+        selected = str(attrs.get("tabSelectedTitle", "")).strip()
+        if len(titles) <= 1 or not selected:
+            continue
+        x, y, w, h = _node_screen_box(n)
+        if w > 0:
+            tab_folders.append((x, y, w, h, selected))
+
+    def _selected_tab_fallback(n: dict) -> str | None:
+        nx, ny, nw, nh = _node_screen_box(n)
+        if nw <= 0:
+            nw = 1
+        mid_x = nx + (nw // 2)
+        best: tuple[int, str] | None = None
+        for tx, ty, tw, _th, sel in tab_folders:
+            if tw <= 0 or not sel:
+                continue
+            if not (tx <= mid_x <= (tx + tw)):
+                continue
+            # Prefer the closest tab strip in Y among X-overlapping candidates.
+            dist = abs(ny - ty)
+            if best is None or dist < best[0]:
+                best = (dist, sel)
+        return best[1] if best else None
+
+    def _in_tab_content_band(n: dict) -> bool:
+        nx, ny, nw, _nh = _node_screen_box(n)
+        if nw <= 0:
+            nw = 1
+        mid_x = nx + (nw // 2)
+        for tx, ty, tw, _th, _sel in tab_folders:
+            if tw <= 0:
+                continue
+            if not (tx <= mid_x <= (tx + tw)):
+                continue
+            # WHY: only nodes at/under the tab strip should use selected-tab
+            # fallback ownership. Fields above the strip are form-level and
+            # must not be pulled into whichever tab is currently selected.
+            if ny >= ty:
+                return True
+        return False
+
     _DATA = ("Field", "LOV", "ComboBox", "Checkbox", "RadioButton")
     for n in nodes:
         # Authoritative tab from the Forms handler (agent-extracted via
@@ -595,8 +664,14 @@ def _assign_owner_tabs(scan: dict) -> None:
                 n["containerRole"] = None
         else:
             n["ownerTab"] = None
-            if in_region and cr != "GridCell" and n.get("semanticType") in _DATA:
-                n["containerRole"] = "OrphanTabContent"
+            if in_region and cr != "GridCell" and n.get("semanticType") in _DATA and _in_tab_content_band(n):
+                sel = _selected_tab_fallback(n)
+                if sel:
+                    n["ownerTab"] = sel
+                    if cr == "OrphanTabContent":
+                        n["containerRole"] = None
+                else:
+                    n["containerRole"] = "OrphanTabContent"
             elif cr == "OrphanTabContent":
                 n["containerRole"] = None
 
