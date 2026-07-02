@@ -117,9 +117,11 @@ def full_view_scan(scan: dict) -> list[dict]:
             continue
         nid = n.get("id")
         if n.get("focusable") and n.get("showing"):
-            active_ef_id = nid
+            if isinstance(nid, int):
+                active_ef_id = nid
         else:
-            exclude_ids.add(nid)
+            if isinstance(nid, int):
+                exclude_ids.add(nid)
             _collect_descendant_ids(n, exclude_ids)
     if not active_ef_id:
         return flatten_nodes(active_window_scan(scan))
@@ -133,7 +135,9 @@ def full_view_scan(scan: dict) -> list[dict]:
 
 
 def _collect_descendant_ids(node: dict, ids: set[int]) -> None:
-    ids.add(node.get("id"))
+    node_id = node.get("id")
+    if isinstance(node_id, int):
+        ids.add(node_id)
     for child in node.get("children") or []:
         _collect_descendant_ids(child, ids)
 
@@ -718,6 +722,7 @@ def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str
     # the agent provides (Java stays an unfiltered extractor).
     _assign_owner_tabs(scoped)
     nodes = flatten_nodes(scoped)
+    _promote_grid_controls(nodes)
     repo_by_id = {e["elementid"]: e for e in java_nodes_to_repo_elements(scoped)}
 
     tree = _build_semantic_tree(nodes)
@@ -732,11 +737,17 @@ def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str
         if not _is_actionable(n):
             continue
         eid = _eid(n)
-        el = dict(repo_by_id.get(eid) or {"elementid": eid})
+        # WHY: id_map entries carry mixed scalar and structured values
+        # (for example locator_params dict), so keep this local map value type
+        # broad instead of inferring a narrow string-only dictionary.
+        el: dict[str, Any] = dict(repo_by_id.get(eid) or {"elementid": eid})
         el["locator_params"] = _build_locator_params(n)
-        el["semantic_id"] = n.get("semanticId")
-        if n.get("treePath"):
-            el["tree_path"] = n.get("treePath")
+        semantic_id = n.get("semanticId")
+        if semantic_id is not None:
+            el["semantic_id"] = semantic_id
+        tree_path = n.get("treePath")
+        if tree_path:
+            el["tree_path"] = tree_path
         id_map[eid] = el
     return tree, id_map
 
@@ -1551,3 +1562,94 @@ def attribute_unique_tab_fields(merged_dom: dict, tab_doms: dict[str, dict]) -> 
             n["ownerTab"] = next(iter(tabs)).split(" -> ")[-1].strip()
             fixed += 1
     return fixed
+
+def _promote_grid_controls(nodes: list[dict]) -> None:
+    """Fold grid-body controls (e.g. an ``On Hold`` checkbox column) into the
+    table instead of leaving them as loose fields above it.
+
+    Schema-2.0 Java stamps ``containerRole=GridCell`` + ``recordIndex`` +
+    ``columnKey`` on the *text* cells of a multi-record block, but leaves the
+    non-text widgets that share the same grid canvas (checkboxes, LOV buttons)
+    untagged — so the thin renderer emits them separately, above the table.
+
+    Java has already extracted the relationship we need to fix this in Python:
+    the widget is a descendant of the *same grid canvas* as the tagged cells
+    (its ``path`` is under their shared ``parentPath``) and its screen bounds
+    line up with a record row and column. This function uses only those
+    Java-provided facts — no pixel heuristics in the table builder itself — to
+    stamp the missing ``recordIndex``/``columnKey`` so the existing renderer
+    places the control in its own row/column.
+    """
+    # Group the already-resolved grid cells by their grid canvas (the parent
+    # path every cell of one block shares). Each group is one table.
+    grids: dict[str, list[dict]] = {}
+    for n in nodes:
+        if n.get("containerRole") == "GridCell":
+            grids.setdefault(str(n.get("parentPath") or ""), []).append(n)
+    if not grids:
+        return
+
+    for canvas_path, cells in grids.items():
+        if not canvas_path:
+            continue
+        owner_tabs = {c.get("ownerTab") for c in cells if c.get("ownerTab")}
+
+        # Row bands: screen-y -> recordIndex, learned from the tagged cells.
+        bands: dict[int, int] = {}
+        for c in cells:
+            ridx = c.get("recordIndex")
+            y = _screen_y(c.get("screenBounds") or {})
+            if ridx is not None and y >= 0:
+                bands.setdefault(y, int(ridx))
+        if not bands:
+            continue
+        ys = sorted(bands)
+        pitch = min((b - a for a, b in zip(ys, ys[1:])), default=24) or 24
+        tol = max(2, pitch // 2)
+
+        # Horizontal span of the block, to reject widgets outside the columns.
+        xs = [_screen_x(c.get("screenBounds") or {}) for c in cells]
+        xs = [x for x in xs if x >= 0]
+        rights = [
+            _screen_x(c.get("screenBounds") or {})
+            + _int((c.get("screenBounds") or {}).get("width"), 0)
+            for c in cells
+        ]
+        x_min = min(xs) if xs else 0
+        x_max = max(rights) if rights else 0
+
+        prefix = canvas_path + "/"
+        for n in nodes:
+            if n.get("containerRole") == "GridCell":
+                continue
+            role = str(n.get("semanticType") or "")
+            # Text fields inside a grid are already GridCells; tabs/trees are
+            # structural. Only recover the interactive column widgets.
+            if role not in _ACTION_ROLES or role in ("Field", "Tab", "Tree", "TreeItem"):
+                continue
+            if not str(n.get("path") or "").startswith(prefix):
+                continue
+            if owner_tabs and n.get("ownerTab") not in owner_tabs:
+                continue
+            label = _label(n)
+            if not label or _looks_like_technical_name(label):
+                continue
+            sb = n.get("screenBounds") or {}
+            x = _screen_x(sb)
+            y = _screen_y(sb)
+            if x < 0 or y < 0:
+                continue
+            if x_max and not (x_min - tol <= x <= x_max + tol):
+                continue
+            best_ridx = None
+            best_dist = None
+            for band_y, ridx in bands.items():
+                dist = abs(y - band_y)
+                if best_dist is None or dist < best_dist:
+                    best_dist, best_ridx = dist, ridx
+            if best_ridx is None or best_dist is None or best_dist > tol:
+                continue
+            n["containerRole"] = "GridCell"
+            n["recordIndex"] = best_ridx
+            n["columnKey"] = label
+

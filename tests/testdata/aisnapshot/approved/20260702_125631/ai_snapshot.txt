@@ -1,0 +1,16 @@
+Form: Order Organizer
+  [e463] Summary (Tab, enabled, selected)
+    [e438] Open Folder... (Button, enabled) , [e460] Open (Button, enabled) , [e461] Actions (Button, enabled)
+    | # | Order Number | PO Received | Admin | Booked By | Booked Date | Opportunity Number | Ultimate Dest | Customer Name | Status | On Hold | Order Type Required | Customer Number | Salesperson | Customer PO | Date Ordered | Request Date | Price List | Ship To Location | Bill To Customer | Bill To Location | Shipment Priority | Tax Exempt Number | Tax | Total | [  ] | End User | Tech Contact | Ack'd | Rep Order # | KOB | Order Tier | Cust Proj Name/No | Freight Terms |
+    |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+    | **1** | [e69] 8100598 | [e79] 23-JUN-2026 | [e89] GLIFONEA, RONALDO | [e99] EMR_UC4_RMT | [e109] 23-JUN-2026 16:38:33 | [e119]  | [e129] Argentina | [e139] EMERSON ARGENTINA SA | [e149] Booked | [e160]  | [e179] Internal_RMT | [e189] 150000105 | [e199] No Sales Credit | [e209] 77846 | [e219] 23-JUN-2026 15:53:32 | [e229] 15-JUN-2026 00:00:00 | [e239] RMT CORPORATE OCT 2024 | [e259] 107220085 | [e269] 150000105 | [e279] 45955403 | [e289]  | [e299]  | [e309] 0.00 | [e319] 69.06 | [e329] . | [e339] SONDA SRL | [e349]  | [e359]  | [e369]  | [e379] KB3.1 | [e389] TIER2 | [e399]  | [e419] Prepaid & Allowed |
+  [e465] Lines (Tab, enabled)
+    | # | Order | Line | Ordered Item | Model String | Qty | Status | On Hold | UOM | Base Model Price | Qty Cancelled | Qty Shipped | Request Date | Promise Date | Warehouse | Ship Set | Ship To Location | Customer PO Line | Line Tech Contact | Sales Person | [  ] | Return | Division ID | CR Division ID | Order Admin | PA Ref ID | ACK | Related Order No | Requested Delivery Date | Original Promise Date | Customer Reference | Acceptance Name | Acceptance Description | Acceptance Expire Event | Acceptance Type | Acceptance Expire Days | Accepted By | Acceptance Comments | Acceptance Customer Signature | Acceptance Date | Industry Information |
+    |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+    | **1** | [e889] 8100598 | [e899] 1.1 | [e909] R-701P*70897590 | [e919]  | [e929] 1 | [e939] Production Open | [e950]  | [e969] EA | [e979] 69.06 | [e989] 0 | [e999]  | [e1009] 23-JUN-2026 00:00:00 | [e1019] 01-JUL-2026 23:59:00 | [e1029] RSK | [e1039] 700 | [e1049] 107220085 | [e1059] 77846 | [e1069]  | [e1079] No Sales Credit | [e1089] . | [e1099] - | [e1109] RMT | [e1119]  | [e1129] GLIFONEA, RONALDO | [e1139]  | [e1149]  | [e1159]  | [e1179] 23-JUN-2026 | [e1189]  | [e1199]  | [e1209]  | [e1219]  | [e1229]  | [e1239]  | [e1249]  | [e1259]  | [e1269]  | [e1279]  | [e1289]  | [e1299] - |
+  [e510] Open (Button, enabled) , [e511] Actions (Button, enabled)
+  [e485] Orders Tree
+      [e486] Today's Orders
+      [e487] Search Results *
+      [e488] Personal Folders
+      [e489] Public Folders
