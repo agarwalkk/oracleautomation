@@ -775,7 +775,159 @@ def _tab_titles(folder: dict) -> list[str]:
     return [t.strip() for t in str(attrs.get("tabTitles", "")).split("|") if t.strip()]
 
 
+def _owner_path(n: dict) -> tuple[str, ...]:
+    """Full tab path (outermost → innermost) a node belongs to.
+
+    Prefers ``ownerTabPath`` (a list stamped by the capture layer, which is the
+    only place the parent→child tab relationship is known for a multi-level tab
+    layout). Falls back to the single flat ``ownerTab`` (length-1 path) for
+    single-level forms and any scan captured before the path was stamped, so
+    those render exactly as before.
+    """
+    p = n.get("ownerTabPath")
+    if isinstance(p, (list, tuple)) and p:
+        return tuple(str(x).strip() for x in p if str(x).strip())
+    ot = n.get("ownerTab")
+    ot = str(ot).strip() if ot else ""
+    return (ot,) if ot else ()
+
+
+def _tab_bars_info(nodes: list[dict]) -> list[dict]:
+    """One entry per distinct multi-title tab bar: titles, selected, enabled.
+
+    Oracle Forms exposes two nodes per bar (the TabBar carries the selected
+    title; the FormsTabPanel container does not); we keep the one that knows the
+    selection. Used only to recover display order + selected/enabled state — the
+    hierarchy itself comes from each node's ``ownerTabPath``.
+    """
+    dedup: dict[tuple, dict] = {}
+    for n in nodes:
+        if n.get("containerRole") != "TabFolder":
+            continue
+        titles = _tab_titles(n)
+        if len(titles) <= 1:
+            continue
+        attrs = n.get("attributes") or {}
+        selected = str(attrs.get("tabSelectedTitle", "")).strip()
+        enabled: dict[str, bool] = {}
+        states_raw = str(attrs.get("tabStates", "")).strip()
+        if states_raw:
+            for idx, part in enumerate(states_raw.split("|")):
+                bits = [b.strip() for b in part.strip().split(",")]
+                if idx < len(titles) and bits and bits[0] in ("0", "1"):
+                    enabled[titles[idx]] = (bits[0] == "1")
+        key = tuple(titles)
+        prev = dedup.get(key)
+        if prev is None or (selected and not prev["selected"]):
+            dedup[key] = {"titles": titles, "selected": selected, "enabled": enabled}
+    return list(dedup.values())
+
+
+def _order_children(titles: set[str], bars: list[dict]) -> tuple[list[str], dict | None]:
+    """Order a level's sibling tab titles and find the tab bar that owns them.
+
+    The bar is matched by title-set overlap (the sub-tab groups of two parents
+    differ as sets — e.g. 7 vs 9 sub-tabs — so the right bar wins even when a
+    leaf name like ``Main`` is shared). The bar supplies display order + the
+    selected/enabled state; the set of children comes from the paths.
+    """
+    best: tuple[tuple[int, int], dict] | None = None
+    for b in bars:
+        bt = set(b["titles"])
+        overlap = len(bt & titles)
+        if not overlap:
+            continue
+        score = (overlap, -len(bt ^ titles))
+        if best is None or score > best[0]:
+            best = (score, b)
+    if best is None:
+        return sorted(titles), None
+    bar = best[1]
+    ordered = [t for t in bar["titles"] if t in titles]
+    ordered += [t for t in sorted(titles) if t not in set(bar["titles"])]
+    return ordered, bar
+
+
+def _build_nested_tab_tree(nodes: list[dict], actionable: list[dict]) -> list[dict]:
+    """Render a multi-level tab layout as nested Tab nodes.
+
+    Structure comes entirely from each node's ``ownerTabPath`` (the relationship
+    the capture layer extracted); this function is the interpretation/rendering
+    logic. Dedup is keyed by (semanticId, full path) so two fields that share a
+    leaf semanticId under different parents (``Order Information -> Main`` vs
+    ``Line Items -> Main``) both survive instead of one clobbering the other.
+    """
+    bars = _tab_bars_info(nodes)
+
+    seen: set = set()
+    by_path: dict[tuple, list[dict]] = {}
+    form_level: list[dict] = []
+    tree_nodes: list[dict] = []
+    for n in actionable:
+        role = str(n.get("semanticType") or "")
+        if role == "Tab" or n.get("containerRole") == "TreeItem":
+            continue
+        if role == "Tree":
+            tree_nodes.append(n)
+            continue
+        path = _owner_path(n)
+        sem = n.get("semanticId")
+        key = (sem, path) if sem else (_label(n), path, role, n.get("id"))
+        if key in seen:
+            continue
+        seen.add(key)
+        if path:
+            by_path.setdefault(path, []).append(n)
+        else:
+            form_level.append(n)
+
+    # Trie of tab paths: prefix -> set of next-level titles.
+    children_titles: dict[tuple, set[str]] = {}
+    for path in by_path:
+        for i in range(len(path)):
+            children_titles.setdefault(path[:i], set()).add(path[i])
+
+    def render_level(prefix: tuple) -> list[dict]:
+        titles = children_titles.get(prefix)
+        if not titles:
+            return []
+        ordered, bar = _order_children(titles, bars)
+        selected = (bar or {}).get("selected", "")
+        enabled_map = (bar or {}).get("enabled", {})
+        out: list[dict] = []
+        for t in ordered:
+            p = prefix + (t,)
+            # A tab's own content comes first, then any nested sub-tabs.
+            content = _render_tab_content(by_path.get(p, []))
+            subtabs = render_level(p)
+            is_sel = (t == selected) if selected else False
+            if not enabled_map.get(t, True):
+                state = "disabled"
+            else:
+                state = "enabled, selected" if is_sel else "enabled"
+            out.append({
+                "element_ref": _tab_ref_for_path(nodes, p),
+                "label": t,
+                "role": "Tab",
+                "states": state,
+                "children": content + subtabs,
+            })
+        return out
+
+    children: list[dict] = render_level(())
+    children.extend(_render_tab_content(form_level))
+    for tr in tree_nodes:
+        children.append(_tree_node(tr))
+    return children
+
+
 def _build_semantic_tree(nodes: list[dict]) -> list[dict]:
+    # Multi-level tab layout: when the capture layer stamped a 2+ deep
+    # ownerTabPath on any actionable node, render nested tabs. Otherwise fall
+    # through to the single-level path below (unchanged).
+    actionable_all = [n for n in nodes if _is_actionable(n)]
+    if any(len(_owner_path(n)) >= 2 for n in actionable_all):
+        return _build_nested_tab_tree(nodes, actionable_all)
     # Use the innermost multi-title TabFolder for the tab list (a single-title
     # folder is a sub-region, not the form's tab bar).
     folders = [n for n in nodes if n.get("containerRole") == "TabFolder" and len(_tab_titles(n)) > 1]
@@ -890,6 +1042,23 @@ def _tab_ref(nodes: list[dict], title: str) -> str:
         if n.get("semanticType") == "Tab" and _label(n) == title:
             return _eid(n)
     return ""
+
+
+def _tab_ref_for_path(nodes: list[dict], path: tuple) -> str:
+    """Element ref of a tab header, parent-qualified when possible.
+
+    When the tab header nodes carry ``ownerTabPath`` (stamped by the capture
+    layer), two same-named sub-tabs under different parents resolve to their own
+    header. Falls back to a leaf-title match for un-stamped scans.
+    """
+    title = path[-1]
+    for n in nodes:
+        if n.get("semanticType") != "Tab" or _label(n) != title:
+            continue
+        p = n.get("ownerTabPath")
+        if isinstance(p, (list, tuple)) and tuple(str(x).strip() for x in p) == path:
+            return _eid(n)
+    return _tab_ref(nodes, title)
 
 
 def _render_tab_content(tab_nodes: list[dict]) -> list[dict]:

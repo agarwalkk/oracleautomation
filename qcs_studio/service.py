@@ -515,9 +515,10 @@ class StudioService:
                 if results:
                     first_path = list(results.keys())[0]
                     merged_dom = results[first_path]["dom"]
-                    
+                    _stamp_owner_tab_paths(merged_dom, first_path)          # <-- NEW
                     for path, res in results.items():
                         if path != first_path:
+                            _stamp_owner_tab_paths(res["dom"], path)        # <-- NEW
                             merged_dom = merge_scans(merged_dom, res["dom"])
                         tab_path_str = " -> ".join(path)
                         tab_screenshots[tab_path_str] = str(res["screenshot_path"])
@@ -657,11 +658,6 @@ class StudioService:
             with open(target_dir / "ai_snapshot.txt", "w", encoding="utf-8") as f:
                 f.write(bundle.snapshot_text)
             
-            # 5. Per-tab full/raw java scans  ← DELETE THIS WHOLE BLOCK
-            if getattr(bundle, "tab_doms", None):
-                for tab_path, tab_dom in bundle.tab_doms.items():
-                    ...
-                    json.dump(tab_dom, f, indent=2, ensure_ascii=False)
         except Exception as e:
             import sys
             print(f"Error auto-dumping scan files: {e}", file=sys.stderr)
@@ -793,3 +789,24 @@ class StudioService:
             return []
         return build_full_overlay_elements(elements)
 
+def _stamp_owner_tab_paths(dom: dict, path: tuple) -> None:
+    """Stamp the full tab path onto the content of ONE captured leaf tab.
+
+    `path` is the exact tab path that was active when `dom` was scanned
+    (e.g. ("Order Information", "Main")). A node belongs to that leaf when its
+    accessibleName carries the "<leaf> tab page " marker Oracle Forms stamps on
+    the innermost tab's content. This is the only point in the pipeline where the
+    parent tab is known, so we record the whole path; the renderer groups on it.
+    """
+    if not path:
+        return
+    leaf = str(path[-1])
+    marker = f"{leaf} tab page "
+    stack = list(dom.get("windows") or [dom])
+    while stack:
+        n = stack.pop()
+        an = str(n.get("accessibleName") or "")
+        i = an.find(" tab page ")
+        if an.startswith(marker) or (i > 0 and an[:i] == leaf):
+            n["ownerTabPath"] = list(path)
+        stack.extend(n.get("children") or [])
