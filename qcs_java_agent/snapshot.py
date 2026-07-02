@@ -312,8 +312,17 @@ def build_full_overlay_elements(elements: list[dict]) -> list[dict]:
         bounds = el.get("bounds") or {}
         w = int(bounds.get("width", el.get("width", 0)) or 0)
         h = int(bounds.get("height", el.get("height", 0)) or 0)
+        role = str(el.get("role") or "")
+        # WHY: Oracle ListView row nodes (TreeItem) frequently report 0x0 bounds
+        # even though they are actionable and visible in the curated tree.
+        # Keep them in full_elements so Studio can show the info tooltip/icon.
         if w <= 0 or h <= 0:
-            continue
+            if role != "TreeItem":
+                continue
+            # Minimal non-zero box to keep UI lookup paths alive. Visual overlay
+            # boxes for tree rows are driven by _tree_node() fallback bounds.
+            w = max(1, w)
+            h = max(1, h)
         x = int(bounds.get("x", el.get("x", 0)) or 0)
         y = int(bounds.get("y", el.get("y", 0)) or 0)
         name = str(el.get("name") or el.get("friendly_name") or "")
@@ -325,7 +334,7 @@ def build_full_overlay_elements(elements: list[dict]) -> list[dict]:
         out.append({
             "element_ref": ref,
             "name": name,
-            "role": str(el.get("role") or ""),
+            "role": role,
             "type": str(java.get("simpleClassName") or el.get("role") or ""),
             "actions": _element_actions(el),
             "forms_action": str(java.get("formsActions") or ""),
@@ -450,6 +459,22 @@ def _eid(n: dict) -> str:
 def _label(n: dict) -> str:
     raw = str(n.get("canonicalLabel") or n.get("displayName")
               or n.get("accessibleName") or n.get("name") or "").strip()
+    # WHY: Oracle Forms list widgets often expose technical names like
+    # "ListView19" for the tree container while the semantic title lives in
+    # the form scope/title (e.g., "form:Order Types"). Prefer that human title
+    # so snapshots stay readable and regressions don't lock in class-like labels.
+    if str(n.get("semanticType") or "") == "Tree" and _looks_like_technical_name(raw):
+        scope = str((n.get("primaryLocator") or {}).get("scope") or "")
+        form_scope = scope[5:] if scope.startswith("form:") else ""
+        title = str(n.get("formTitle") or n.get("windowTitle") or "").strip()
+        human = form_scope or title
+        if human:
+            raw = human
+    # WHY: Oracle ListView rows often serialize multiple visible columns into a
+    # single label joined by em-dash delimiters. Snapshot readability is better
+    # when tree/list rows show only the first (primary) column value.
+    if str(n.get("semanticType") or "") == "TreeItem" and "—" in raw:
+        raw = raw.split("—", 1)[0].strip()
     return _ALT_RE.sub("", _LOV_RE.sub("", raw))
 
 
@@ -466,12 +491,10 @@ def _is_actionable(n: dict) -> bool:
         return False
     if n.get("isMirror") or n.get("containerRole") in ("OrphanTabContent", "OccludedCanvas"):
         return False
-    attrs = n.get("attributes") or {}
-    has_rows = bool(attrs.get("treeRows") or attrs.get("getRowCount"))
     lbl = _label(n)
-    if not lbl and not has_rows:
+    if not lbl:
         return False
-    if role not in ("Tree", "TreeItem") and not (role == "List" and has_rows):
+    if role not in ("Tree", "TreeItem"):
         if _looks_like_technical_name(lbl) or lbl == str(n.get("simpleClassName") or ""):
             return False
     if "enabled" not in _states(n) and role not in ("TreeItem", "Tab"):
@@ -925,37 +948,8 @@ def _grid_node(cells: list[dict]) -> dict:
 
 def _field_rows(nodes: list[dict]) -> list[dict]:
     out: list[dict] = []
-    i = 0
-    while i < len(nodes):
-        n = nodes[i]
+    for n in nodes:
         role = n.get("semanticType")
-
-        if role == "RadioButton":
-            radio_run: list[dict] = []
-            while i < len(nodes) and nodes[i].get("semanticType") == "RadioButton":
-                radio_run.append(nodes[i])
-                i += 1
-            if len(radio_run) >= 2:
-                group_label, option_labels = _radio_group_parts(radio_run)
-                group_children: list[dict] = []
-                for idx, radio in enumerate(radio_run):
-                    group_children.append({
-                        "element_ref": _eid(radio),
-                        "label": option_labels[idx],
-                        "role": "RadioButton",
-                        "states": ", ".join(_states(radio)),
-                        "selected": bool(radio.get("selected")),
-                        "children": [],
-                    })
-                out.append({
-                    "element_ref": f"{_eid(radio_run[0])}_radio_group",
-                    "label": group_label,
-                    "role": "Group",
-                    "children": group_children,
-                    "radio_group": True,
-                })
-                continue
-
         node = {
             "element_ref": _eid(n),
             "label": _label(n),
@@ -974,13 +968,6 @@ def _field_rows(nodes: list[dict]) -> list[dict]:
             node["selected"] = bool(n.get("selected"))
         elif role == "LOV":
             node["has_lov"] = True
-        elif role == "List":
-            parsed = _parse_list_rows(n)
-            if parsed:
-                node["list_columns"] = parsed["columns"]
-                node["list_rows"] = parsed["rows"]
-                if _looks_like_technical_name(node["label"]):
-                    node["label"] = _first_text(n.get("accessibleName")) or "Results"
         # Forms item capabilities (ground truth from the agent). has_lov also
         # set defensively from the flag in case role wasn't reclassified.
         if n.get("hasLov"):
@@ -995,14 +982,41 @@ def _field_rows(nodes: list[dict]) -> list[dict]:
         if cur and cur != node["label"]:
             node["current_value"] = cur
         out.append(node)
-        i += 1
     return out
 
 
 def _tree_node(tree: dict) -> dict:
     items = []
+    tree_sb = tree.get("screenBounds") or tree.get("bounds") or {}
+    tree_x = _screen_x(tree_sb)
+    tree_y = _screen_y(tree_sb)
+    tree_w = _int(tree_sb.get("width"), 0)
+    tree_h = _int(tree_sb.get("height"), 0)
+    if tree_x < 0 or tree_y < 0:
+        tb = tree.get("bounds") or {}
+        tree_x = _int(tb.get("x"), 0)
+        tree_y = _int(tb.get("y"), 0)
+        if tree_w <= 0:
+            tree_w = _int(tb.get("width"), 0)
+        if tree_h <= 0:
+            tree_h = _int(tb.get("height"), 0)
+    tree_children = [c for c in (tree.get("children") or []) if c.get("containerRole") == "TreeItem"]
+    total_rows = len(tree_children)
+    attrs = tree.get("attributes") or {}
+    has_columns = bool(str(attrs.get("listColumns") or "").strip())
+    # WHY: ListView bounds include header and large empty tail area; splitting
+    # full height by row count produces oversized bands. Model a compact body:
+    # reserve header height and clamp row height to realistic line heights.
+    header_h = 22 if has_columns else 0
+    body_y = tree_y + header_h
+    body_h = max(0, tree_h - header_h)
+    if body_h > 0 and total_rows > 0:
+        estimated = body_h // max(total_rows + 4, total_rows)
+        row_h = max(18, min(24, estimated))
+    else:
+        row_h = 0
     children_list = []
-    for c in tree.get("children") or []:
+    for idx, c in enumerate(tree_children):
         if c.get("containerRole") != "TreeItem":
             continue
         items.append({
@@ -1016,10 +1030,22 @@ def _tree_node(tree: dict) -> dict:
         cy = _screen_y(sb)
         cw = _int(sb.get("width"), 0)
         ch = _int(sb.get("height"), 0)
+        # WHY: rowBoundsPx is component-relative in Java diagnostics while
+        # overlay rendering needs screen-space coordinates. Prefer screenBounds
+        # from the node itself and only fall back when geometry is missing.
         if cx < 0 or cy < 0:
             bnd = c.get("bounds") or {}
             cx = _int(bnd.get("x"), 0)
             cy = _int(bnd.get("y"), 0)
+        # WHY: Some Forms ListView rows report no row-level bounds. Derive a
+        # deterministic fallback band from the parent tree rectangle so Studio
+        # can draw per-row overlays and hover targets.
+        if (cw <= 0 or ch <= 0) and tree_w > 0 and body_h > 0 and row_h > 0:
+            cx = tree_x
+            cy = body_y + (idx * row_h)
+            cw = tree_w
+            remaining = max(1, (body_y + body_h) - cy)
+            ch = min(row_h, remaining)
         children_list.append({
             "element_ref": _eid(c),
             "label": _label(c),
@@ -1030,42 +1056,6 @@ def _tree_node(tree: dict) -> dict:
         })
     return {"element_ref": _eid(tree), "label": _label(tree),
             "role": "Tree", "tree_items": items, "children": children_list}
-
-
-def _radio_group_label(radios: list[dict]) -> str:
-    """Derive a stable group heading from shared leading words in radio labels."""
-    return _radio_group_parts(radios)[0]
-
-
-def _radio_group_parts(radios: list[dict]) -> tuple[str, list[str]]:
-    """Return ``(group_label, option_labels)`` for a run of radio nodes.
-
-    Group label is the longest shared leading word-prefix across options.
-    Option labels strip that prefix when the remainder is non-empty for all.
-    """
-    labels = [str(_label(r) or "").strip() for r in radios]
-    if len(labels) < 2:
-        return "Select one", labels
-
-    split_labels = [lbl.split() for lbl in labels if lbl]
-    if len(split_labels) != len(labels):
-        return "Select one", labels
-
-    prefix_len = 0
-    for words_at_pos in zip(*split_labels):
-        norm = [w.lower() for w in words_at_pos]
-        if len(set(norm)) != 1:
-            break
-        prefix_len += 1
-
-    if prefix_len <= 0:
-        return "Select one", labels
-
-    group_label = " ".join(split_labels[0][:prefix_len]).strip()
-    stripped = [" ".join(words[prefix_len:]).strip() for words in split_labels]
-    if all(s for s in stripped):
-        return group_label, stripped
-    return group_label, labels
 
 
 # ── tree → AI snapshot text (same format the recorder prompt expects) ───────
@@ -1121,27 +1111,16 @@ def _render_text(tree: list[dict], form_title: str,
                 lines.append(f"{indent}{' , '.join(parts)}")
                 continue
             if role == "RadioButton":
-                radio_run: list[dict] = []
+                lines.append(f"{indent}Select one:")
                 while i < len(nodes) and nodes[i].get("role") == "RadioButton":
-                    radio_run.append(nodes[i])
-                    i += 1
-                lines.append(f"{indent}{_radio_group_label(radio_run)}:")
-                for r in radio_run:
+                    r = nodes[i]
                     rref = str(r.get("element_ref") or "")
                     rtag = f"[{rref}] " if rref.startswith("e") else ""
                     dot = "(x)" if r.get("selected") else "( )"
                     lines.append(f"{indent}  {rtag}{dot} {r.get('label', '')}")
+                    i += 1
                 continue
             if role == "Group":
-                if n.get("radio_group"):
-                    lines.append(f"{indent}{n.get('label')}:")
-                    for r in n.get("children") or []:
-                        rref = str(r.get("element_ref") or "")
-                        rtag = f"[{rref}] " if rref.startswith("e") else ""
-                        dot = "(x)" if r.get("selected") else "( )"
-                        lines.append(f"{indent}  {rtag}{dot} {r.get('label', '')}")
-                    i += 1
-                    continue
                 lines.append(f"{indent}{n.get('label')}:")
                 for it in n.get("children") or []:
                     if it.get("checked") is not None:
@@ -1149,17 +1128,6 @@ def _render_text(tree: list[dict], form_title: str,
                     else:
                         mark = ""
                     lines.append(f"{indent}  {mark}{it.get('label', '')}")
-                i += 1
-                continue
-            if role == "List" and n.get("list_rows"):
-                cols = n.get("list_columns") or []
-                lines.append(f"{indent}{tag}{n.get('label', 'Results')} (List, select one):")
-                lines.append(f"{indent}  | {' | '.join(cols)} |")
-                lines.append(f"{indent}  |{'|'.join('---' for _ in cols)}|")
-                for r in n.get("list_rows"):
-                    vals = list(r.get("values") or []) + [""] * (len(cols) - len(r.get("values") or []))
-                    mark = "  *selected" if r.get("selected") else ""
-                    lines.append(f"{indent}  | {' | '.join(vals)} |{mark}")
                 i += 1
                 continue
             if role == "Tab":
@@ -1583,24 +1551,3 @@ def attribute_unique_tab_fields(merged_dom: dict, tab_doms: dict[str, dict]) -> 
             n["ownerTab"] = next(iter(tabs)).split(" -> ")[-1].strip()
             fixed += 1
     return fixed
-
-def _parse_list_rows(n: dict) -> dict | None:
-    """Rows of a Forms result list (LOV/ListView) live in the treeRows attribute:
-    '<flags>\\t<col>:<val>\\t...' per row, rows joined by ' || '. Flag[1]=='1' = selected."""
-    raw = str((n.get("attributes") or {}).get("treeRows") or "").strip()
-    if not raw:
-        return None
-    columns: list[str] = []
-    rows: list[dict] = []
-    for ridx, entry in enumerate(raw.split(" || ")):
-        parts = entry.split("\t")
-        flags, cells = parts[:3], parts[3:]
-        selected = len(flags) >= 2 and flags[1] == "1"
-        values: list[str] = []
-        for c in cells:
-            col, _, val = c.partition(":") if ":" in c else ("Value", "", c)
-            if col not in columns:
-                columns.append(col)
-            values.append(val)
-        rows.append({"values": values, "selected": selected})
-    return {"columns": columns, "rows": rows} if rows else None

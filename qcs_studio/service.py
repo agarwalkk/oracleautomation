@@ -603,7 +603,18 @@ class StudioService:
         # The curated tree + AI snapshot remain scoped to the active form window.
         full_view_nodes = full_view_scan(raw_dom)
         all_elements = java_nodes_to_repo_elements({"windows": full_view_nodes})
-        full_elements = build_full_overlay_elements(all_elements)
+        # WHY: Some Oracle ListView row items can appear in the curated tree
+        # (built from scoped DOM) but be absent from full-view flattening,
+        # which breaks overlay hover + info icon lookup for those nodes.
+        # Merge scoped elements so every tree element_ref has a full_elements
+        # entry with bounds and metadata for Studio UI interactions.
+        scoped_elements = java_nodes_to_repo_elements(scoped)
+        by_id = {str(e.get("elementid") or ""): e for e in all_elements}
+        for e in scoped_elements:
+            eid = str(e.get("elementid") or "")
+            if eid and eid not in by_id:
+                by_id[eid] = e
+        full_elements = build_full_overlay_elements(list(by_id.values()))
 
         # Update the bundle in-place with tree data.
         bundle.snapshot_text = str(payload.get("text") or "")

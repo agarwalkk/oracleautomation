@@ -6,8 +6,10 @@ import com.pyebsdom.agent.model.LocatorCandidate;
 
 import javax.swing.SwingUtilities;
 import java.awt.Component;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -88,13 +90,28 @@ public final class ListViewExpander {
             }
 
             int added = 0;
+            int rowErrs = 0;
             for (Row r : model.rows) {
-                DomNode item = buildRowNode(listNode, model, r, idGen);
-                listNode.children.add(item);
-                added++;
+                try {
+                    DomNode item = buildRowNode(listNode, model, r, idGen);
+                    if (item != null) {
+                        listNode.children.add(item);
+                        added++;
+                    }
+                } catch (Throwable rowErr) {
+                    rowErrs++;
+                    // Keep aggregate count only; avoid verbose per-row diagnostics
+                    // in normal scans to keep payload lean.
+                }
             }
             if (added == 0) {
+                if (rowErrs > 0) {
+                    listNode.attributes.put("_listExpandError", "all rows failed; rowErrs=" + rowErrs);
+                }
                 return 0;
+            }
+            if (rowErrs > 0) {
+                listNode.attributes.put("_listExpandRowErrors", Integer.toString(rowErrs));
             }
 
             // The rows are now first-class children — reuse the tree render/action
@@ -104,10 +121,11 @@ public final class ListViewExpander {
             if (!model.headers.isEmpty()) {
                 listNode.attributes.put("listColumns", join(model.headers, " | "));
             }
+            listNode.attributes.put("listGeomPlan", model.geomPlan);
             return added;
         } catch (Throwable t) {
             listNode.attributes.put("_listExpandError",
-                    t.getClass().getName() + ": " + t.getMessage());
+                    shortError(t));
             return 0;
         }
     }
@@ -156,22 +174,25 @@ public final class ListViewExpander {
         n.current = r.selected;
         n.enabled = true;
         n.visible = true;
-        n.showing = r.bounds != null;
+        n.showing = r.bounds != null || r.primaryCellBounds != null;
         n.focusable = true;
 
-        if (r.bounds != null) {
+        Rectangle targetBounds = (r.primaryCellBounds != null) ? r.primaryCellBounds : r.bounds;
+        if (targetBounds != null) {
             if (r.screenX >= 0 && r.screenY >= 0) {
-                n.bounds = new Bounds(r.bounds.x, r.bounds.y, r.bounds.width, r.bounds.height);
-                n.screenBounds = new Bounds(r.bounds.x, r.bounds.y, r.bounds.width, r.bounds.height,
-                        r.screenX, r.screenY, r.bounds.width, r.bounds.height);
+                n.bounds = new Bounds(targetBounds.x, targetBounds.y, targetBounds.width, targetBounds.height);
+                n.screenBounds = new Bounds(targetBounds.x, targetBounds.y, targetBounds.width, targetBounds.height,
+                        r.screenX, r.screenY, targetBounds.width, targetBounds.height);
             } else {
-                n.bounds = new Bounds(r.bounds.x, r.bounds.y, r.bounds.width, r.bounds.height);
-                n.screenBounds = new Bounds(r.bounds.x, r.bounds.y, r.bounds.width, r.bounds.height);
+                n.bounds = new Bounds(targetBounds.x, targetBounds.y, targetBounds.width, targetBounds.height);
+                n.screenBounds = new Bounds(targetBounds.x, targetBounds.y, targetBounds.width, targetBounds.height);
             }
         } else {
             n.bounds = new Bounds(0, 0, 0, 0);
             n.screenBounds = new Bounds(0, 0, 0, 0);
         }
+        n.attributes.put("rowCellBoundsPx", rectsToCsv(r.cellBounds));
+        n.attributes.put("rowGeomMethod", r.geomMethod != null ? r.geomMethod : "none");
 
         // Deterministic locators. listRow (list handle + row index) is the stable,
         // replay-friendly one; the key-column value is a human fallback. Both are
@@ -188,7 +209,13 @@ public final class ListViewExpander {
         if (list.accessibleName != null && !list.accessibleName.isEmpty()) {
             return list.accessibleName;
         }
-        return list.name != null ? list.name : list.path;
+        if (list.name != null && !list.name.isEmpty()) {
+            return list.name;
+        }
+        if (list.path != null && !list.path.isEmpty()) {
+            return list.path;
+        }
+        return "ListView";
     }
 
     // ── Reflective model read (marshalled onto EDT) ───────────────────────
@@ -203,12 +230,22 @@ public final class ListViewExpander {
                 }
             }
         };
-        if (SwingUtilities.isEventDispatchThread()) {
+        boolean onEdt = false;
+        try {
+            onEdt = SwingUtilities.isEventDispatchThread();
+        } catch (Throwable ignored) {
+            // WHY: In injected/attach contexts Oracle AWT can throw from toolkit
+            // lookup during EDT checks. Fall back to direct execution.
+            onEdt = false;
+        }
+        if (onEdt) {
             work.run();
         } else {
             try {
                 SwingUtilities.invokeAndWait(work);
-            } catch (Throwable t) {
+            } catch (Throwable ignored) {
+                // Fallback: run directly if invokeAndWait is unavailable in this
+                // runtime context (e.g., toolkit/appcontext edge cases).
                 work.run();
             }
         }
@@ -259,6 +296,11 @@ public final class ListViewExpander {
         // Row/cell geometry (optional; several method names across runtimes).
         Method rowBounds = m1(c, "getRowBounds");
         Method cellBounds = m2(c, "getCellBounds");
+        Insets insets = readInsets(comp, c);
+        model.columnWidths = readColumnWidths(comp, c, cols);
+        model.columnX = columnX(insets, model.columnWidths, cols);
+        GeomSeed seed = buildGeomSeed(comp, c, rows, cols, model);
+        model.geomPlan = seed.plan;
         Point origin = null;
         try {
             if (comp.isShowing()) {
@@ -280,11 +322,47 @@ public final class ListViewExpander {
                 } catch (Exception ignored) {
                 }
                 r.values.add(v != null ? v.toString().trim() : "");
+                Rectangle cb = cellRectangle(comp, col, rIdx, cellBounds);
+                if (cb == null && !model.columnWidths.isEmpty()) {
+                    Rectangle rr = rowRectangle(comp, rIdx, rowBounds, cellBounds);
+                    if (rr != null && col < model.columnWidths.size() && col < model.columnX.size()) {
+                        int cw = Math.max(0, model.columnWidths.get(col));
+                        int cx = model.columnX.get(col);
+                        cb = new Rectangle(cx, rr.y, cw, rr.height);
+                    }
+                }
+                r.cellBounds.add(cb);
             }
+            r.geomSource = "none";
+            r.geomMethod = "none";
             r.bounds = rowRectangle(comp, rIdx, rowBounds, cellBounds);
+            if (r.bounds != null) {
+                r.geomSource = "rowBounds";
+                r.geomMethod = "getRowBounds";
+            }
+            if (r.bounds == null) {
+                r.bounds = union(r.cellBounds);
+                if (r.bounds != null) {
+                    r.geomSource = "cellUnion";
+                    r.geomMethod = "getCellBounds";
+                }
+            }
+            if (r.bounds == null && seed.canSynthesize) {
+                synthesizeRowGeometry(r, cols, model, seed);
+                if (r.bounds != null) {
+                    r.geomSource = "synthColumnModel";
+                    r.geomMethod = seed.methodTag;
+                }
+            }
+            r.primaryCellBounds = firstNonNull(r.cellBounds);
+            if (r.primaryCellBounds != null && "none".equals(r.geomSource)) {
+                r.geomSource = "primaryCell";
+                r.geomMethod = "getCellBounds";
+            }
             if (r.bounds != null && origin != null) {
-                r.screenX = origin.x + r.bounds.x;
-                r.screenY = origin.y + r.bounds.y;
+                Rectangle screenRect = (r.primaryCellBounds != null) ? r.primaryCellBounds : r.bounds;
+                r.screenX = origin.x + screenRect.x;
+                r.screenY = origin.y + screenRect.y;
             }
             model.rows.add(r);
         }
@@ -313,6 +391,289 @@ public final class ListViewExpander {
             }
         }
         return null;
+    }
+
+    private static Rectangle cellRectangle(Component comp, int col, int row, Method cellBounds) {
+        if (cellBounds != null) {
+            try {
+                Object cb = cellBounds.invoke(comp, col, row);
+                if (cb instanceof Rectangle) {
+                    return (Rectangle) cb;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Insets readInsets(Component comp, Class<?> c) {
+        Method m = m0(c, "getColumnInsets");
+        if (m == null) {
+            return null;
+        }
+        try {
+            Object obj = m.invoke(comp);
+            if (obj instanceof Insets) {
+                return (Insets) obj;
+            }
+            if (obj == null) {
+                return null;
+            }
+            Integer top = intMember(obj, "top");
+            Integer left = intMember(obj, "left");
+            Integer bottom = intMember(obj, "bottom");
+            Integer right = intMember(obj, "right");
+            if (top != null || left != null || bottom != null || right != null) {
+                return new Insets(
+                        top != null ? top : 0,
+                        left != null ? left : 0,
+                        bottom != null ? bottom : 0,
+                        right != null ? right : 0);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static Integer intMember(Object obj, String name) {
+        try {
+            Method getter = obj.getClass().getMethod("get" + Character.toUpperCase(name.charAt(0)) + name.substring(1));
+            Object v = getter.invoke(obj);
+            return toInt(v);
+        } catch (Exception ignored) {
+        }
+        try {
+            Field f = obj.getClass().getField(name);
+            f.setAccessible(true);
+            Object v = f.get(obj);
+            return toInt(v);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static List<Integer> readColumnWidths(Component comp, Class<?> c, int cols) {
+        List<Integer> out = new ArrayList<>();
+        Method actual = m1(c, "getActualColumnWidth");
+        Method plain = m1(c, "getColumnWidth");
+        Method widthGetter = (actual != null) ? actual : plain;
+        if (widthGetter == null || cols <= 0) {
+            return out;
+        }
+        for (int i = 0; i < cols; i++) {
+            int w = 0;
+            try {
+                w = Math.max(0, toInt(widthGetter.invoke(comp, i)));
+            } catch (Exception ignored) {
+            }
+            out.add(w);
+        }
+        return out;
+    }
+
+    private static List<Integer> columnX(Insets insets, List<Integer> widths, int cols) {
+        List<Integer> out = new ArrayList<>();
+        if (cols <= 0) {
+            return out;
+        }
+        int x = (insets != null) ? Math.max(0, insets.left) : 0;
+        for (int i = 0; i < cols; i++) {
+            out.add(x);
+            int w = (i < widths.size()) ? Math.max(0, widths.get(i)) : 0;
+            x += w;
+        }
+        return out;
+    }
+
+    private static GeomSeed buildGeomSeed(Component comp, Class<?> c, int rows, int cols, Model model) {
+        GeomSeed s = new GeomSeed();
+        Insets scrollInsets = readImmInsets(comp, c, "getScrollInsets");
+        Integer canvasOriginX = readIntFromNoArg(comp, c, "getCanvasOriginX");
+        Integer canvasOriginY = readIntFromNoArg(comp, c, "getCanvasOriginY");
+        if (canvasOriginX == null || canvasOriginY == null) {
+            Point p = readPointFromNoArg(comp, c, "getCanvasOrigin");
+            if (p != null) {
+                if (canvasOriginX == null) {
+                    canvasOriginX = p.x;
+                }
+                if (canvasOriginY == null) {
+                    canvasOriginY = p.y;
+                }
+            }
+        }
+
+        Integer rowStep = resolveVLineIncrement(comp);
+        Integer canvasH = readIntFromNoArg(comp, c, "getCanvasHeight");
+        if (canvasH == null || canvasH <= 0) {
+            Integer innerH = readIntFromNoArg(comp, c, "getInnerHeight");
+            if (innerH != null && innerH > 0) {
+                canvasH = innerH;
+            }
+        }
+        if (rowStep == null || rowStep <= 0) {
+            int safeRows = Math.max(1, rows);
+            int fallback = (canvasH != null && canvasH > 0) ? Math.max(16, canvasH / Math.max(safeRows, 4)) : 18;
+            rowStep = fallback;
+        }
+
+        s.canvasOriginX = canvasOriginX != null ? canvasOriginX : 0;
+        s.canvasOriginY = canvasOriginY != null ? canvasOriginY : 0;
+        s.scrollTop = (scrollInsets != null) ? Math.max(0, scrollInsets.top) : 0;
+        s.rowStep = Math.max(1, rowStep);
+        s.rowHeight = Math.max(1, s.rowStep);
+        s.methodTag = "columnWidth+columnInsets+scrollInsets+canvasOrigin+vLineIncrement";
+        s.canSynthesize = cols > 0 && !model.columnWidths.isEmpty();
+        s.plan = "method=" + s.methodTag
+            + ",rowStep=" + s.rowStep
+            + ",scrollTop=" + s.scrollTop
+            + ",canvasOriginX=" + s.canvasOriginX
+            + ",canvasOriginY=" + s.canvasOriginY;
+        return s;
+    }
+
+    private static void synthesizeRowGeometry(Row r, int cols, Model model, GeomSeed seed) {
+        int rowY = Math.max(0, seed.scrollTop + (r.rowIndex * seed.rowStep) - seed.canvasOriginY);
+        int rowMaxX = 0;
+        for (int col = 0; col < cols; col++) {
+            Rectangle existing = (col < r.cellBounds.size()) ? r.cellBounds.get(col) : null;
+            if (existing != null && existing.width > 0 && existing.height > 0) {
+                rowMaxX = Math.max(rowMaxX, existing.x + existing.width);
+                continue;
+            }
+            int cx = seed.canvasOriginX;
+            if (col < model.columnX.size()) {
+                cx += Math.max(0, model.columnX.get(col));
+            }
+            int cw = (col < model.columnWidths.size()) ? Math.max(1, model.columnWidths.get(col)) : 1;
+            Rectangle synth = new Rectangle(cx, rowY, cw, seed.rowHeight);
+            if (col < r.cellBounds.size()) {
+                r.cellBounds.set(col, synth);
+            } else {
+                r.cellBounds.add(synth);
+            }
+            rowMaxX = Math.max(rowMaxX, cx + cw);
+        }
+        if (!r.cellBounds.isEmpty()) {
+            r.primaryCellBounds = firstNonNull(r.cellBounds);
+            int rowX = seed.canvasOriginX;
+            int rowW = Math.max(1, rowMaxX - rowX);
+            r.bounds = new Rectangle(rowX, rowY, rowW, seed.rowHeight);
+        }
+    }
+
+    private static Insets readImmInsets(Component comp, Class<?> c, String methodName) {
+        Method m = m0(c, methodName);
+        if (m == null) {
+            return null;
+        }
+        try {
+            Object obj = m.invoke(comp);
+            if (obj instanceof Insets) {
+                return (Insets) obj;
+            }
+            if (obj == null) {
+                return null;
+            }
+            Integer top = intMember(obj, "top");
+            Integer left = intMember(obj, "left");
+            Integer bottom = intMember(obj, "bottom");
+            Integer right = intMember(obj, "right");
+            if (top != null || left != null || bottom != null || right != null) {
+                return new Insets(
+                        top != null ? top : 0,
+                        left != null ? left : 0,
+                        bottom != null ? bottom : 0,
+                        right != null ? right : 0);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static Integer readIntFromNoArg(Component comp, Class<?> c, String methodName) {
+        Method m = m0(c, methodName);
+        if (m == null) {
+            return null;
+        }
+        try {
+            return toInt(m.invoke(comp));
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static Point readPointFromNoArg(Component comp, Class<?> c, String methodName) {
+        Method m = m0(c, methodName);
+        if (m == null) {
+            return null;
+        }
+        try {
+            Object p = m.invoke(comp);
+            if (p instanceof Point) {
+                return (Point) p;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static Integer resolveVLineIncrement(Component comp) {
+        for (Component cur = comp; cur != null; cur = cur.getParent()) {
+            Method m = m0(cur.getClass(), "getVLineIncrement");
+            if (m == null) {
+                continue;
+            }
+            try {
+                int v = toInt(m.invoke(cur));
+                if (v > 0) {
+                    return v;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Rectangle union(List<Rectangle> rects) {
+        Rectangle out = null;
+        for (Rectangle r : rects) {
+            if (r == null) {
+                continue;
+            }
+            if (out == null) {
+                out = new Rectangle(r);
+            } else {
+                out = out.union(r);
+            }
+        }
+        return out;
+    }
+
+    private static Rectangle firstNonNull(List<Rectangle> rects) {
+        for (Rectangle r : rects) {
+            if (r != null && r.width > 0 && r.height > 0) {
+                return r;
+            }
+        }
+        return null;
+    }
+
+    private static String rectsToCsv(List<Rectangle> rects) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < rects.size(); i++) {
+            if (i > 0) {
+                sb.append('\t');
+            }
+            Rectangle r = rects.get(i);
+            if (r == null) {
+                sb.append(i).append(':').append("0,0,0,0");
+            } else {
+                sb.append(i).append(':')
+                        .append(r.x).append(',').append(r.y).append(',')
+                        .append(r.width).append(',').append(r.height);
+            }
+        }
+        return sb.toString();
     }
 
     // ── String helpers ────────────────────────────────────────────────────
@@ -401,11 +762,34 @@ public final class ListViewExpander {
         }
     }
 
+    private static String shortError(Throwable t) {
+        if (t == null) {
+            return "unknown";
+        }
+        String msg = t.getClass().getName() + ": " + String.valueOf(t.getMessage());
+        StackTraceElement[] st = t.getStackTrace();
+        if (st != null && st.length > 0) {
+            msg += " @ " + st[0].toString();
+        }
+        Throwable cause = t.getCause();
+        if (cause != null && cause != t) {
+            msg += " | cause=" + cause.getClass().getName() + ": " + String.valueOf(cause.getMessage());
+            StackTraceElement[] cst = cause.getStackTrace();
+            if (cst != null && cst.length > 0) {
+                msg += " @ " + cst[0].toString();
+            }
+        }
+        return msg;
+    }
+
     // ── Carriers ──────────────────────────────────────────────────────────
 
     private static final class Model {
         final List<String> headers = new ArrayList<>();
         final List<Row> rows = new ArrayList<>();
+        List<Integer> columnWidths = new ArrayList<>();
+        List<Integer> columnX = new ArrayList<>();
+        String geomPlan = "";
     }
 
     private static final class Row {
@@ -413,7 +797,22 @@ public final class ListViewExpander {
         boolean selected;
         final List<String> values = new ArrayList<>();
         Rectangle bounds;      // component-relative
+        Rectangle primaryCellBounds; // first visible column cell
+        final List<Rectangle> cellBounds = new ArrayList<>();
+        String geomSource;
+        String geomMethod;
         int screenX = -1;
         int screenY = -1;
+    }
+
+    private static final class GeomSeed {
+        boolean canSynthesize;
+        int canvasOriginX;
+        int canvasOriginY;
+        int scrollTop;
+        int rowStep;
+        int rowHeight;
+        String methodTag;
+        String plan;
     }
 }

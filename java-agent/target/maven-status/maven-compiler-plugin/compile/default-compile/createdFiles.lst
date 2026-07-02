@@ -4,6 +4,7 @@ com\pyebsdom\agent\execute\ComponentResolver.class
 com\pyebsdom\agent\runtime\AwtContext.class
 com\pyebsdom\agent\render\TextLayout.class
 com\pyebsdom\agent\extract\TabPageExpander$Page.class
+com\pyebsdom\agent\extract\ListViewExpander$GeomSeed.class
 com\pyebsdom\agent\extract\Identity.class
 com\pyebsdom\agent\runtime\Reflect.class
 com\pyebsdom\agent\capture\ScreenCapture$Result.class

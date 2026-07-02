@@ -1,0 +1,75 @@
+Form: Find Purchase Orders
+  [e119] Line (Tab, enabled, selected)
+    [e36] Item number (LOV)
+    [e38] Category (LOV)
+    [e39] Description
+    [e40] Supplier Item (LOV)
+    [e41] VMI (ComboBox) (read-only) values: ['Yes', 'No']
+    [e43] Consigned (ComboBox) (read-only) values: ['Yes', 'No']
+    [e53] Job
+    [e54] Line
+    [e55] Assembly
+    [e56] Operation Department
+    [e57] Resource Name
+  [e121] Date Ranges (Tab, enabled)
+    [e108] Order Creation Date : From (LOV)
+    [e109] Order Creation Date : To (LOV)
+    [e110] Approved Date : From (LOV)
+    [e111] Approved Date : To (LOV)
+    [e112] Promised Date : From (LOV)
+    [e113] Promised Date : To (LOV)
+    [e114] Need-by Date : From (LOV)
+    [e115] Need-by Date : To (LOV)
+    [e116] Closed Date : From (LOV)
+    [e117] Closed Date : To (LOV)
+  [e123] Status (Tab, enabled)
+    [e95] Order Approval (ComboBox) (read-only) values: ['Approved', 'In Process', 'Incomplete', 'Pre-Approved', 'Rejected', 'Requires Reapproval']
+    [e97] Control (ComboBox) (read-only) values: ['Open', 'Closed', 'Finally Closed', 'Closed for Invoice', 'Closed for Receiving', 'Cancelled']
+    [e99] Hold (ComboBox) (read-only) values: ['Yes', 'No']
+    [e101] Frozen (ComboBox) (read-only) values: ['Yes', 'No']
+    [e103] Firmed (ComboBox) (read-only) values: ['Yes', 'No']
+  [e125] Related Documents (Tab, enabled)
+    [e83] Contract (LOV)
+    [e84] Receipt (LOV)
+    [e85] Invoice (LOV)
+    [e86] Requisition (LOV)
+    [e87] Paper Requisition (LOV)
+    [e88] Source Document: Type (LOV)
+    [e91] Supplier Quote (LOV)
+  [e127] Deliver To (Tab, enabled)
+    [e72] Destination Type (ComboBox) (read-only) values: ['Expense', 'Inventory', 'Shop Floor']
+    [e74] Requester (LOV)
+    [e75] Organization (LOV)
+    [e77] Show External Locations (Checkbox, unchecked)
+    [e78] Location (LOV)
+    [e79] Subinventory (LOV)
+  [e129] Accounting (Tab, enabled)
+    [e61] Period Name : From (LOV)
+    [e62] Period Name : To (LOV)
+    [e63] GL Date : From (LOV)
+    [e64] GL Date : To (LOV)
+    [e65] Charge Account (LOV)
+    [e66] Budget Account (LOV)
+    [e67] Active Encumbrances (ComboBox) (read-only) values: ['Yes', 'No']
+  [e131] Projects (Tab, enabled)
+    [e48] Project (LOV)
+  [e168] Item: Item (LOV) = RMT_RMD_OU
+  [e169] Number (LOV)
+  [e170] Type (LOV)
+  [e172] Currency (LOV)
+  [e173] Supplier (LOV)
+  [e175] Ship-To Org (LOV)
+  [e177] Show External Locations (Checkbox, unchecked)
+  [e178] Bill-To (LOV)
+  [e179] Ship-To (LOV)
+  [e181] Line Type (LOV)
+  [e183] Buyer (LOV)
+  [e185] View Releases (Checkbox, unchecked)
+  [e187] Consumption Advice (Checkbox, unchecked)
+  [e189] Global Agreement (Checkbox, unchecked)
+  Select one:
+    [e191] (x) View Results Headers
+    [e193] ( ) View Results Lines
+    [e195] ( ) View Results Shipments
+    [e197] ( ) View Results Distributions
+  [e198] Clear (Button, enabled) , [e201] Find (Button, enabled)
