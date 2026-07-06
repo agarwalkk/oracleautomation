@@ -39,12 +39,8 @@
             padding: 28px;
             min-height: 260px;
         }
-        .mermaid svg {
-            max-width: none;
-        }
-        .stage-card {
-            border-left: 4px solid #0f766e;
-        }
+        .mermaid svg { max-width: none; }
+        .stage-card { border-left: 4px solid #0f766e; }
         code {
             background: #eef2f7;
             border: 1px solid #d9dee7;
@@ -62,77 +58,120 @@
             line-height: 1.55;
         }
         .priority-cell { width: 72px; }
+        .badge-new { background:#ecfeff; color:#0e7490; border:1px solid #a5f3fc; border-radius:6px; padding:1px 7px; font-size:11px; font-weight:700; }
+        .badge-prop { background:#fef3c7; color:#92400e; border:1px solid #fde68a; border-radius:6px; padding:1px 7px; font-size:11px; font-weight:700; }
     </style>
 </head>
 <body class="antialiased">
     <main class="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-12">
         <header class="mb-8">
             <div class="mb-4 flex flex-wrap gap-2">
-                <span class="status-chip bg-blue-50 text-blue-800">Current: screenshot-only AI recorder</span>
-                <span class="status-chip bg-emerald-50 text-emerald-800">Replay: deterministic pytest</span>
-                <span class="status-chip bg-amber-50 text-amber-800">Forms: local Java agent</span>
-                <span class="status-chip bg-slate-50 text-slate-800">Updated: May 22, 2026</span>
+                <span class="status-chip bg-blue-50 text-blue-800">Record: screenshot-only AI recorder</span>
+                <span class="status-chip bg-emerald-50 text-emerald-800">Replay: deterministic pytest (AI-free)</span>
+                <span class="status-chip bg-amber-50 text-amber-800">Forms: local Java Attach agent</span>
+                <span class="status-chip bg-indigo-50 text-indigo-800">Studio: FastAPI + React repository builder</span>
+                <span class="status-chip bg-slate-50 text-slate-800">Reviewed: Jul 2026</span>
             </div>
             <h1 class="max-w-5xl text-4xl font-extrabold tracking-tight text-slate-950 md:text-5xl">
                 QCS Oracle Automation Architecture
             </h1>
             <p class="mt-4 max-w-4xl text-lg leading-8 text-slate-700">
-                QCS turns natural-language Oracle EBS R12 test instructions into generated pytest replay scripts for mixed OAF/web and Java Forms workflows. AI is allowed during recording and failure healing only. Normal replay is deterministic and resolves user-friendly script references through the object repository, Playwright, and the local Java Forms agent.
+                QCS turns natural-language Oracle EBS R12 test instructions into generated pytest replay scripts for mixed OAF/web and Java Forms workflows.
+                AI is allowed during recording and failure healing only. Normal replay is deterministic and resolves user-friendly script references through the
+                object repository, Playwright, and the local Java Forms agent. A companion <strong>web studio</strong> lets a human scan a live Forms window and
+                curate the element repository the scripts depend on.
             </p>
         </header>
 
         <section class="grid gap-5 md:grid-cols-4" aria-label="Architecture principles">
             <div class="panel metric p-4">
                 <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Record Once</p>
-                <p class="mt-2 text-sm leading-6 text-slate-700">AI watches screenshots, decides the next action, and the recorder stores structured actions.</p>
+                <p class="mt-2 text-sm leading-6 text-slate-700">AI watches screenshots, decides the next action, and the recorder stores structured actions in <code>recording.jsonl</code>.</p>
             </div>
             <div class="panel metric border-l-teal-600 p-4">
                 <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Replay Often</p>
-                <p class="mt-2 text-sm leading-6 text-slate-700">Generated pytest scripts call a readable DSL and run without LLM calls in the normal path.</p>
+                <p class="mt-2 text-sm leading-6 text-slate-700">Generated pytest scripts call a readable DSL and run without any LLM calls in the normal path.</p>
             </div>
             <div class="panel metric border-l-amber-600 p-4">
                 <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Repo Resolves</p>
-                <p class="mt-2 text-sm leading-6 text-slate-700">Friendly names map to Java-agent and Playwright descriptors in the repository.</p>
+                <p class="mt-2 text-sm leading-6 text-slate-700">Business names map to Java-agent and Playwright descriptors in <code>repo/repo.db</code>.</p>
             </div>
-            <div class="panel metric border-l-rose-600 p-4">
-                <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Patch Review</p>
-                <p class="mt-2 text-sm leading-6 text-slate-700">Recorded and healed locator changes are reviewable. Do not silently merge AI changes.</p>
+            <div class="panel metric border-l-indigo-600 p-4">
+                <p class="text-xs font-bold uppercase tracking-wide text-slate-500">Studio Curates</p>
+                <p class="mt-2 text-sm leading-6 text-slate-700">The web studio scans forms, overlays elements on a screenshot, and lets a human build reusable containers.</p>
             </div>
         </section>
 
         <section class="section-band section-shell">
             <h2 class="text-2xl font-bold text-slate-950">Quick Start For Developers</h2>
             <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-700">
-                This is the local development loop. Recording now generates the replay suite immediately and prints the script path at the end.
+                The two local loops: the CLI record/replay pipeline, and the web studio for repository curation.
             </p>
             <div class="mt-6 grid gap-6 lg:grid-cols-2">
                 <div class="panel p-5">
-                    <h3 class="font-bold text-slate-900">Record And Generate</h3>
-                    <pre class="code-block mt-3">Get-Content .env | ForEach-Object {
-  if ($_ -match '^([^#=]+)=(.*)$') {
-    [System.Environment]::SetEnvironmentVariable($Matches[1].Trim(), $Matches[2].Trim(), 'Process')
-  }
-}
-
-python -m qcs record instructions.txt --run-id rec_014 --auto-name</pre>
+                    <h3 class="font-bold text-slate-900">Record, Generate, Replay</h3>
+                    <pre class="code-block mt-3">python -m qcs record instructions.txt --run-id rec_014 --auto-name
+python -m pytest generated_tests\rec_014 -q -s</pre>
                     <p class="mt-3 text-sm leading-6 text-slate-700">
-                        Output includes <code>recordings/rec_014/recording.jsonl</code>, <code>recordings/rec_014/recording.manifest.json</code>, diagnostics, repo updates, regenerated page objects, and <code>generated_tests/rec_014/test_rec_014.py</code>.
+                        Recording writes <code>recordings/rec_014/recording.jsonl</code>, a validated <code>recording.manifest.json</code>, diagnostics, repo
+                        updates, regenerated page objects, and <code>generated_tests/rec_014/test_rec_014.py</code>. Replay logs in, opens the form, attaches the
+                        Java agent, and runs deterministic actions. Use <code>qcs gen validate</code> before committing a suite.
                     </p>
                 </div>
                 <div class="panel p-5">
-                    <h3 class="font-bold text-slate-900">Replay The Generated Script</h3>
-                    <pre class="code-block mt-3">python -m pytest generated_tests\rec_014 -q -s</pre>
+                    <h3 class="font-bold text-slate-900">Run The Web Studio</h3>
+                    <pre class="code-block mt-3">python -m qcs_studio                 # FastAPI backend (:8090)
+cd qcs_studio\web
+npm install
+npm run dev                          # React frontend (:5176, proxies /api)</pre>
                     <p class="mt-3 text-sm leading-6 text-slate-700">
-                        Normal replay launches browser login, opens the Oracle form, attaches to Java Forms, resolves repository refs, performs deterministic actions, and writes pytest reports. Use <code>qcs gen run</code> for manual regeneration after reviewed repo edits. Use <code>qcs gen validate</code> to run the business-readability gate before committing a suite.
+                        Pick a running Oracle Java window, scan it, review the screenshot with its element overlay, drag discovery elements into the tree, then
+                        save the curated container into the repository.
                     </p>
                 </div>
             </div>
         </section>
 
         <section class="section-band section-shell">
+            <h2 class="text-2xl font-bold text-slate-950">System Map</h2>
+            <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-700">
+                Two subsystems share one object repository: the CLI record→generate→replay pipeline, and the web studio for capturing and curating elements.
+                Both talk to the live Oracle Forms JVM through the same local Java agent.
+            </p>
+            <div class="mermaid-wrap mt-6">
+                <pre class="mermaid">flowchart TB
+    subgraph Pipeline["Record &rarr; Generate &rarr; Replay (CLI)"]
+        INSTR["instructions.txt"] --> REC["oracle_ai_agent recorder"]
+        REC -->|screenshots only| AI["Azure / OpenAI models"]
+        REC --> JSONL["recording.jsonl"]
+        JSONL --> MAN["qcs_manifest normalize + validate"]
+        MAN --> MANJSON["recording.manifest.json"]
+        MANJSON --> GEN["generator + config/aliases"]
+        REPO[("qcs_repo: repo.db + YAML")] --> GEN
+        GEN --> TESTS["generated_tests/*.py + conftest"]
+        TESTS --> REPLAY["qcs_replay OracleReplay DSL"]
+        REPLAY -->|failure only| HEAL["healing (two-tier)"]
+    end
+    subgraph Studio["QCS Studio (web)"]
+        WEB["React frontend"] <-->|REST /api/v1| SVC["FastAPI backend"]
+        SVC --> AISNAP["tests/testdata/aisnapshot/new"]
+    end
+    REC <--> PYJA["qcs_java_agent (JavaAgentDriver)"]
+    REPLAY <--> PYJA
+    SVC <--> PYJA
+    REPLAY <-->|browser| PW["Playwright"]
+    PYJA <-->|Attach API| JAVA["java-agent in Forms JVM"]
+    JAVA --> EBS["Oracle Forms / OAF runtime"]
+    REC --> REPO
+    SVC --> REPO</pre>
+            </div>
+        </section>
+
+        <section class="section-band section-shell">
             <h2 class="text-2xl font-bold text-slate-950">End-To-End Pipeline</h2>
             <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-700">
-                The current pipeline records a raw action log, normalizes and validates a stable manifest, updates the actioned-element repository, and immediately generates a readable pytest script.
+                The pipeline records a raw action log, normalizes and validates a stable manifest, updates the actioned-element repository, and immediately
+                generates a readable pytest script.
             </p>
             <div class="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
                 <article class="panel stage-card p-5">
@@ -177,27 +216,85 @@ python -m qcs record instructions.txt --run-id rec_014 --auto-name</pre>
         </section>
 
         <section class="section-band section-shell">
+            <h2 class="text-2xl font-bold text-slate-950">QCS Studio — Web Repository Builder</h2>
+            <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-700">
+                <code>qcs_studio/</code> is a local FastAPI backend serving a React + TypeScript (Vite) frontend. It scans a live Oracle Forms window through the
+                same Java agent, then lets a human review and curate the element repository visually. It runs a <strong>two-phase scan</strong> so capture stays
+                fast and tree-building can be retried without touching the live window.
+            </p>
+            <div class="mt-6 grid gap-6 lg:grid-cols-2">
+                <div class="panel p-5">
+                    <h3 class="font-bold text-slate-900">Backend API (<code>/api/v1</code>)</h3>
+                    <ul class="mt-3 space-y-1.5 text-sm leading-6 text-slate-700">
+                        <li><code>GET /windows</code> — list running Oracle Java processes.</li>
+                        <li><code>POST /scan</code> — <strong>Phase 1</strong>: attach, capture raw DOM + screenshot (multi-tab DFS), return a <code>ScanBundle</code> with an empty tree.</li>
+                        <li><code>POST /scan/recalculate</code> — <strong>Phase 2</strong>: build tree + AI snapshot + hover overlay from the cached DOM; auto-dump artifacts.</li>
+                        <li><code>POST /scan/save</code> — persist a draft as an active container.</li>
+                        <li><code>GET /scans/{id}/screenshot</code> — screenshot (supports <code>?tab=</code>).</li>
+                        <li><code>GET /containers</code> · <code>/drafts</code> · <code>/drafts/{id}</code> — list / inspect / delete.</li>
+                        <li><code>GET/PUT /containers/{ref}</code>, <code>PUT …/display-tree</code> — load / update / persist the curated tree.</li>
+                        <li><code>PATCH/DELETE …/elements/{ref}</code> — edit / remove one element.</li>
+                    </ul>
+                </div>
+                <div class="panel p-5">
+                    <h3 class="font-bold text-slate-900">Frontend (<code>web/src/App.tsx</code>)</h3>
+                    <ul class="mt-3 space-y-1.5 text-sm leading-6 text-slate-700">
+                        <li>Renders the screenshot with an <strong>overlay of element bounding boxes</strong> (sorted smallest-on-top).</li>
+                        <li><strong>Hover-to-highlight</strong> with a details tooltip: <code>element_ref</code>, name, type, role, value, actions.</li>
+                        <li>Two hover modes — <code>tree</code> (curated only) and <code>all</code> (every scanned element).</li>
+                        <li><strong>Drag-to-add</strong>: "discovery" elements not yet in the tree are dragged onto tree nodes (<code>addElementToNode</code>), persisted via <code>PUT …/display-tree</code>.</li>
+                        <li>Zoom / fit, expandable tree, per-tab screenshots.</li>
+                    </ul>
+                    <p class="mt-3 text-sm leading-6 text-slate-700">
+                        Today the studio operates on a <em>captured</em> screenshot + overlay — there is no live cursor picking on the real Forms window yet, and no
+                        WebSocket. See <a href="#live-picker" class="text-indigo-700 underline">Studio Enhancement: Live Element Picker</a>.
+                    </p>
+                </div>
+            </div>
+            <div class="mermaid-wrap mt-6">
+                <pre class="mermaid">flowchart LR
+    WIN["Oracle Forms window"] -->|scan| SVC["StudioService.run_scan"]
+    SVC -->|raw DOM + screenshot| BUNDLE["ScanBundle (draft cache)"]
+    BUNDLE -->|POST /scan/recalculate| TREE["compute_tree: build_action_payload + overlay"]
+    TREE --> DUMP["auto-dump: ai_snapshot.txt + java_scan_dump.json + screenshot.png"]
+    TREE --> UI["React overlay + tree"]
+    UI -->|drag-to-add / edit| CURATE["curated display tree"]
+    CURATE -->|POST /scan/save| STORE["qcs_repo: containers + container_elements"]</pre>
+            </div>
+            <div class="panel mt-5 border-l-4 border-l-indigo-600 p-5">
+                <h3 class="font-bold text-slate-900">Auto-Dump Rule</h3>
+                <p class="mt-2 text-sm leading-6 text-slate-700">
+                    Phase 2 (<code>compute_tree</code>) writes <code>tests/testdata/aisnapshot/new/&lt;YYYYMMDD_HHMMSS&gt;/</code> with
+                    <code>ai_snapshot.txt</code>, <code>java_scan_dump.json</code>, and <code>screenshot.png</code> (plus per-tab files for multi-tab forms).
+                    A human moves liked scans to <code>approved/</code> to join the snapshot regression suite (<code>test_aisnapshot_regression.py</code>).
+                </p>
+            </div>
+        </section>
+
+        <section class="section-band section-shell">
             <h2 class="text-2xl font-bold text-slate-950">Current Module Map</h2>
             <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-700">
-                Keep changes inside the layer that owns the behavior. Generated files are useful to inspect, but lasting fixes belong in the generator, repo, recorder, or replay runtime.
+                Keep changes inside the layer that owns the behavior. Generated files are useful to inspect, but lasting fixes belong in the generator, repo,
+                recorder, replay runtime, or studio.
             </p>
             <div class="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                <article class="panel p-5"><h3 class="font-bold text-blue-800">CLI</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs/__main__.py</code> owns commands. <code>qcs record</code> records and generates immediately. <code>qcs gen run</code> is for manual regeneration; <code>qcs gen validate &lt;dir&gt;</code> runs the business-readability gate. <code>qcs aliases validate</code> and <code>qcs aliases report</code> manage the alias catalog. <code>qcs repo validate</code> checks the repository schema.</p></article>
-                <article class="panel p-5"><h3 class="font-bold text-indigo-800">Recorder</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>oracle_ai_agent</code> owns AI-guided recording. It performs deterministic login/open-form setup, sends only screenshots to AI, and maps actions locally to Java DOM.</p></article>
-                <article class="panel p-5"><h3 class="font-bold text-amber-800">Java Forms Agent</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>java-agent/</code> and <code>qcs_java_agent</code> extract, inspect, and replay Java Forms through the Java Attach API. Normal Forms execution must not use screenshot clicking.</p></article>
-                <article class="panel p-5"><h3 class="font-bold text-teal-800">Object Repository</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs_repo</code> stores forms and elements in <code>repo/repo.db</code> with YAML fallback and flow files under <code>repo/</code>. Current recording stores only actioned elements.</p></article>
-                <article class="panel p-5"><h3 class="font-bold text-rose-800">Generator</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>generator</code> converts manifest steps into launchable pytest suites using the <code>FormReplay</code> DSL. <code>generator/naming.py</code> applies the alias catalog (<code>config/aliases/</code>) then a deterministic sanitiser to produce business-readable <code>form_ref</code> and <code>element_ref</code> names. <code>generator/alias_catalog.py</code> loads and validates per-domain alias JSON files. <code>generator/script_validator.py</code> provides the post-generation readability gate.</p></article>
-                <article class="panel p-5"><h3 class="font-bold text-slate-800">Replay Runtime</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs_replay</code> owns deterministic actions, assertions, Playwright helpers, Java ref resolution, and failure-only healing. <code>qcs_replay.dsl</code> adds the surface-aware DSL layer: <code>RepositoryResolver</code>, <code>FormReplay</code>, <code>BrowserReplayBackend</code>, <code>JavaFormsReplayBackend</code>, <code>ReplayLogger</code>, and typed exceptions. <code>OracleReplay.form('form_ref')</code> returns a <code>FormReplay</code> bound to the named form; controls are invoked from that object. <code>qcs_replay.failure_bundle</code> writes structured diagnostics (JSON + screenshots + Java snapshots) on step failure.</p></article>
-                <article class="panel p-5"><h3 class="font-bold text-slate-800">Control Plane Prototype</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs_center</code> is an early FastAPI job/agent backend. Evolve it into the management and artifact service.</p></article>
-                <article class="panel p-5"><h3 class="font-bold text-slate-800">Windows Worker Prototype</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs_agent</code> long-polls the center and runs jobs on a Windows desktop session. Oracle Forms automation is desktop-session bound.</p></article>
-                <article class="panel p-5"><h3 class="font-bold text-slate-800">Legacy Note</h3><p class="mt-2 text-sm leading-6 text-slate-700">Do not reintroduce the old standalone Oracle MCP server path. Current Forms extraction and replay goes through <code>qcs_java_agent</code> and <code>java-agent/</code>.</p></article>
+                <article class="panel p-5"><h3 class="font-bold text-blue-800">CLI</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs/__main__.py</code> owns commands: <code>record</code>, <code>play</code>, <code>normalize</code>, <code>gen run</code>/<code>gen validate</code>, <code>pages</code>/<code>flows</code>, <code>aliases validate</code>/<code>report</code>, <code>repo validate</code>/<code>repo-capture</code>, <code>center</code>, <code>agent</code>.</p></article>
+                <article class="panel p-5"><h3 class="font-bold text-indigo-800">Recorder</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>oracle_ai_agent</code> owns AI-guided recording. <code>tools.py</code> exposes the model tool surface and writes <code>recording.jsonl</code>; <code>play.py</code> is screenshot-only computer-use. AI sees screenshots; Java DOM mapping stays local.</p></article>
+                <article class="panel p-5"><h3 class="font-bold text-amber-800">Java Forms Agent</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>java-agent/</code> (in-JVM, Attach API) and <code>qcs_java_agent</code> (Python client) extract, inspect, and replay Java Forms. Commands: <code>scan</code>, <code>raw</code>, <code>layout</code>, <code>tables</code>, <code>click</code>, <code>settext</code>, <code>clear</code>, <code>presskey</code>, <code>screenshot</code>, <code>highlight</code>, <code>elementat</code>.</p></article>
+                <article class="panel p-5"><h3 class="font-bold text-teal-800">Object Repository</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs_repo</code> stores forms and elements in SQLite <code>repo/repo.db</code> (<code>forms</code>, <code>elements</code>, <code>containers</code>, <code>container_elements</code>, <code>repo_entries</code>) with YAML export/fallback. <code>RepoEntry</code> is keyed by <code>(form_ref, element_ref)</code>. Recording stores only actioned elements.</p></article>
+                <article class="panel p-5"><h3 class="font-bold text-slate-800">Manifest</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs_manifest</code> defines <code>RecordingManifest</code>/<code>RecordingManifestStep</code>. Canonical step fields: <code>step_id</code>, <code>intent</code>, <code>surface</code>, <code>action</code>, <code>form_ref</code>, <code>element_ref</code>, <code>input</code>, <code>assertions</code>, <code>diagnostics</code>, <code>metadata</code>. No <code>target_ref</code>.</p></article>
+                <article class="panel p-5"><h3 class="font-bold text-rose-800">Generator</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>generator</code> converts manifest steps into pytest suites using the <code>FormReplay</code> DSL. <code>naming.py</code> (<code>sanitize_ref</code>, <code>AliasResolver</code>) + <code>alias_catalog.py</code> (<code>config/aliases/&lt;domain&gt;/&lt;form_ref&gt;.json</code>) produce business-readable names. <code>script_validator.py</code> is the readability gate.</p></article>
+                <article class="panel p-5"><h3 class="font-bold text-slate-800">Replay Runtime</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs_replay.script.OracleReplay</code> exposes <code>login</code>, <code>open_form</code>, <code>form()</code>. <code>dsl.py</code> adds <code>RepositoryResolver</code>, <code>FormReplay</code>, <code>BrowserReplayBackend</code>, <code>JavaFormsReplayBackend</code>, <code>ReplayLogger</code>, typed exceptions. <code>failure_bundle.py</code> writes diagnostics on failure.</p></article>
+                <article class="panel p-5"><h3 class="font-bold text-indigo-800">Web Studio</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs_studio</code> — FastAPI backend (<code>service.py</code> <code>ScanBundle</code>, two-phase scan, auto-dump) + React frontend (<code>web/src/App.tsx</code>: overlay, hover tooltip, drag-to-add tree). Scans and curates the repository visually.</p></article>
+                <article class="panel p-5"><h3 class="font-bold text-slate-800">Control Plane Prototype</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>qcs_center</code> is an early FastAPI + SQLite job/agent service; <code>qcs_agent</code> long-polls it and shells out to <code>qcs record</code>. Evolve into full record/generate/replay/artifact orchestration.</p></article>
             </div>
         </section>
 
         <section class="section-band section-shell">
             <h2 class="text-2xl font-bold text-slate-950">Generated Script Contract</h2>
             <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-700">
-                Users launch generated pytest scripts directly. The script should read like a business replay while still carrying deterministic <code>ref</code> and <code>form_id</code> values so runtime resolution stays stable.
+                Users launch generated pytest scripts directly. The script reads like a business replay while carrying deterministic <code>form_ref</code> and
+                <code>element_ref</code> values so runtime resolution stays stable.
             </p>
             <div class="mt-6 grid gap-6 lg:grid-cols-2">
                 <div class="panel p-5">
@@ -229,38 +326,31 @@ def test_update_po_number(oracle_replay: OracleReplay):
                     <ul class="mt-3 space-y-2 text-sm leading-6 text-slate-700">
                         <li><code>OracleReplay.login</code> performs deterministic Playwright login with environment credentials.</li>
                         <li><code>OracleReplay.open_form</code> navigates to RF.jsp, downloads JNLP, starts Forms, attaches the Java agent, and waits for readiness.</li>
-                        <li><code>oracle_replay.form('form_ref')</code> returns a <code>FormReplay</code> bound to the named form. Controls are invoked from that object: <code>set_text</code>, <code>click</code>, <code>press_key</code>, <code>assert_text</code>, etc.</li>
-                        <li><code>form_ref</code> and <code>element_ref</code> are business-readable names resolved through the alias catalog; <code>qcs_repo</code> maps them to Java-agent descriptors at runtime.</li>
+                        <li><code>oracle_replay.form('form_ref')</code> returns a <code>FormReplay</code> bound to the named form. Controls invoked from it: <code>set_text</code>, <code>click</code>, <code>double_click</code>, <code>select_value</code>, <code>press_key</code>, <code>wait_for</code>, <code>assert_visible</code>, <code>assert_text</code>, <code>assert_value</code>, <code>get_text</code>, <code>get_value</code>.</li>
+                        <li><code>RepositoryResolver</code> maps <code>(form_ref, element_ref)</code> to a descriptor and surface; a miss raises <code>ReplayRefNotFoundError</code> (no silent fallback). Surface routes by <code>form_id</code> prefix (<code>html_</code> &rarr; browser, <code>java_</code> &rarr; java_forms).</li>
                         <li>Technical Java IDs (<code>java_*</code>, <code>_alt_*</code>, <code>toolbar\d</code>) must never appear in generated step arguments. <code>qcs gen validate</code> enforces this.</li>
-                        <li>Normal replay does not call an LLM. Healing opens only after a deterministic failure; it produces a reviewable patch.</li>
+                        <li>Normal replay does not call an LLM. Healing opens only after a deterministic failure and produces a reviewable patch.</li>
                     </ul>
                 </div>
             </div>
         </section>
 
         <section class="section-band section-shell">
-            <h2 class="text-2xl font-bold text-slate-950">Recorder Details</h2>
-            <div class="mt-6 grid gap-5 lg:grid-cols-2">
-                <div class="panel p-5"><h3 class="font-bold text-slate-900">Screenshot-Only AI Surface</h3><p class="mt-2 text-sm leading-6 text-slate-700">During recording, AI receives screenshots and returns actions. Java DOM is not sent to AI. The Python recorder maps returned coordinates to local Java-agent DOM and records only the actioned element in the repository.</p></div>
-                <div class="panel p-5"><h3 class="font-bold text-slate-900">Readiness Before AI</h3><p class="mt-2 text-sm leading-6 text-slate-700">The recorder and replay wait for Oracle Forms readiness using <code>qcs_java_agent.readiness</code>. Avoid fixed sleeps. AI screenshots should be taken only after the form is stable and not busy.</p></div>
-                <div class="panel p-5"><h3 class="font-bold text-slate-900">Dedicated Session Diagnostics</h3><p class="mt-2 text-sm leading-6 text-slate-700">Each run writes <code>recordings/&lt;run_id&gt;/diagnostics/</code>, including screenshots, Java DOM snapshots, readiness data, AI requests/responses, action calls, and coordinate mapping files.</p></div>
-                <div class="panel p-5"><h3 class="font-bold text-slate-900">Fail Fast Recording</h3><p class="mt-2 text-sm leading-6 text-slate-700">Recording should stop clearly when expected values are not found, LOV lookup fails, the wrong form opens, or a required field/action cannot be verified. Do not record a misleading script.</p></div>
-            </div>
-        </section>
-
-        <section class="section-band section-shell">
             <h2 class="text-2xl font-bold text-slate-950">Oracle Forms Runtime</h2>
             <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-700">
-                Java Forms automation is owned by the local Java agent. It attaches to the running Oracle Forms JVM and performs extraction and replay with structured component descriptors.
+                Java Forms automation is owned by the local Java agent. It attaches to the running Oracle Forms JVM via the Attach API and performs extraction and
+                replay with structured component descriptors and screen-absolute bounds.
             </p>
             <div class="mermaid-wrap mt-6">
                 <pre class="mermaid">flowchart TB
-    PY["Python runtime<br/>qcs_java_agent"] --> ATTACH["AttachAgentByPid"]
-    ATTACH --> JVM["Oracle Forms JVM<br/>javaws"]
-    JVM --> SCAN["scan/raw/layout/tables"]
-    JVM --> ACTION["click/settext/clear/presskey/screenshot/elementat"]
-    SCAN --> SNAP["Java DOM snapshot"]
+    PY["Python runtime<br/>qcs_java_agent.JavaAgentDriver"] --> ATTACH["attach by PID (jp2launcher / javaw)"]
+    ATTACH --> JVM["Oracle Forms JVM<br/>EbsDomAgent.agentmain"]
+    JVM --> SCAN["scan / raw / layout / tables"]
+    JVM --> ACTION["click / settext / clear / presskey"]
+    JVM --> PICK["screenshot / highlight / elementat"]
+    SCAN --> SNAP["Java DOM snapshot (schema 2.0 identity)"]
     ACTION --> RESULT["JSON result envelope"]
+    PICK --> RESULT
     SNAP --> REPO["repo descriptors"]
     REPO --> REPLAY["qcs_replay.script controls"]
     REPLAY --> ACTION</pre>
@@ -268,7 +358,8 @@ def test_update_po_number(oracle_replay: OracleReplay):
             <div class="panel mt-5 border-l-4 border-l-amber-600 p-5">
                 <h3 class="font-bold text-slate-900">Non-Negotiable Forms Launch Rule</h3>
                 <p class="mt-2 text-sm leading-6 text-slate-700">
-                    After Oracle EBS login succeeds, call <code>oracle_form_open</code> immediately. It handles responsibility selection and function navigation internally. If RF.jsp downloads a JNLP or starts Forms, call <code>java_form_launch</code> immediately before any Java Forms interaction.
+                    After Oracle EBS login succeeds, call <code>oracle_form_open</code> immediately. It handles responsibility selection and function navigation
+                    internally. If RF.jsp downloads a JNLP or starts Forms, call <code>java_form_launch</code> immediately before any Java Forms interaction.
                 </p>
             </div>
         </section>
@@ -276,72 +367,45 @@ def test_update_po_number(oracle_replay: OracleReplay):
         <section class="section-band section-shell">
             <h2 class="text-2xl font-bold text-slate-950">AI Boundary And Healing</h2>
             <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-700">
-                AI is an authoring and repair assistant, not the normal execution engine. Replay must first try deterministic repository resolution and Java/Playwright actions.
+                AI is an authoring and repair assistant, not the normal execution engine. Replay first tries deterministic repository resolution and
+                Java/Playwright actions. Healing is <strong>two-tier and failure-only</strong>; the deterministic path never imports AI modules
+                (guarded by <code>test_replay_dsl_module_does_not_import_ai_modules</code>).
             </p>
             <div class="mermaid-wrap mt-6">
                 <pre class="mermaid">flowchart TD
-    STEP["Generated pytest step"] --> RESOLVE["Resolve repo descriptor"]
-    RESOLVE --> ACT["Run Java-agent or Playwright action"]
+    STEP["Generated pytest step"] --> RESOLVE["RepositoryResolver.resolve"]
+    RESOLVE --> ACT["Java-agent or Playwright action"]
     ACT --> CHECK{"success?"}
     CHECK -->|yes| NEXT["next deterministic step"]
-    CHECK -->|no| T1["Tier 1 healer<br/>structured snapshot"]
-    T1 --> PATCH1["proposed repo patch"]
+    CHECK -->|no| BUNDLE["failure_bundle.json + screenshot + Java snapshot"]
+    CHECK -->|no, healing on| T1["Tier 1 SnapshotHealer<br/>accessibility snapshot &rarr; constrained LLM &rarr; validate"]
     T1 --> RETRY["retry deterministic step"]
     RETRY --> CHECK
-    T1 -->|unresolved| T2["Tier 2 healer<br/>screenshot fallback"]
-    T2 --> MAP["map coordinate back to descriptor"]
-    MAP --> PATCH2["proposed repo patch"]
-    PATCH1 --> REVIEW["human review"]
-    PATCH2 --> REVIEW</pre>
+    T1 -->|unresolved| T2["Tier 2 ComputerUseHealer<br/>screenshot &rarr; computer use"]
+    T2 --> MAP["coord_to_locator: map coordinate back to descriptor"]
+    T1 --> PATCH["repo_patch.yaml"]
+    T2 --> PATCH
+    PATCH --> REVIEW["human review"]</pre>
             </div>
             <div class="mt-6 grid gap-5 md:grid-cols-3">
                 <div class="panel p-4"><h3 class="font-bold text-slate-900">Allowed AI</h3><p class="mt-2 text-sm leading-6 text-slate-700">Recording, friendly-name proposals, failure healing, and patch suggestions.</p></div>
                 <div class="panel p-4"><h3 class="font-bold text-slate-900">Forbidden AI</h3><p class="mt-2 text-sm leading-6 text-slate-700">Normal replay, ordinary locator resolution, data loading, assertions, and Java Forms execution.</p></div>
-                <div class="panel p-4"><h3 class="font-bold text-slate-900">Review Rule</h3><p class="mt-2 text-sm leading-6 text-slate-700">AI-recorded and self-healed locator changes produce patches or reviewable repository changes.</p></div>
+                <div class="panel p-4"><h3 class="font-bold text-slate-900">Review Rule</h3><p class="mt-2 text-sm leading-6 text-slate-700">AI-recorded and self-healed locator changes produce patches or reviewable repository changes — never silent merges.</p></div>
             </div>
         </section>
 
-        <section class="section-band section-shell">
-            <h2 class="text-2xl font-bold text-slate-950">Distributed Future State</h2>
+        <section id="live-picker" class="section-band section-shell">
+            <h2 class="text-2xl font-bold text-slate-950">Studio Enhancement: Live Element Picker <span class="badge-prop">Proposed</span></h2>
             <p class="mt-2 max-w-4xl text-sm leading-6 text-slate-700">
-                The management UI should be built over QCS Center. Generated tests remain pytest. Agents execute desktop-bound Oracle work and upload artifacts, logs, patches, and results.
+                A planned upgrade to the studio: instead of curating from a static screenshot, the user clicks a button to enter a <strong>live pick mode</strong>,
+                hovers directly over the running Oracle Forms window to see element details under the cursor, clicks to add that element to the component tree, and
+                presses Esc (or a stop button) to exit back to the studio. The building blocks already exist in the Java agent — this is an integration, not new
+                low-level capability.
             </p>
-            <div class="mermaid-wrap mt-6">
-                <pre class="mermaid">flowchart TB
-    subgraph Clients["Users and integrations"]
-        UI["Management UI"]
-        CLI["qcs CLI"]
-        PIPE["Azure Pipelines"]
-    end
-    subgraph Center["QCS Center"]
-        API["FastAPI jobs/catalog/artifacts API"]
-        DB["PostgreSQL target<br/>SQLite local"]
-        ART["Blob Storage target<br/>local artifacts"]
-        PATCH["Patch review service"]
-        AZ["Azure Test Plans adapter"]
-    end
-    subgraph Fleet["Windows worker fleet"]
-        A1["qcs_agent<br/>desktop session"]
-        A2["qcs_agent<br/>desktop session"]
-    end
-    GIT["Git repo<br/>source + repo data"]
-    EBS["Oracle EBS R12<br/>OAF + Java Forms"]
-    UI --> API
-    CLI --> API
-    PIPE --> API
-    API --> DB
-    API --> ART
-    API --> PATCH
-    API --> AZ
-    API <-->|jobs and heartbeats| A1
-    API <-->|jobs and heartbeats| A2
-    A1 --> EBS
-    A2 --> EBS
-    A1 --> ART
-    A2 --> ART
-    PATCH --> GIT
-    GIT --> A1
-    GIT --> A2</pre>
+            <div class="mt-6 grid gap-5 md:grid-cols-3">
+                <div class="panel p-4"><h3 class="font-bold text-slate-900">Already available</h3><p class="mt-2 text-sm leading-6 text-slate-700"><code>elementat(x, y)</code> deep hit-test, <code>screenshot</code> (screen or component), and <code>highlight</code> already ship in <code>java-agent</code> / <code>JavaAgentDriver</code>. Bounds are screen-absolute.</p></div>
+                <div class="panel p-4"><h3 class="font-bold text-slate-900">To add</h3><p class="mt-2 text-sm leading-6 text-slate-700">A live-view transport (streamed frames or a native overlay), a throttled hover &rarr; <code>elementat</code> loop, a picker WebSocket, and studio state for the in-progress tree + an explicit exit.</p></div>
+                <div class="panel p-4"><h3 class="font-bold text-slate-900">Key decision</h3><p class="mt-2 text-sm leading-6 text-slate-700">Fully web-based streamed-frame picker (no extension) vs a native transparent overlay helper driven from the web app. See the accompanying recommendation.</p></div>
             </div>
         </section>
 
@@ -353,17 +417,15 @@ def test_update_po_number(oracle_replay: OracleReplay):
                         <tr><th class="priority-cell px-4 py-3">Priority</th><th class="px-4 py-3">Work</th><th class="px-4 py-3">Primary Modules</th><th class="px-4 py-3">Verification Signal</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200 bg-white text-slate-700">
-                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">Business naming layer: <code>generator/naming.py</code> (<code>sanitize_ref</code>, <code>AliasResolver</code>) strips technical Java IDs and resolves names through the alias catalog before code generation.</td><td class="px-4 py-4"><code>generator/naming.py</code>, <code>generator/alias_catalog.py</code>, <code>config/aliases/</code></td><td class="px-4 py-4">257 tests pass. <code>qcs gen validate</code> exits 0 on rec_013_replay. No <code>java_*</code> refs in generated step section.</td></tr>
-                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">Alias catalog: per-domain alias JSON files under <code>config/aliases/</code> with <code>AliasCatalog.load()</code>, <code>validate()</code>, and CLI via <code>qcs aliases validate / report</code>.</td><td class="px-4 py-4"><code>generator/alias_catalog.py</code>, <code>config/aliases/</code>, <code>qcs/__main__.py</code></td><td class="px-4 py-4"><code>qcs aliases validate</code> exits 0. 7 form alias files cover order management, purchasing, and common dialogs.</td></tr>
-                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">Business-readability gate: <code>generator/script_validator.py</code> detects technical name leakage in generated scripts. CLI via <code>qcs gen validate &lt;dir&gt;</code>.</td><td class="px-4 py-4"><code>generator/script_validator.py</code>, <code>qcs/__main__.py</code></td><td class="px-4 py-4"><code>qcs gen validate generated_tests\rec_013_replay</code> exits 0.</td></tr>
-                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">Failure bundle diagnostics: <code>FailureBundle</code> + <code>BundleWriter</code> write structured JSON, screenshots, and Java snapshots per failed step.</td><td class="px-4 py-4"><code>qcs_replay/failure_bundle.py</code></td><td class="px-4 py-4">Forced locator break produces a <code>failure_bundle_*.json</code> artifact beside the diagnostics directory.</td></tr>
-                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">Normalized manifest layer added between <code>recording.jsonl</code> and pytest generation, with schema/validator drift guard test.</td><td class="px-4 py-4"><code>qcs_manifest</code>, <code>generator</code>, <code>tests/test_manifest_layer.py</code></td><td class="px-4 py-4"><code>qcs gen run</code> consumes manifest first and required fields stay aligned by test.</td></tr>
-                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">OracleReplay DSL layer: surface-aware routing, <code>RepositoryResolver</code>, <code>BrowserReplayBackend</code>, <code>JavaFormsReplayBackend</code>, structured logging, and typed exceptions. Generator output remains compatible.</td><td class="px-4 py-4"><code>qcs_replay.dsl</code>, <code>qcs_replay.script</code>, <code>tests/test_oracle_replay_dsl.py</code></td><td class="px-4 py-4">257 tests pass. <code>test_replay_dsl_module_does_not_import_ai_modules</code> guards the no-AI contract.</td></tr>
-                        <tr><td class="px-4 py-4 font-bold text-red-700">P0</td><td class="px-4 py-4">Improve recorder semantic disambiguation so fields like <code>PO#</code> are captured correctly instead of nearby labels.</td><td class="px-4 py-4"><code>oracle_ai_agent</code>, <code>qcs_java_agent.snapshot</code>, <code>qcs_repo</code></td><td class="px-4 py-4">Fresh recording emits correct field ref and replay updates the intended field.</td></tr>
-                        <tr><td class="px-4 py-4 font-bold text-red-700">P0</td><td class="px-4 py-4">Wrap generated steps with deterministic failure handling and healing boundaries.</td><td class="px-4 py-4"><code>generator</code>, <code>qcs_replay.healing</code></td><td class="px-4 py-4">Forced locator break writes <code>repo_patch.yaml</code> and retries only through explicit healing.</td></tr>
+                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">Business naming layer + alias catalog: technical Java IDs stripped and resolved to business names before generation.</td><td class="px-4 py-4"><code>generator/naming.py</code>, <code>generator/alias_catalog.py</code>, <code>config/aliases/</code></td><td class="px-4 py-4"><code>qcs gen validate</code> and <code>qcs aliases validate</code> exit 0; no <code>java_*</code> refs in step section.</td></tr>
+                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">Normalized manifest layer + business-readability gate + failure bundles.</td><td class="px-4 py-4"><code>qcs_manifest</code>, <code>generator/script_validator.py</code>, <code>qcs_replay/failure_bundle.py</code></td><td class="px-4 py-4"><code>test_manifest_layer.py</code> drift guard passes; forced break writes a <code>failure_bundle.json</code>.</td></tr>
+                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">OracleReplay DSL: surface-aware routing, backends, structured logging, typed exceptions; two-tier failure-only healing.</td><td class="px-4 py-4"><code>qcs_replay.dsl</code>, <code>qcs_replay.script</code>, <code>qcs_replay.healing</code></td><td class="px-4 py-4"><code>test_oracle_replay_dsl.py</code> passes; no-AI import guard holds.</td></tr>
+                        <tr><td class="px-4 py-4 font-bold text-blue-700">Done</td><td class="px-4 py-4">Web studio: two-phase scan, multi-tab DFS, overlay + hover tooltip, drag-to-add tree, container persistence, auto-dump.</td><td class="px-4 py-4"><code>qcs_studio</code>, <code>qcs_studio/web</code></td><td class="px-4 py-4">Scan a live window, curate a tree, save a container; snapshot regression stays green.</td></tr>
+                        <tr><td class="px-4 py-4 font-bold text-cyan-700">New</td><td class="px-4 py-4"><span class="badge-new">Studio</span> Live element picker: click &rarr; live screen, hover shows element, click adds to tree, Esc exits. Reuse <code>elementat</code> / <code>screenshot</code> / <code>highlight</code>.</td><td class="px-4 py-4"><code>qcs_studio</code>, <code>qcs_java_agent</code>, <code>java-agent</code></td><td class="px-4 py-4">User picks live elements without a full pre-scan and exits cleanly to the studio.</td></tr>
+                        <tr><td class="px-4 py-4 font-bold text-red-700">P0</td><td class="px-4 py-4">Improve recorder semantic disambiguation so fields like <code>PO#</code> are captured correctly instead of nearby labels.</td><td class="px-4 py-4"><code>oracle_ai_agent</code>, <code>qcs_java_agent.snapshot</code>, <code>qcs_repo</code></td><td class="px-4 py-4">Fresh recording emits the correct field ref; fewer <code>alias_review</code> items.</td></tr>
+                        <tr><td class="px-4 py-4 font-bold text-red-700">P0</td><td class="px-4 py-4">Wrap generated steps with deterministic failure handling and explicit healing boundaries.</td><td class="px-4 py-4"><code>generator</code>, <code>qcs_replay.healing</code></td><td class="px-4 py-4">Forced locator break writes <code>repo_patch.yaml</code> and retries only through explicit healing.</td></tr>
                         <tr><td class="px-4 py-4 font-bold text-amber-700">P1</td><td class="px-4 py-4">Expand <code>qcs_center</code> and <code>qcs_agent</code> from record prototype to record/generate/replay/artifact jobs.</td><td class="px-4 py-4"><code>qcs_center</code>, <code>qcs_agent</code></td><td class="px-4 py-4">Tagged Windows agents run replay jobs and upload reports, diagnostics, and patches.</td></tr>
                         <tr><td class="px-4 py-4 font-bold text-amber-700">P1</td><td class="px-4 py-4">Add Azure Test Plans adapter around manifests, pytest/JUnit output, and run summaries.</td><td class="px-4 py-4">new Azure DevOps integration package</td><td class="px-4 py-4">Generated test maps to an Azure Test Case and publishes run results.</td></tr>
-                        <tr><td class="px-4 py-4 font-bold text-blue-700">P2</td><td class="px-4 py-4">Build management UI over QCS Center for jobs, catalog, artifacts, logs, and patch review.</td><td class="px-4 py-4">new UI app, <code>qcs_center</code> APIs</td><td class="px-4 py-4">Team can submit recordings, launch replays, inspect diagnostics, and review repo patches.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -373,15 +435,16 @@ def test_update_po_number(oracle_replay: OracleReplay):
             <h2 class="text-2xl font-bold text-slate-950">Validation Checklist</h2>
             <div class="mt-6 grid gap-6 lg:grid-cols-2">
                 <div class="panel p-5"><h3 class="font-bold text-slate-900">Fast Local Checks</h3><pre class="code-block mt-3">python -m compileall qcs oracle_ai_agent qcs_java_agent qcs_repo qcs_replay generator
-python test_local.py
 python -m qcs record --help
 python -m qcs gen run recordings\rec_013 rec_013_replay --out generated_tests\rec_013_replay
 python -m qcs gen validate generated_tests\rec_013_replay
 python -m qcs aliases validate
 python -m qcs repo validate
 python -m pytest tests/ -q</pre></div>
-                <div class="panel p-5"><h3 class="font-bold text-slate-900">Live Oracle Checks</h3><pre class="code-block mt-3">python -m qcs record instructions.txt --run-id rec_014 --auto-name
-python -m pytest generated_tests\rec_014 -q -s</pre><p class="mt-3 text-sm leading-6 text-slate-700">For Java agent changes, rebuild with <code>C:\apache-maven-3.9.15\bin\mvn.cmd -f java-agent\pom.xml -DskipTests package</code> before live replay.</p></div>
+                <div class="panel p-5"><h3 class="font-bold text-slate-900">Live Oracle + Studio Checks</h3><pre class="code-block mt-3">python -m qcs record instructions.txt --run-id rec_014 --auto-name
+python -m pytest generated_tests\rec_014 -q -s
+
+python -m qcs_studio            # then scan a live Forms window in the browser</pre><p class="mt-3 text-sm leading-6 text-slate-700">For Java agent changes, rebuild with <code>C:\apache-maven-3.9.15\bin\mvn.cmd -f java-agent\pom.xml -DskipTests package</code> before live replay.</p></div>
             </div>
         </section>
 
@@ -393,9 +456,11 @@ python -m pytest generated_tests\rec_014 -q -s</pre><p class="mt-3 text-sm leadi
                     <ul class="mt-3 space-y-2 text-sm leading-6 text-slate-700">
                         <li>Recorder behavior belongs in <code>oracle_ai_agent</code>.</li>
                         <li>Java Forms extraction/replay belongs in <code>java-agent/</code> and <code>qcs_java_agent</code>.</li>
+                        <li>Scan &rarr; tree / snapshot formatting belongs in <code>qcs_java_agent/snapshot.py</code> (re-approve baselines deliberately).</li>
                         <li>Repository identity, naming, and patch logic belongs in <code>qcs_repo</code>.</li>
                         <li>User-visible generated script behavior belongs in <code>generator</code> and <code>qcs_replay.script</code>.</li>
                         <li>Runtime locators, assertions, and healing belong in <code>qcs_replay</code>.</li>
+                        <li>Web capture / tree curation / picker belongs in <code>qcs_studio</code>.</li>
                         <li>Fleet, jobs, artifacts, and UI APIs belong in <code>qcs_center</code> and <code>qcs_agent</code>.</li>
                     </ul>
                 </div>
@@ -406,8 +471,9 @@ python -m pytest generated_tests\rec_014 -q -s</pre><p class="mt-3 text-sm leadi
                         <li>Do not send Java DOM to AI during normal recording; AI sees screenshots, local code maps coordinates.</li>
                         <li>Do not use screenshot clicking for normal Java Forms replay.</li>
                         <li>Do not navigate responsibilities or menus before <code>oracle_form_open</code>.</li>
+                        <li>Tables group by <code>recordIndex</code> + <code>columnKey</code> metadata; do not reintroduce the removed Jaccard/geometry heuristic. Keep rows and buttons flat.</li>
                         <li>Do not serialize credentials or keys into prompts, recordings, logs, reports, generated tests, or DB rows.</li>
-                        <li>Do not hand-edit generated tests for lasting fixes. Update the generator or repository source.</li>
+                        <li>Do not hand-edit generated tests, page objects, or flows for lasting fixes. Update the generator or repository source.</li>
                     </ul>
                 </div>
             </div>

@@ -1,67 +1,336 @@
-# Custom Workspace Rules & Architecture Guide
+# AGENTS.md — QCS Oracle Automation
 
-## 1. Custom Workspace Rules
+Guidance for AI coding agents and human contributors working in this repository.
+Keep this file in sync with `.github/copilot-instructions.md` (same content) and
+with the visual companion `architecture.html`.
 
-- **No Grouping Folders (`FieldRow`)**: Do not use synthetic grouping folders (like `grp-1`, `grp-2`, etc. representing horizontal rows of fields) in the parsed scan tree. Row children must be appended flatly to their parent containers.
-- **Table Row Grouping**: Ensure tables (especially large tables with >6 columns) are correctly recognized as `Table` nodes, grouping their cells into table rows using robust similarity signature matches (Jaccard similarity >= 70% with at least 3 matching columns).
-- **Auto-Saving Scans**: Every scan performed via the web front-end must automatically dump its snapshot outputs into `tests/testdata/aisnapshot/new/<timestamp>/` (where `<timestamp>` is in `YYYYMMDD_HHMMSS` format) containing exactly 3 files:
-  1. `ai_snapshot.txt`: The generated AI snapshot text.
-  2. `java_scan_dump.json`: The raw JSON DOM returned from the Java scan.
-  3. `screenshot.png`: The screenshot image.
-- **Approved Folders**: Scans liked by the user should be manually moved from the `new` folder to the `approved` folder to become part of the regression test suite.
-- **No Regression**: Every change to the scan or snapshot formatting code must run the regression test suite to ensure that the new code is able to reproduce the `ai_snapshot.txt` baselines from the `java_scan_dump.json` files under `tests/testdata/aisnapshot/approved/`.
-- **No Buttons Grouping**: Do not group buttons under a synthetic `Buttons` group. Buttons must be appended flatly.
-- **Dynamic Parent Bounds**: Ensure parent container nodes (like `Form`, `Table`, `Group`, etc.) enclosing children dynamically compute their bounds by enclosing all children's bounds recursively.
+> **Mission.** QCS records natural-language Oracle EBS R12 test instructions once,
+> then generates deterministic, AI-free pytest replay scripts for mixed OAF/web
+> and Java Forms flows. A separate **web studio** lets a human capture and curate
+> the element repository that those scripts resolve against.
+>
+> **AI boundary.** AI is an *authoring and repair* assistant only — it is allowed
+> during recording and after a deterministic replay failure (healing). **Normal
+> replay must never call an LLM.** During recording, AI sees screenshots only; the
+> Java DOM stays local and is mapped to elements by deterministic code.
 
 ---
 
-## 2. Application Architecture Overview
+## 1. Custom Workspace Rules
 
-This project is an automation platform for Oracle Forms runtime applications, consisting of a Java accessibility agent scanner, an interactive repository editor studio, element storage, test replay engines, and automated script/page-object code generators.
+These constraints govern the scan → snapshot → tree pipeline in
+`qcs_java_agent/snapshot.py` and the web studio in `qcs_studio/`. Follow them
+exactly; several are guarded by the regression suite.
+
+- **Metadata-driven table grouping.** Tables are assembled from the Java agent's
+  schema-2.0 identity metadata (`recordIndex` + `columnKey`), **not** from
+  geometry or label similarity. `_grid_node()` builds a `Table` node purely from
+  `recordIndex`/`columnKey`; a real grid needs ≥2 distinct columns (guards against
+  a stray single-column `GridCell`). Do **not** reintroduce the old
+  Jaccard/geometric row-signature heuristic — it has been removed.
+- **Flat rows and buttons.** Do not wrap fields in synthetic horizontal
+  grouping folders, and do not group buttons under a synthetic `Buttons` folder.
+  Row and button children are appended flatly to their parent container.
+- **Dynamic parent bounds.** Container nodes (`Form`, `Table`, `Group`, tab
+  content, etc.) compute their bounds by enclosing all descendant bounds
+  recursively. Never hard-code container geometry.
+- **Auto-saving scans (studio).** When the studio computes a tree
+  (`StudioService.compute_tree`, reached via `POST /api/v1/scan/recalculate`),
+  it auto-dumps the raw artifacts to
+  `tests/testdata/aisnapshot/new/<YYYYMMDD_HHMMSS>/`:
+  1. `ai_snapshot.txt` — the generated AI snapshot text.
+  2. `java_scan_dump.json` — the raw JSON DOM returned by the Java scan.
+  3. `screenshot.png` — the captured screenshot.
+  Multi-tab scans additionally dump per-tab `java_scan_dump_<tab>.json` and a
+  `tab_screenshots/` folder.
+- **Approved baselines.** Scans a human likes are moved by hand from
+  `tests/testdata/aisnapshot/new/` to `tests/testdata/aisnapshot/approved/` to
+  join the regression suite.
+- **No snapshot regression.** Any change to scan or snapshot-formatting code must
+  keep `tests/test_aisnapshot_regression.py` green. That test runs
+  `build_action_context()` over every `java_scan_dump.json` under
+  `approved/` and asserts the output matches the checked-in `ai_snapshot.txt`
+  **exactly**. Fix the code or deliberately re-approve the baseline — never let it
+  drift silently.
+
+### System-wide rules (recording, replay, safety)
+
+- **Forms launch sequence.** After EBS login succeeds, call `oracle_form_open`
+  immediately — it handles responsibility selection and function navigation
+  internally. Do not navigate responsibilities or menus first. If `RF.jsp`
+  downloads a JNLP or starts Forms, call `java_form_launch` immediately before any
+  Java Forms interaction.
+- **No screenshot clicking in normal Forms replay.** Java Forms actions go through
+  `java-agent/` via `qcs_java_agent`, not pixel clicking. Screenshot/computer-use
+  is reserved for the recorder and the Tier-2 healer.
+- **No AI in the normal replay path.** Do not import or call LLM modules from the
+  deterministic replay path. `tests/test_oracle_replay_dsl.py` contains a guard
+  (`test_replay_dsl_module_does_not_import_ai_modules`) — keep it passing.
+- **Business-readable generated scripts only.** Generated `form_ref`/`element_ref`
+  arguments must be business names. Never emit `java_*`, `_alt_*`, `_mnemonic_*`,
+  `toolbar\d`, `page.locator(...)`, or raw Java descriptor dicts in the step
+  section. `qcs gen validate <dir>` enforces this.
+- **Don't hand-edit generated artifacts.** Lasting fixes go in `generator/`,
+  `qcs_replay.script`, the alias catalog, or repository metadata — never in
+  `generated_tests/`, generated `pages/`, or generated `flows_gen/`.
+- **Never serialize secrets.** No credentials, Azure keys, or tokens in prompts,
+  logs, DB rows, recordings, generated tests, docs, or reports.
+
+---
+
+## 2. Architecture Overview
+
+Two cooperating subsystems share one object repository:
+
+1. **Record → generate → replay pipeline** (CLI-driven): capture a flow once with
+   AI assistance, normalize it to a validated manifest, update the actioned-element
+   repository, and generate a deterministic pytest suite that replays without AI.
+2. **QCS Studio** (web-driven): a local FastAPI + React app to scan a live Oracle
+   Forms window, review the screenshot/element overlay, curate the element tree,
+   and persist reusable containers into the same repository.
 
 ```mermaid
 graph TD
-    classDef comp fill:#252526,stroke:#007acc,stroke-width:2px,color:#d4d4d4;
-    classDef data fill:#2d2d2d,stroke:#4ec9b0,stroke-width:1px,color:#d4d4d4;
-    
-    A[Java runtime / Oracle Forms]:::data -->|Java Access Bridge| B(qcs_java_agent):::comp
-    B -->|DOM Snapshot & Screen Coordinates| C(qcs_studio backend):::comp
-    C <-->|FastAPI / WebSocket| D(qcs_studio React frontend):::comp
-    C <-->|Saves mappings & names| E[(repo SQLite store)]:::data
-    C -->|Auto-dumps raw scan artifacts| F[tests/testdata/aisnapshot/new]:::data
-    
-    G(qcs_manifest / generator):::comp -->|Compiles mappings| H[pages/ Page Objects]:::data
-    I(qcs_replay DSL Engine):::comp -->|Drives| B
-    
-    J[test_aisnapshot_regression.py]:::comp -->|Verifies snapshot output| F
+    classDef comp fill:#eef2ff,stroke:#4338ca,stroke-width:1px,color:#1e1b4b;
+    classDef data fill:#ecfdf5,stroke:#059669,stroke-width:1px,color:#064e3b;
+
+    INSTR[instructions.txt]:::data --> CLI(qcs CLI):::comp
+    CLI --> REC(oracle_ai_agent recorder):::comp
+    REC -->|screenshots only| AI[[Azure/OpenAI models]]:::data
+    REC <-->|scan / click / settext / elementat / screenshot| PYJA(qcs_java_agent):::comp
+    PYJA <-->|Attach API command protocol| JAVA(java-agent in Forms JVM):::comp
+    JAVA --> EBS[Oracle Forms / OAF runtime]:::data
+
+    REC --> JSONL[recordings/&lt;run&gt;/recording.jsonl]:::data
+    JSONL --> MAN(qcs_manifest normalize+validate):::comp
+    MAN --> MANJSON[recording.manifest.json]:::data
+    REC --> REPO[(qcs_repo: repo/repo.db + YAML)]:::data
+    MANJSON --> GEN(generator + config/aliases):::comp
+    REPO --> GEN
+    GEN --> TESTS[generated_tests/&lt;run&gt;/test_*.py + conftest]:::data
+    TESTS --> REPLAY(qcs_replay OracleReplay DSL):::comp
+    REPLAY <-->|browser| PW[Playwright]:::data
+    REPLAY <-->|java_forms| PYJA
+    REPLAY -->|failure only| HEAL(qcs_replay.healing two-tier):::comp
+
+    STUDIO(qcs_studio backend):::comp <-->|REST /api/v1| WEB(React studio):::comp
+    STUDIO <--> PYJA
+    STUDIO --> REPO
+    STUDIO --> AISNAP[tests/testdata/aisnapshot/new]:::data
+
+    CENTER(qcs_center control plane):::comp <-->|jobs + heartbeats| WORKER(qcs_agent worker):::comp
+    WORKER --> CLI
 ```
 
-### Component Directory Map
+---
 
-#### 📂 [qcs_java_agent](file:///C:/Apps/OracleAutomation/qcs_java_agent)
-The Java Accessibility runtime interface that connects to active Java/Forms windows.
-- [process.py](file:///C:/Apps/OracleAutomation/qcs_java_agent/process.py): Enumerates active Windows processes via ctypes to locate Oracle Forms runtime wrappers (`jp2launcher.exe`, `javaw.exe`), resolving PID, window handle (HWND), class name, and title.
-- [driver.py](file:///C:/Apps/OracleAutomation/qcs_java_agent/driver.py): Executes lower-level control requests on Java GUI components (clicking, typing, triggering accessibility actions).
-- [snapshot.py](file:///C:/Apps/OracleAutomation/qcs_java_agent/snapshot.py): **Core DOM parser & compiler**. Walks the JAB tree, partitions tab frames, applies row-sorting rules, uses similarity-based table column grouping, builds the tree layout metadata via `build_action_tree()`, recursively calculates bounding coordinates via `_populate_bounds()`, and generates the AI-friendly textual representation via `render_snapshot_text()`.
-- [readiness.py](file:///C:/Apps/OracleAutomation/qcs_java_agent/readiness.py) / [settle.py](file:///C:/Apps/OracleAutomation/qcs_java_agent/settle.py): Monitors StatusBar messages and cursor types to wait for forms to settle into idle states prior to capturing visual snapshots.
+## 3. Component Directory Map
 
-#### 📂 [qcs_studio](file:///C:/Apps/OracleAutomation/qcs_studio)
-A FastAPI web application serving the local web studio UI.
-- [service.py](file:///C:/Apps/OracleAutomation/qcs_studio/service.py): Backend controller logic managing active scan caches (`ScanBundle`), capturing fullscreen screenshots, and writing automated scan output snapshots (`java_scan_dump.json`, `screenshot.png`, `ai_snapshot.txt`) to the tests directory on every scan.
-- [web/](file:///C:/Apps/OracleAutomation/qcs_studio/web/src): React frontend allowing developers to view the screenshot, inspect the elements tree, verify the overlay box coordinates, and edit naming mapping entries in the element repository.
+### `qcs/` — CLI entry point
+`qcs/__main__.py` (`python -m qcs …`) registers all commands and dispatches to the
+owning module. Command groups:
 
-#### 📂 [qcs_repo](file:///C:/Apps/OracleAutomation/qcs_repo)
-Element repository database storage layer.
-- [store.py](file:///C:/Apps/OracleAutomation/qcs_repo/store.py) / [schema.py](file:///C:/Apps/OracleAutomation/qcs_repo/schema.py): SQLite storage backend saving the mappings.
-- [fingerprint.py](file:///C:/Apps/OracleAutomation/qcs_repo/fingerprint.py): Calculates layout hashing and forms structural fingerprints to uniquely identify window layouts.
+| Command | Dispatches to | Purpose |
+|---|---|---|
+| `record <instr> --run-id <id> [--data] [--auto-name]` | `oracle_ai_agent.run_agent` + `generator.build_pages` + `generator.build_test` | Record a flow, update repo, regenerate pages, and generate the replay suite. |
+| `play <instr> --run-id <id>` | `oracle_ai_agent.play.run_play` | Screenshot-only computer-use "play" mode (does not write `recording.jsonl` or touch the repo). |
+| `normalize <recording>` | `qcs_manifest.normalize_recording` | `recording.jsonl` → validated `recording.manifest.json`. |
+| `gen run <recording> <test_name>` | `generator.build_test.generate_test` | Regenerate a pytest suite from a recording/manifest. |
+| `gen validate <dir>` | `generator.script_validator.validate_generated_dir` | Business-readability gate on generated tests. |
+| `pages [form_ids…]` / `flows [flow_ids…]` | `generator.build_pages` / `build_flows` | Regenerate page objects / flow functions from the repo. |
+| `aliases validate` / `aliases report` | `generator.alias_catalog.AliasCatalog` | Validate / summarize the alias catalog. |
+| `repo validate` | `qcs_repo.store.validate_repo` | Validate all `repo_entries`. |
+| `repo-capture <form_id> <snapshot_db>` | `qcs_repo.store` | Import a recording snapshot DB into the element catalog. |
+| `center` / `agent` | `qcs_center.app` / `qcs_agent.main` | Start the control-plane API / a worker (optional extras). |
 
-#### 📂 [qcs_replay](file:///C:/Apps/OracleAutomation/qcs_replay)
-Automation test execution engine.
-- [java_agent.py](file:///C:/Apps/OracleAutomation/qcs_replay/java_agent.py): Replay target driver translating script DSL steps (clicks, inputs) into lower-level `driver.py` invocations.
-- [dsl.py](file:///C:/Apps/OracleAutomation/qcs_replay/dsl.py): Replay DSL keyword commands definition.
+### `oracle_ai_agent/` — AI-guided recorder
+- `tools.py`: `RecorderSession` state and the tool surface the model calls —
+  `session_start`, `ebs_login`, `oracle_form_open`, `java_form_launch`,
+  `java_click`, `java_send_text`, `java_get_page_snapshot`, etc. `dispatch()`
+  routes model tool-calls; every action is appended to
+  `recordings/<run>/recording.jsonl`. Java-agent results are mapped to repo
+  elements via `qcs_java_agent.snapshot`.
+- `play.py`: deterministic login + form-open, then a GPT computer-use loop that
+  drives the Forms window by screenshot + `pyautogui` (window-relative → screen
+  coordinate mapping). Used by `qcs play`.
+- `cu_system_prompt.txt`: the stable computer-use system prompt.
 
-#### 📂 [generator](file:///C:/Apps/OracleAutomation/generator) & [qcs_manifest](file:///C:/Apps/OracleAutomation/qcs_manifest)
-- Converts element repository mappings into standard Python Page Object classes (`pages/*.py`), and validates test manifests against schemas.
+### `qcs_java_agent/` — Python client to the Java agent
+`JavaAgentDriver` (`driver.py`) attaches to a Forms JVM and runs the agent command
+protocol. Command vocabulary: `health`, `scan`, `raw`, `layout`, `tables`,
+`focus`, `click`, `settext`, `clear`, `presskey`, `screenshot`, `highlight`,
+**`elementat` (point hit-test → `element_at(x, y)`)**.
+- `snapshot.py`: **core DOM parser/compiler.** `active_window_scan()` scopes to the
+  active window/dialog; `flatten_nodes()`/`java_nodes_to_repo_elements()` produce
+  repo element dicts (each carrying screen-absolute bounds, role, name, schema-2.0
+  `semantic_id` + `primaryLocator`); `build_action_tree()` → `build_action_context()`
+  → `build_action_payload()` produce the curated tree + AI snapshot text;
+  `actioned_element_at(scan, x, y)` and `build_full_overlay_elements()` support
+  coordinate hit-testing and the studio overlay; `merge_scans()` merges multi-tab
+  DOMs. (The old `render_snapshot_text`/`_build_action_tree` symbols are gone.)
+- `readiness.py` / `settle.py`: poll `scan()` until the form is structurally stable
+  and not busy before capturing snapshots. Avoid fixed sleeps.
+- `attach.py` / `command.py` / `process.py`: build and run the Attach API command,
+  and discover the Forms process (`jp2launcher.exe` / `javaw.exe` → PID → HWND).
 
-#### 📂 [tests](file:///C:/Apps/OracleAutomation/tests)
-- [test_aisnapshot_regression.py](file:///C:/Apps/OracleAutomation/tests/test_aisnapshot_regression.py): Discovers all subdirectories under `testdata/aisnapshot/approved/`, parses their raw `java_scan_dump.json`, and asserts that the compiler output exactly matches the baseline `ai_snapshot.txt`.
+### `java-agent/` — Java Attach API agent (runs inside the Forms JVM)
+Maven project under `java-agent/src/main/java/com/pyebsdom/agent/`. Loaded via
+`EbsDomAgent.agentmain()`; `dispatch()` switches on the command name.
+- `DomScanner.java`: walks the AWT/Swing tree, emitting screen-absolute bounds and
+  Oracle schema-2.0 identity (`semanticId`, `primaryLocator`, `containerRole`,
+  `ownerTab`, `recordIndex`, `columnKey`, `treePath`, `isMirror`).
+- `ActionExecutor.java`: `executeClick/SetText/Clear/PressKey/Focus`,
+  `executeScreenshot` (full screen or component region), `executeHighlight`, and
+  `executeElementAt` (`findDeepestRealComponent` recursion → component at a screen
+  point).
+- Rebuild after Java changes:
+  `& 'C:\apache-maven-3.9.15\bin\mvn.cmd' -f java-agent\pom.xml -DskipTests package`.
+
+### `qcs_repo/` — object repository
+SQLite `repo/repo.db` is the source of truth (tables `forms`, `elements`,
+`containers`, `container_elements`, `repo_entries`); YAML under `repo/` is the
+review/export/fallback format.
+- `schema.py`: `RepoEntry` dataclass keyed by `(form_ref, element_ref)` with
+  `descriptor`, `fallback_descriptors`, `surface`, `source`, `confidence`,
+  `status`; `validate_entry` / `validate_repo`.
+- `identity.py`: stable identity — `semantic_ref`, `element_uid`,
+  `element_identity_key` (ignores volatile `eNN` refs), `locator_candidates`.
+- `store.py`: `save_form_capture` (full inventory, preserves human names),
+  `upsert_actioned_element` (records only interacted elements),
+  `upsert_form_module`, `save_container_scan`, `load_entry`, `resolve_element_ref`.
+- `fingerprint.py`: `fingerprint_java_form` / `fingerprint_html_page` →
+  stable `java_*` / `html_*` `form_id`s.
+
+### `qcs_manifest/` — normalized manifest layer
+`RecordingManifest` / `RecordingManifestStep` (`model.py`). Canonical step fields:
+`step_id`, `intent`, `surface` (`browser` | `java_forms` | `system` | `assertion`),
+`action`, **`form_ref` + `element_ref`** (there is no `target_ref` anywhere),
+`input`, `assertions`, `diagnostics`, `metadata`. `normalize.py` converts
+`recording.jsonl` → manifest; `validate.py` + `schema.py` enforce the contract
+(guarded by `tests/test_manifest_layer.py`).
+
+### `generator/` + `config/aliases/` — deterministic code generation
+- `build_test.py`: manifest → `test_<name>.py` + `conftest.py` using the
+  `OracleReplay` / `FormReplay` DSL. `build_pages.py` / `build_flows.py` regenerate
+  page objects and flows.
+- `naming.py`: `sanitize_ref()` strips technical noise; `AliasResolver` resolves
+  business names, returning `NameResult` (confidence + `needs_alias_review`).
+- `alias_catalog.py`: `AliasCatalog` / `FormAliasFile` / `ElementAlias` load
+  per-domain JSON at `config/aliases/<domain>/<form_ref>.json`
+  (`order_management`, `purchasing`, `common`) and `validate()` for conflicts.
+- `script_validator.py`: post-generation gate flagging `java_*`, `toolbar\d`,
+  `_alt_*`, `_mnemonic_*`, `page.locator(`, and raw Java descriptor dicts.
+
+### `qcs_replay/` — deterministic replay runtime (AI-free)
+- `script.py`: public `OracleReplay` facade — `login`, `open_form`, `form(form_ref)`
+  (→ `FormReplay`), `step`, `press_key`.
+- `dsl.py`: `RepositoryResolver` (→ `ResolvedTarget`, raises `ReplayRefNotFoundError`
+  on miss — no silent fallback), `FormReplay` handle (`click`, `double_click`,
+  `set_text`, `select_value`, `press_key`, `wait_for`, `assert_visible`,
+  `assert_text`, `assert_value`, `get_text`, `get_value`), backends
+  `BrowserReplayBackend` (Playwright) and `JavaFormsReplayBackend`, surface routing
+  by `form_id` prefix (`html_` → browser, `java_` → java_forms), `ReplayLogger`,
+  typed exceptions.
+- `web.py` / `java_agent.py`: Playwright login+form-open helpers; DSL-step →
+  `JavaAgentDriver` translation.
+- `locator.py` / `assertions.py` / `data.py`: locator strategy chains, retry-poll
+  assertions, Excel/CSV data loaders.
+- `failure_bundle.py`: `BundleWriter` writes `failure_bundle.json` + screenshot +
+  Java snapshot on step failure — **no repo mutation, no AI.**
+- `healing/`: two-tier, **failure-only** self-healing. `engine.py` runs the action,
+  and only on exception escalates Tier 1 `SnapshotHealer` (accessibility snapshot →
+  constrained LLM → validate) → Tier 2 `ComputerUseHealer` (screenshot → computer
+  use → `coord_to_locator`). Successful heals write a reviewable `repo_patch.yaml`.
+
+### `qcs_studio/` — web repository studio (backend + React frontend)
+FastAPI backend (`app.py`, `router.py`, `service.py`, `models.py`). All API routes
+are under `/api/v1` (optional bearer auth via `QCS_STUDIO_API_KEY`):
+
+| Route | Purpose |
+|---|---|
+| `GET /windows` | List running Oracle Java processes to scan. |
+| `POST /scan` | **Phase 1** — attach, capture raw DOM + screenshot (multi-tab DFS), return a `ScanBundle` with an empty tree. |
+| `POST /scan/recalculate` | **Phase 2** — build tree + AI snapshot + overlay from cached raw DOM; auto-dump artifacts. |
+| `POST /scan/save` | Persist a draft scan as a container (status `active`). |
+| `GET /scans/{id}/screenshot` | Screenshot for a draft (supports `?tab=`). |
+| `GET /containers` · `GET /drafts` · `GET /drafts/{id}` · `DELETE /drafts/{id}` | List/inspect/delete containers and drafts. |
+| `GET/PUT /containers/{ref}` · `PUT /containers/{ref}/display-tree` | Load / update a container / persist the curated display tree. |
+| `PATCH/DELETE /containers/{ref}/elements/{ref}` | Edit / remove a single element. |
+
+`ScanBundle` (`service.py`) holds `raw_dom`, `snapshot_text`, `tree`, `raw_elements`,
+`full_elements` (hoverable overlay boxes), `screenshot_path`, multi-tab
+screenshots/DOMs, and `capture_mode`.
+
+**Frontend** (`qcs_studio/web/`, React 18 + TypeScript + Vite; `src/App.tsx`):
+renders the screenshot with an overlay of element bounding boxes, hover-to-highlight
+with a details tooltip (`element_ref`, name, type, role, value, actions), two hover
+modes (`tree` vs `all`), zoom/fit, an expandable element tree, and **drag-to-add**:
+"discovery" elements not yet in the tree are dragged onto tree nodes
+(`addElementToNode`) and persisted via `PUT …/display-tree`. Today the studio works
+off a captured screenshot + overlay — there is no live cursor picking on the real
+Forms window yet, and no WebSocket. (See `architecture.html` → "Studio Enhancement:
+Live Element Picker" for the planned upgrade built on the existing `elementat`,
+`screenshot`, and `highlight` commands.)
+
+### `qcs_center/` + `qcs_agent/` — control-plane prototype
+`qcs_center` is an early FastAPI + SQLite job/agent service (`POST /api/v1/jobs`,
+`/agents/poll` long-poll, `/agents/heartbeat`, `/agents/result/{id}`).
+`qcs_agent` is the Windows worker: `qcs_agent/loop.py` long-polls the center and
+`executor.py` shells out to `python -m qcs record …`, posting results back. Both are
+prototypes — evolve them into full record/generate/replay/artifact orchestration.
+
+### `tests/`
+`pytest` suite covering the manifest layer, repo entries, DSL routing, generator
+naming, script validation, healing/failure bundles, settle/readiness, and the
+snapshot golden regression (`test_aisnapshot_regression.py`,
+`test_semantic_tree_golden.py`).
+
+---
+
+## 4. Local Commands
+
+```powershell
+# Record a flow and generate its replay suite
+python -m qcs record instructions.txt --run-id rec_014 --auto-name
+
+# Replay (no AI)
+python -m pytest generated_tests\rec_014 -q -s
+
+# Regenerate + gate an existing recording
+python -m qcs gen run recordings\rec_013 rec_013_replay --out generated_tests\rec_013_replay
+python -m qcs gen validate generated_tests\rec_013_replay
+
+# Catalog + repo validation
+python -m qcs aliases validate
+python -m qcs repo validate
+
+# Fast local checks
+python -m compileall qcs oracle_ai_agent qcs_java_agent qcs_repo qcs_replay generator
+python -m pytest tests/ -q
+
+# Web studio (local)
+python -m qcs_studio            # FastAPI backend
+cd qcs_studio/web && npm install && npm run dev   # React frontend (proxies /api → backend)
+
+# Rebuild the Java agent after Java changes
+& 'C:\apache-maven-3.9.15\bin\mvn.cmd' -f java-agent\pom.xml -DskipTests package
+```
+
+---
+
+## 5. Where To Put Changes
+
+| Change | Owning layer |
+|---|---|
+| Recorder behavior / AI recording | `oracle_ai_agent/` |
+| Java Forms extraction & replay | `java-agent/` + `qcs_java_agent/` |
+| Scan → tree / snapshot formatting | `qcs_java_agent/snapshot.py` (+ approve baselines) |
+| Repository identity, naming, patches | `qcs_repo/` |
+| Manifest contract | `qcs_manifest/` |
+| Generated-script behavior & naming | `generator/`, `config/aliases/`, `qcs_replay.script` |
+| Runtime locators, assertions, healing | `qcs_replay/` |
+| Web studio (capture, tree curation, picker) | `qcs_studio/` (backend + `web/`) |
+| Fleet / jobs / artifacts | `qcs_center/`, `qcs_agent/` |
+
+See `docs/project-guide.md` for the full team handoff and `architecture.html` for
+the visual companion.
