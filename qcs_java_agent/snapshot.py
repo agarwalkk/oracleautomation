@@ -493,7 +493,17 @@ def _is_actionable(n: dict) -> bool:
     role = str(n.get("semanticType") or "")
     if role not in _ACTION_ROLES:
         return False
-    if n.get("isMirror") or n.get("containerRole") in ("OrphanTabContent", "OccludedCanvas"):
+    if n.get("containerRole") in ("OrphanTabContent", "OccludedCanvas"):
+        return False
+    # The multi-tab DFS capture flags every non-focused tab's content as a mirror
+    # echo. For a 2+ level tab path we WANT that content — it is the only copy of
+    # a hidden top-tab's fields (e.g. the whole "Order Information" branch when
+    # "Line Items" is the live block). All other gates below still apply, so the
+    # focused tab's genuine mirror duplicates (technical/disabled) stay dropped.
+    # Single-level forms keep dropping mirrors exactly as before.
+    _otp = n.get("ownerTabPath")
+    _nested = isinstance(_otp, (list, tuple)) and len(_otp) >= 2
+    if n.get("isMirror") and not _nested:
         return False
     lbl = _label(n)
     if not lbl:
@@ -705,6 +715,79 @@ def _assign_owner_tabs(scan: dict) -> None:
                 n["containerRole"] = None
 
 
+def _propagate_owner_tab_paths(scan: dict) -> None:
+    """Fan each capture-seeded ``ownerTabPath`` out across its whole tab-page region.
+
+    The capture layer can only mark the ONE field per tab whose accessibleName
+    carries the ``"<leaf> tab page "`` anchor Oracle Forms stamps (≈1 node per
+    tab — not every field carries it). This spreads that seed to every node in
+    the same tab-page region: the FScrollBox whose subtree contains only that
+    leaf's ``" tab page "`` marker. Two same-named sub-tabs (``Order Information
+    -> Main`` vs ``Line Items -> Main``) live in separate regions, so they keep
+    separate full paths — which is exactly what makes the nested render correct.
+
+    Runs after ``_assign_owner_tabs`` and before the tree build; nodes outside
+    any seeded region keep their flat single-level ownership, unchanged.
+    """
+    parent: dict[int, dict | None] = {}
+    nodes: list[dict] = []
+
+    def walk(n: dict, p: dict | None) -> None:
+        nodes.append(n)
+        parent[id(n)] = p
+        for c in n.get("children") or []:
+            walk(c, n)
+
+    for w in scan.get("windows") or []:
+        walk(w, None)
+
+    anchors = [n for n in nodes
+               if isinstance(n.get("ownerTabPath"), list) and n.get("ownerTabPath")]
+    if not anchors:
+        return
+
+    def leaf_prefixes(node: dict) -> set[str]:
+        acc: set[str] = set()
+        stack = [node]
+        while stack:
+            x = stack.pop()
+            an = str(x.get("accessibleName") or "")
+            i = an.find(" tab page ")
+            if i > 0:
+                acc.add(an[:i])
+            stack.extend(x.get("children") or [])
+        return acc
+
+    # An FScrollBox that wraps exactly one tab page (its subtree carries a single
+    # "<leaf> tab page" marker) is that leaf's content region.
+    single_prefix: dict[int, str] = {}
+    for n in nodes:
+        if str(n.get("simpleClassName") or "") == "FScrollBox":
+            pf = leaf_prefixes(n)
+            if len(pf) == 1:
+                single_prefix[id(n)] = next(iter(pf))
+
+    def stamp_subtree(root: dict, path: list) -> None:
+        stack = [root]
+        while stack:
+            x = stack.pop()
+            x["ownerTabPath"] = list(path)
+            stack.extend(x.get("children") or [])
+
+    for a in anchors:
+        path = list(a["ownerTabPath"])
+        leaf = str(path[-1])
+        # Region = outermost ancestor FScrollBox scoped to this leaf alone.
+        region = None
+        cur: dict | None = a
+        while cur is not None:
+            if single_prefix.get(id(cur)) == leaf:
+                region = cur
+            cur = parent.get(id(cur))
+        if region is not None:
+            stamp_subtree(region, path)
+
+
 def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str, Any]], dict[str, dict]]:
     """Return ``(tree, id_map)`` for a scan.
 
@@ -721,6 +804,7 @@ def build_action_tree(scan: dict, all_tabs: bool = False) -> tuple[list[dict[str
     # ownerTab/orphan the agent stamped, using only the raw hierarchy + labels
     # the agent provides (Java stays an unfiltered extractor).
     _assign_owner_tabs(scoped)
+    _propagate_owner_tab_paths(scoped)
     nodes = flatten_nodes(scoped)
     _promote_grid_controls(nodes)
     repo_by_id = {e["elementid"]: e for e in java_nodes_to_repo_elements(scoped)}
@@ -810,16 +894,20 @@ def _tab_bars_info(nodes: list[dict]) -> list[dict]:
         attrs = n.get("attributes") or {}
         selected = str(attrs.get("tabSelectedTitle", "")).strip()
         enabled: dict[str, bool] = {}
+        visible: dict[str, bool] = {}
         states_raw = str(attrs.get("tabStates", "")).strip()
         if states_raw:
             for idx, part in enumerate(states_raw.split("|")):
                 bits = [b.strip() for b in part.strip().split(",")]
                 if idx < len(titles) and bits and bits[0] in ("0", "1"):
                     enabled[titles[idx]] = (bits[0] == "1")
+                if idx < len(titles) and len(bits) > 1 and bits[1] in ("0", "1"):
+                    visible[titles[idx]] = (bits[1] == "1")
         key = tuple(titles)
         prev = dedup.get(key)
         if prev is None or (selected and not prev["selected"]):
-            dedup[key] = {"titles": titles, "selected": selected, "enabled": enabled}
+            dedup[key] = {"titles": titles, "selected": selected,
+                          "enabled": enabled, "visible": visible}
     return list(dedup.values())
 
 
@@ -892,6 +980,17 @@ def _build_nested_tab_tree(nodes: list[dict], actionable: list[dict]) -> list[di
         if not titles:
             return []
         ordered, bar = _order_children(titles, bars)
+        # Structure fidelity: when the matched tab bar is a superset of the tabs
+        # we found content for, surface EVERY visible tab of that bar in bar
+        # order — so a sub-tab whose content was dropped/merged away upstream
+        # still appears (empty) instead of vanishing. The subset guard means a
+        # mismatched bar can never inject unrelated tabs.
+        if bar and titles <= set(bar["titles"]):
+            vis = bar.get("visible", {})
+            ordered = [t for t in bar["titles"] if vis.get(t, True)]
+            for t in (children_titles.get(prefix) or set()):
+                if t not in ordered:
+                    ordered.append(t)
         selected = (bar or {}).get("selected", "")
         enabled_map = (bar or {}).get("enabled", {})
         out: list[dict] = []

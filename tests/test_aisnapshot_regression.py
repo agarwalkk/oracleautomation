@@ -51,7 +51,8 @@ def test_ai_snapshot_matches_baseline(case_dir: Path):
     with open(scan_path, encoding="utf-8") as f:
         scan = json.load(f)
 
-    actual_text, _ = build_action_context(scan, all_tabs=True)
+    all_tabs = scan.get("multi_tab", True)
+    actual_text, _ = build_action_context(scan, all_tabs=all_tabs)
     expected_text = baseline_path.read_text(encoding="utf-8")
 
     if actual_text != expected_text:
@@ -72,3 +73,54 @@ def test_ai_snapshot_matches_baseline(case_dir: Path):
             f"  {baseline_path}\n\n"
             f"{diff_text}"
         )
+
+
+def test_recognition_of_single_vs_multi_tab(monkeypatch):
+    import io
+    import builtins
+    import sys
+    
+    called_all_tabs = []
+    
+    def mock_build_action_context(scan, all_tabs=False):
+        called_all_tabs.append(all_tabs)
+        return "mocked snapshot text", {"some_key": {}}
+        
+    module = sys.modules[test_ai_snapshot_matches_baseline.__module__]
+    monkeypatch.setattr(module, "build_action_context", mock_build_action_context)
+    
+    # Mocking Path objects so we don't hit the filesystem
+    class MockPath:
+        def __init__(self, name):
+            self.name = name
+            
+        def __truediv__(self, other):
+            return self
+            
+        def read_text(self, encoding="utf-8"):
+            return "mocked snapshot text"
+            
+    # Case 1: multi_tab is False in the scan dump
+    def mock_open_single(*args, **kwargs):
+        return io.StringIO('{"multi_tab": false}')
+        
+    monkeypatch.setattr(builtins, "open", mock_open_single)
+    test_ai_snapshot_matches_baseline(MockPath("mock_single_tab"))
+    
+    # Case 2: multi_tab is True in the scan dump
+    def mock_open_multi(*args, **kwargs):
+        return io.StringIO('{"multi_tab": true}')
+        
+    monkeypatch.setattr(builtins, "open", mock_open_multi)
+    test_ai_snapshot_matches_baseline(MockPath("mock_multi_tab"))
+    
+    # Case 3: multi_tab is missing in the scan dump (should default to True for backward compatibility)
+    def mock_open_missing(*args, **kwargs):
+        return io.StringIO('{}')
+        
+    monkeypatch.setattr(builtins, "open", mock_open_missing)
+    test_ai_snapshot_matches_baseline(MockPath("mock_missing_tab"))
+    
+    assert called_all_tabs == [False, True, True]
+
+

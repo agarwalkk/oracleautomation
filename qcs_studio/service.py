@@ -278,6 +278,7 @@ class ScanBundle:
     created_at: str
     tab_screenshots: dict[str, str]
     tab_doms: dict[str, dict] | None = None
+    multi_tab: bool = True
 class StudioService:
     """Application service for Studio scan and container operations."""
 
@@ -352,7 +353,7 @@ class StudioService:
             )
         return windows
 
-    def run_scan(self, pid: int | None = None, contains: str | None = None) -> ScanBundle:
+    def run_scan(self, pid: int | None = None, contains: str | None = None, multi_tab: bool = True) -> ScanBundle:
         """Phase 1: capture raw DOM + screenshot from a live Oracle window.
 
         Returns a ScanBundle with raw_dom and screenshot populated but tree/
@@ -404,7 +405,7 @@ class StudioService:
 
         scoped_nodes = flatten_nodes(scoped)
         tab_bars, _ = _get_sorted_tab_bars(scoped)
-        tab_info = bool(tab_bars)
+        tab_info = multi_tab and bool(tab_bars)  # single-tab mode skips DFS regardless
         screenshot_result = {}
 
         try:
@@ -558,6 +559,7 @@ class StudioService:
         )
         container_ref = repo_fingerprint.suggest_form_id(title_for_fp, surface="java")
         container_ref = f"{repo_identity.normalize_ref(container_ref)}_{fingerprint[-6:]}"
+        merged_dom["multi_tab"] = multi_tab
 
         # Build bundle with Phase 1 data only — tree is empty until computed.
         bundle = ScanBundle(
@@ -575,6 +577,7 @@ class StudioService:
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             tab_screenshots=tab_screenshots,
             tab_doms=tab_doms,
+            multi_tab=multi_tab,
         )
         StudioService._drafts[scan_id] = bundle
         self._scan_cache[scan_id] = bundle
@@ -597,7 +600,7 @@ class StudioService:
         scoped = active_window_scan(raw_dom)
         enriched = repo_snapshot.enrich_java_elements(java_nodes_to_repo_elements(scoped))
 
-        payload = build_action_payload(scoped, all_tabs=True)
+        payload = build_action_payload(scoped, all_tabs=bundle.multi_tab)
 
         # Full overlay uses the FULL raw DOM filtered to active form window +
         # toolbar / menu bar only (exclude non-active ExtendedFrame subtrees).
@@ -686,6 +689,7 @@ class StudioService:
             "snapshot_text": bundle.snapshot_text,
             "display_tree": display_tree if display_tree is not None else bundle.tree,
             "saved_from": saved_from,
+            "multi_tab": bundle.multi_tab,
         }
         if extra_metadata:
             metadata.update(extra_metadata)

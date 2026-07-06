@@ -120,6 +120,8 @@ export function App() {
   const [hoverMode, setHoverMode] = useState<"tree" | "all">("tree");
   // Tree node details popup: opens only from explicit info-button clicks.
   const [treeTooltip, setTreeTooltip] = useState<{ fe: FullElement; x: number; y: number } | null>(null);
+  // Scan mode: "single" = current tab only (fast, no navigation), "multi" = full DFS all tabs.
+  const [scanMode, setScanMode] = useState<"single" | "multi">("multi");
 
   useEffect(() => {
     void refreshContainers();
@@ -171,10 +173,12 @@ export function App() {
     setDetail(json);
   }
 
-  async function runScan() {
+  async function runScan(mode?: "single" | "multi") {
+    const effectiveMode = mode ?? scanMode;
     setBusy(true);
     try {
-      const payload = selectedPid ? { pid: Number(selectedPid) } : {};
+      const payload: Record<string, unknown> = selectedPid ? { pid: Number(selectedPid) } : {};
+      payload.multi_tab = effectiveMode === "multi";
       // Phase 1: capture raw DOM + screenshot (no tree yet).
       const res = await fetch("/api/v1/scan", {
         method: "POST",
@@ -479,7 +483,17 @@ export function App() {
               );
             })}
           </select>
-          <button onClick={runScan} disabled={busy || !selectedPid}>
+          <label className="scan-mode-toggle-switch" title={scanMode === "single" ? "Single tab scan (no tab navigation)" : "Multi-tab scan (full DFS tab navigation and merge)"}>
+            <input
+              type="checkbox"
+              checked={scanMode === "multi"}
+              onChange={(e) => setScanMode(e.target.checked ? "multi" : "single")}
+              disabled={busy}
+            />
+            <span className="scan-mode-slider"></span>
+            <span className="scan-mode-label">Multi-tab Scan</span>
+          </label>
+          <button id="btn-run-scan" onClick={() => runScan()} disabled={busy || !selectedPid}>
             {busy ? "Scanning..." : "Scan"}
           </button>
           <button onClick={saveScan} disabled={!scan || busy}>

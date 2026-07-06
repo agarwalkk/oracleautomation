@@ -85,6 +85,71 @@ body {
   cursor: not-allowed;
 }
 
+.scan-mode-toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  height: 34px;
+  padding: 0 4px;
+}
+
+.scan-mode-toggle-switch input {
+  display: none;
+}
+
+.scan-mode-slider {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+  background-color: var(--line);
+  border-radius: 20px;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.scan-mode-slider::before {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.scan-mode-toggle-switch input:checked + .scan-mode-slider {
+  background-color: var(--accent);
+}
+
+.scan-mode-toggle-switch input:checked + .scan-mode-slider::before {
+  transform: translateX(20px);
+}
+
+.scan-mode-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.scan-mode-toggle-switch input:disabled + .scan-mode-slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scan-mode-toggle-switch:hover .scan-mode-slider {
+  box-shadow: 0 0 4px rgba(15, 118, 110, 0.25);
+}
+
 .layout {
   flex: 1;
   min-height: 0;

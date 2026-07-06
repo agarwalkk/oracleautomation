@@ -73,3 +73,9 @@ Form: Find Purchase Orders
     [e195] ( ) View Results Shipments
     [e197] ( ) View Results Distributions
   [e198] Clear (Button, enabled) , [e201] Find (Button, enabled)
+  Tools Menu:
+    Copy Document
+    Respond To Changes
+    Change History
+    Communicate
+    Manage Tax

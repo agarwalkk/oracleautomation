@@ -106,3 +106,13 @@ Form: EMR Global Find  Orders/Quotes
   [e208] Scheduling (Tab, disabled)
   [e210] Retrobill Requests (Tab, enabled)
   [e241] Clear (Button, enabled) , [e242] Find (Button, enabled) , [e243] Open Folder... (Button, enabled)
+  Tools Menu:
+    Find Customer
+    Workflow Status
+    [ ] Show Line Details
+    Book Sales Order
+    [ ] ATO Summary View
+    Copy Sales Order Prgram
+    [ ] Pricing Options
+    [ ] Star Model Status
+    Mass Price Adjustment Tool

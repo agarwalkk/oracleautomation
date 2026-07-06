@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class ScanRequest(BaseModel):
     pid: int | None = None
     contains: str | None = None
+    multi_tab: bool = True  # False = scan current tab only (no DFS navigation/merge)
 
 
 class ScanSaveRequest(BaseModel):

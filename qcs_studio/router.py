@@ -32,7 +32,7 @@ def run_scan(request: ScanRequest) -> dict:
     Returns the scan immediately with empty tree. The client should then call
     POST /scan/recalculate to compute the AI snapshot tree (Phase 2)."""
     try:
-        bundle = _service.run_scan(pid=request.pid, contains=request.contains)
+        bundle = _service.run_scan(pid=request.pid, contains=request.contains, multi_tab=request.multi_tab)
     except Exception as exc:  # pragma: no cover - pass-through for UI diagnostics
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
